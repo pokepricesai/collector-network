@@ -1,0 +1,40 @@
+/*
+ * DuelDivider — signature section separator. A hairline with a small
+ * angular notch at the centre (echoing a card corner cut). Restrained
+ * — never neon, never animated.
+ */
+
+.divider {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--ygo-size-base);
+  color: var(--ygo-line-strong);
+}
+
+.line {
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.notch {
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  border: 1px solid currentColor;
+  background: var(--ygo-ink-abyss);
+  opacity: 0.8;
+}
+
+.label {
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ygo-text-muted);
+  white-space: nowrap;
+}

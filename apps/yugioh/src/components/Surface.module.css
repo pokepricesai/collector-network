@@ -1,0 +1,20 @@
+.surface {
+  border-radius: var(--ygo-radius-lg);
+  padding: var(--ygo-size-lg);
+  border: 1px solid var(--ygo-line-hairline);
+  background: var(--surface-bg, var(--ygo-ink-graphite));
+  box-shadow: var(--surface-shadow, none);
+  position: relative;
+  isolation: isolate;
+}
+
+.base     { --surface-bg: var(--ygo-ink-abyss); }
+.raised   { --surface-bg: var(--ygo-ink-graphite); --surface-shadow: var(--ygo-shadow-raised); }
+.card     { --surface-bg: var(--ygo-ink-onyx); --surface-shadow: var(--ygo-shadow-raised); }
+.market   { --surface-bg: var(--ygo-ink-indigo); --surface-shadow: var(--ygo-shadow-raised); }
+.premium  { --surface-bg: var(--ygo-ink-onyx); --surface-shadow: var(--ygo-shadow-premium); border-color: rgba(201, 162, 74, 0.2); }
+.overlay  {
+  --surface-bg: rgba(20, 25, 38, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}

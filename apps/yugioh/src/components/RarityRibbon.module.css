@@ -1,0 +1,41 @@
+/*
+ * RarityRibbon — the "signature" high-rarity ornament. A thin diagonal
+ * strip sitting along the top-right corner of a card thumbnail, colour-
+ * matched to the rarity family. Uses only currentColor + CSS gradients;
+ * never a raster foil texture.
+ */
+
+.ribbon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(30%, -30%) rotate(45deg);
+  transform-origin: center;
+  min-width: 120px;
+  padding: 4px 24px;
+  font-family: var(--ygo-font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--rarity-ink, var(--ygo-text-primary));
+  background: var(--rarity-bg, var(--ygo-rarity-common));
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.spectral::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--rarity-spectral, transparent);
+  mix-blend-mode: overlay;
+  opacity: 0.7;
+  z-index: -1;
+  pointer-events: none;
+}

@@ -1,0 +1,198 @@
+/*
+ * Yu-Gi-Oh! CSS design tokens. Keep values in lockstep with tokens.ts.
+ * Semantic first. Raw colours only appear here.
+ *
+ * Core mood: dark, precise, premium, holographic. High-contrast text on
+ * near-black surfaces. Colour is used sparingly and semantically —
+ * rarity families and F&L states carry meaning; base UI is quiet.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Base palette (semantic, not raw) ─────────────────────────────── */
+  --ygo-ink-abyss: #05070c;         /* deepest surface — page bg */
+  --ygo-ink-graphite: #0d1119;      /* raised surfaces */
+  --ygo-ink-onyx: #141926;          /* card surfaces */
+  --ygo-ink-indigo: #1a2138;        /* premium surfaces (deep navy tint) */
+  --ygo-line-hairline: #2a3145;     /* thin metallic lines */
+  --ygo-line-strong: #3d4562;       /* pronounced dividers */
+
+  --ygo-text-primary: #eef1f7;      /* body text */
+  --ygo-text-muted: #8a92a8;        /* secondary */
+  --ygo-text-quiet: #5a6079;        /* tertiary */
+  --ygo-text-inverse: #05070c;
+
+  --ygo-accent-gold: #c9a24a;       /* signature muted metallic gold */
+  --ygo-accent-gold-strong: #e8c069;
+  --ygo-accent-gold-deep: #7e6428;
+
+  /* ── Status colours (F&L semantic) ───────────────────────────────── */
+  --ygo-status-forbidden: #b13232;
+  --ygo-status-forbidden-ink: #ffdede;
+  --ygo-status-limited: #c47a1c;
+  --ygo-status-limited-ink: #ffe6c2;
+  --ygo-status-semi-limited: #a89438;
+  --ygo-status-semi-limited-ink: #fff2c0;
+  --ygo-status-unlimited: #384254;
+  --ygo-status-unlimited-ink: #cfd5e5;
+  --ygo-status-unknown: #303546;
+  --ygo-status-unknown-ink: #8a92a8;
+
+  /* ── Rarity family palette ──────────────────────────────────────── */
+  --ygo-rarity-common: #4a5164;
+  --ygo-rarity-common-ink: #cfd5e5;
+
+  --ygo-rarity-rare: #8892b0;
+  --ygo-rarity-rare-ink: #0d1119;
+
+  --ygo-rarity-super: #6d7fa8;
+  --ygo-rarity-super-ink: #eef1f7;
+
+  --ygo-rarity-ultra: #c9a24a;
+  --ygo-rarity-ultra-ink: #1c1509;
+
+  --ygo-rarity-ultimate: #b09772;
+  --ygo-rarity-ultimate-ink: #1c1608;
+
+  --ygo-rarity-secret: #b7a3d2;
+  --ygo-rarity-secret-ink: #14102b;
+  --ygo-rarity-secret-spectral: linear-gradient(115deg,
+    rgba(255,120,180,0.35) 0%,
+    rgba(120,200,255,0.35) 50%,
+    rgba(180,255,180,0.35) 100%);
+
+  --ygo-rarity-prismatic-secret-spectral: linear-gradient(115deg,
+    rgba(255,120,220,0.55) 0%,
+    rgba(120,200,255,0.55) 40%,
+    rgba(180,255,180,0.55) 70%,
+    rgba(255,220,120,0.55) 100%);
+
+  --ygo-rarity-ghost: #b8d4e6;
+  --ygo-rarity-ghost-ink: #0a1520;
+  --ygo-rarity-ghost-glow: radial-gradient(circle at 50% 30%,
+    rgba(200,230,255,0.35) 0%,
+    rgba(200,230,255,0.06) 60%,
+    transparent 100%);
+
+  --ygo-rarity-collectors: #6c8fa8;
+  --ygo-rarity-collectors-ink: #0a1520;
+  --ygo-rarity-collectors-etch: repeating-linear-gradient(45deg,
+    rgba(255,255,255,0.03) 0px,
+    rgba(255,255,255,0.03) 1px,
+    transparent 1px,
+    transparent 4px);
+
+  --ygo-rarity-prismatic-collectors: #8fb0c9;
+  --ygo-rarity-prismatic-collectors-ink: #0a1520;
+
+  --ygo-rarity-starlight: #e8ecff;
+  --ygo-rarity-starlight-ink: #0a1020;
+  --ygo-rarity-starlight-glint: linear-gradient(135deg,
+    rgba(255,180,255,0.7) 0%,
+    rgba(180,220,255,0.7) 25%,
+    rgba(200,255,220,0.7) 50%,
+    rgba(255,240,180,0.7) 75%,
+    rgba(255,180,220,0.7) 100%);
+
+  --ygo-rarity-qcsr: #d4b878;
+  --ygo-rarity-qcsr-ink: #1e1608;
+  --ygo-rarity-qcsr-spectral: linear-gradient(115deg,
+    rgba(230,190,110,0.6) 0%,
+    rgba(255,220,150,0.6) 40%,
+    rgba(210,180,255,0.55) 70%,
+    rgba(230,190,110,0.6) 100%);
+
+  --ygo-rarity-gold: #d0a63e;
+  --ygo-rarity-gold-ink: #1c1509;
+  --ygo-rarity-gold-border: linear-gradient(180deg, #f0cf6c, #a37d20);
+
+  --ygo-rarity-platinum: #b8c4d0;
+  --ygo-rarity-platinum-ink: #0d1119;
+  --ygo-rarity-platinum-border: linear-gradient(180deg, #dfe4ea, #6a7280);
+
+  --ygo-rarity-parallel: #6a7fa0;
+  --ygo-rarity-parallel-ink: #eef1f7;
+  --ygo-rarity-parallel-lines: repeating-linear-gradient(60deg,
+    rgba(255,255,255,0.05) 0px,
+    rgba(255,255,255,0.05) 1px,
+    transparent 1px,
+    transparent 5px);
+
+  --ygo-rarity-short-print: #7a6a4a;
+  --ygo-rarity-short-print-ink: #f0e6ce;
+
+  --ygo-rarity-other: #3d4562;
+  --ygo-rarity-other-ink: #cfd5e5;
+
+  /* ── Focus + interaction ───────────────────────────────────────── */
+  --ygo-focus-ring: #7fa3ff;
+
+  /* ── Sizing ────────────────────────────────────────────────────── */
+  --ygo-size-2xs: 2px;
+  --ygo-size-xs: 4px;
+  --ygo-size-sm: 6px;
+  --ygo-size-md: 8px;
+  --ygo-size-base: 12px;
+  --ygo-size-lg: 16px;
+  --ygo-size-xl: 24px;
+  --ygo-size-2xl: 32px;
+  --ygo-size-3xl: 48px;
+
+  --ygo-radius-xs: 2px;
+  --ygo-radius-sm: 4px;
+  --ygo-radius-md: 6px;
+  --ygo-radius-lg: 10px;
+  --ygo-radius-pill: 999px;
+
+  --ygo-shadow-raised: 0 1px 0 rgba(255,255,255,0.03) inset,
+                       0 12px 24px rgba(0,0,0,0.5);
+  --ygo-shadow-premium: 0 1px 0 rgba(255,255,255,0.06) inset,
+                        0 18px 40px rgba(0,0,0,0.6),
+                        0 0 0 1px rgba(201,162,74,0.08);
+
+  --ygo-motion-fast: 120ms;
+  --ygo-motion-base: 200ms;
+  --ygo-motion-slow: 360ms;
+  --ygo-motion-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ygo-motion-glint: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Baseline reset scoped to the YGO app */
+html,
+body {
+  background: var(--ygo-ink-abyss);
+  color: var(--ygo-text-primary);
+  font-family: var(--ygo-font-body, ui-sans-serif, system-ui, sans-serif);
+  font-feature-settings: 'ss01', 'cv02';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ygo-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--ygo-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ygo-motion-fast: 0ms;
+    --ygo-motion-base: 0ms;
+    --ygo-motion-slow: 0ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
+}

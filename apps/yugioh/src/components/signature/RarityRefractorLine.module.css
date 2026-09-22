@@ -1,0 +1,43 @@
+/*
+ * A thin diagonal spectral line — the signature YGO motif used to
+ * accent premium card headers and rarity-focused sections. NOT a
+ * recreation of any official card foil pattern. Pure CSS gradient
+ * driven by the current rarity family via a data attribute.
+ */
+
+.line {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--refractor-color, var(--ygo-line-hairline)) 20%,
+    var(--refractor-color, var(--ygo-line-hairline)) 80%,
+    transparent 100%);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.line::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0;
+  background: var(--refractor-spectral, none);
+  mix-blend-mode: overlay;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.line[data-family='ultra']     { --refractor-color: var(--ygo-accent-gold); }
+.line[data-family='ultimate']  { --refractor-color: var(--ygo-rarity-ultimate); }
+.line[data-family='secret']    { --refractor-color: var(--ygo-rarity-secret); --refractor-spectral: var(--ygo-rarity-secret-spectral); }
+.line[data-family='prismatic-secret'] { --refractor-color: var(--ygo-rarity-secret); --refractor-spectral: var(--ygo-rarity-prismatic-secret-spectral); }
+.line[data-family='ghost']     { --refractor-color: var(--ygo-rarity-ghost); --refractor-spectral: var(--ygo-rarity-ghost-glow); }
+.line[data-family='collectors'] { --refractor-color: var(--ygo-rarity-collectors); }
+.line[data-family='prismatic-collectors'] { --refractor-color: var(--ygo-rarity-prismatic-collectors); --refractor-spectral: var(--ygo-rarity-starlight-glint); }
+.line[data-family='starlight'] { --refractor-color: #e8ecff; --refractor-spectral: var(--ygo-rarity-starlight-glint); }
+.line[data-family='qcsr']      { --refractor-color: var(--ygo-rarity-qcsr); --refractor-spectral: var(--ygo-rarity-qcsr-spectral); }
+.line[data-family='gold']      { --refractor-color: var(--ygo-rarity-gold); }
+.line[data-family='platinum']  { --refractor-color: var(--ygo-rarity-platinum); }
+.line[data-family='parallel']  { --refractor-color: var(--ygo-rarity-parallel); }

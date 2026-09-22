@@ -1,0 +1,25 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--ygo-size-2xs) var(--ygo-size-sm);
+  border-radius: var(--ygo-radius-sm);
+  font-family: var(--ygo-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ygo-text-primary);
+  background: var(--ygo-ink-onyx);
+  border: 1px solid var(--ygo-line-hairline);
+}
+
+/* Text-only badges — deliberately brand-neutral. We do not have licences
+ * for the grading companies' actual logos and do not want to imply
+ * endorsement. */
+.psa   { color: #d8b4a0; }
+.bgs   { color: #a0c8e0; }
+.cgc   { color: #b4dcc0; }
+.sgc   { color: #d8c8a0; }
+.any   { color: var(--ygo-text-muted); font-style: italic; letter-spacing: 0.04em; }

@@ -1,0 +1,49 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ygo-size-xs);
+  padding: var(--ygo-size-2xs) var(--ygo-size-sm);
+  border-radius: var(--ygo-radius-sm);
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ygo-text-primary);
+  background: var(--ygo-ink-graphite);
+  border: 1px solid var(--ygo-line-hairline);
+}
+
+.first {
+  color: var(--ygo-accent-gold-strong);
+  border-color: var(--ygo-accent-gold-deep);
+  background:
+    linear-gradient(180deg,
+      rgba(232, 192, 105, 0.08),
+      rgba(126, 100, 40, 0.15));
+}
+
+.limited {
+  color: var(--ygo-status-limited-ink);
+  border-color: var(--ygo-status-limited);
+  background: rgba(196, 122, 28, 0.15);
+}
+
+.unlimited {
+  color: var(--ygo-text-muted);
+  border-color: var(--ygo-line-hairline);
+  background: transparent;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+.icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+  flex-shrink: 0;
+}

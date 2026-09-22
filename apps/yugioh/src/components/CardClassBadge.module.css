@@ -1,0 +1,43 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ygo-size-xs);
+  padding: var(--ygo-size-2xs) var(--ygo-size-sm);
+  border-radius: var(--ygo-radius-sm);
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid var(--ygo-line-hairline);
+  color: var(--ygo-text-primary);
+  background: var(--ygo-ink-graphite);
+}
+
+.icon {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+/* Class palettes — semantic, not a recreation of Konami's frame
+ * colours. Extra Deck classes share a warmer ink; Spell/Trap are
+ * cooler; Ritual sits between. */
+
+.normal { color: var(--ygo-text-muted); }
+
+.effect { color: #c5b280; }
+
+.ritual { color: #d0b0dc; }
+
+.fusion { color: #d09ac0; border-color: rgba(208, 154, 192, 0.4); }
+.synchro { color: #dedede; border-color: rgba(222, 222, 222, 0.4); }
+.xyz { color: #8fa7d1; border-color: rgba(143, 167, 209, 0.45); background: rgba(30, 40, 65, 0.6); }
+.pendulum { color: #a4d3b8; border-color: rgba(164, 211, 184, 0.4); }
+.link { color: #7db5d6; border-color: rgba(125, 181, 214, 0.45); background: rgba(24, 45, 60, 0.6); }
+
+.spell { color: #86c5aa; border-color: rgba(134, 197, 170, 0.45); }
+.trap { color: #d19bb0; border-color: rgba(209, 155, 176, 0.45); }
+.unknown { color: var(--ygo-text-quiet); font-style: italic; letter-spacing: 0.04em; }

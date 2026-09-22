@@ -1,0 +1,87 @@
+/*
+ * CardImageFrame — the primitive we wrap every catalogue image in.
+ * Maintains card aspect ratio (~59:86 for Yu-Gi-Oh!), gets a subtle
+ * premium border on dark surfaces, and picks up a rarity-aware glow
+ * on hover for high-rarity families.
+ *
+ * We do NOT recreate official card borders. The card image itself is
+ * the visual focus.
+ */
+
+.frame {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  max-width: var(--ygo-frame-max, 220px);
+  aspect-ratio: 59 / 86;
+  border-radius: var(--ygo-radius-md);
+  overflow: hidden;
+  background: var(--ygo-ink-graphite);
+  border: 1px solid var(--ygo-line-hairline);
+  box-shadow: var(--ygo-shadow-raised);
+  isolation: isolate;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ygo-text-quiet);
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background:
+    repeating-linear-gradient(45deg,
+      rgba(255,255,255,0.02) 0 6px,
+      transparent 6px 12px);
+}
+
+.gloss::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(150deg,
+    rgba(255,255,255,0.08) 0%,
+    rgba(255,255,255,0) 40%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Rarity-aware hover treatments. Ordinary rarities get nothing.
+ * High-rarity families get a subtle glow that respects
+ * prefers-reduced-motion. */
+
+.frame[data-rarity='secret']:hover,
+.frame[data-rarity='prismatic-secret']:hover,
+.frame[data-rarity='qcsr']:hover,
+.frame[data-rarity='starlight']:hover,
+.frame[data-rarity='ghost']:hover,
+.frame[data-rarity='prismatic-collectors']:hover {
+  box-shadow:
+    var(--ygo-shadow-premium),
+    0 0 30px var(--ygo-rarity-glow, rgba(184, 212, 230, 0.35));
+}
+
+.frame[data-rarity='ghost']:hover { --ygo-rarity-glow: rgba(184, 212, 230, 0.5); }
+.frame[data-rarity='secret']:hover { --ygo-rarity-glow: rgba(183, 163, 210, 0.45); }
+.frame[data-rarity='prismatic-secret']:hover { --ygo-rarity-glow: rgba(255, 180, 220, 0.5); }
+.frame[data-rarity='starlight']:hover { --ygo-rarity-glow: rgba(232, 236, 255, 0.45); }
+.frame[data-rarity='qcsr']:hover { --ygo-rarity-glow: rgba(212, 184, 120, 0.55); }
+.frame[data-rarity='prismatic-collectors']:hover { --ygo-rarity-glow: rgba(180, 210, 240, 0.45); }
+
+.frame {
+  transition: box-shadow var(--ygo-motion-slow) var(--ygo-motion-ease),
+              transform var(--ygo-motion-slow) var(--ygo-motion-ease);
+}
+
+.frame:hover { transform: translateY(-1px); }

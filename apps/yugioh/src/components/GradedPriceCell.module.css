@@ -1,0 +1,54 @@
+.cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ygo-size-xs);
+  padding: var(--ygo-size-sm) var(--ygo-size-base);
+  min-width: 92px;
+  border-radius: var(--ygo-radius-md);
+  background: var(--ygo-ink-graphite);
+  border: 1px solid var(--ygo-line-hairline);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--ygo-size-xs);
+}
+
+.price {
+  font-family: var(--ygo-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.currency {
+  font-family: var(--ygo-font-body);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meta {
+  font-family: var(--ygo-font-body);
+  font-size: 10px;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.04em;
+}
+
+.high::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(232, 192, 105, 0.35);
+  pointer-events: none;
+}

@@ -1,0 +1,52 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ygo-size-xs);
+  padding: var(--ygo-size-2xs) var(--ygo-size-sm);
+  border-radius: var(--ygo-radius-sm);
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.icon {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.forbidden {
+  background: var(--ygo-status-forbidden);
+  color: var(--ygo-status-forbidden-ink);
+  border-color: rgba(255, 100, 100, 0.35);
+}
+
+.limited {
+  background: var(--ygo-status-limited);
+  color: var(--ygo-status-limited-ink);
+  border-color: rgba(255, 170, 90, 0.35);
+}
+
+.semiLimited {
+  background: var(--ygo-status-semi-limited);
+  color: var(--ygo-status-semi-limited-ink);
+  border-color: rgba(220, 190, 90, 0.35);
+}
+
+.unlimited {
+  background: var(--ygo-status-unlimited);
+  color: var(--ygo-status-unlimited-ink);
+  border-color: var(--ygo-line-hairline);
+}
+
+.unknown {
+  background: var(--ygo-status-unknown);
+  color: var(--ygo-status-unknown-ink);
+  border-color: var(--ygo-line-hairline);
+  font-weight: 500;
+}

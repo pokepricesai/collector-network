@@ -1,0 +1,74 @@
+/*
+ * PrintingFingerprint — signature YGO element. Compact printing
+ * identifier that combines set-code + rarity + edition + language into
+ * a single fingerprint pill users can memorise for "what's this exact
+ * card in my hand".
+ */
+
+.pill {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border-radius: var(--ygo-radius-md);
+  background: var(--ygo-ink-onyx);
+  border: 1px solid var(--ygo-line-hairline);
+  font-family: var(--ygo-font-mono);
+  overflow: hidden;
+  line-height: 1;
+  box-shadow: var(--ygo-shadow-raised);
+}
+
+.cell {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--ygo-size-sm) var(--ygo-size-base);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  border-right: 1px solid var(--ygo-line-hairline);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.cell:last-child { border-right: none; }
+
+.code {
+  font-size: 14px;
+  color: var(--ygo-accent-gold-strong);
+  letter-spacing: 0.06em;
+}
+
+.rarity {
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ygo-text-muted);
+}
+
+.edition {
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.edition[data-edition='1st_edition'] { color: var(--ygo-accent-gold-strong); }
+.edition[data-edition='limited'] { color: var(--ygo-status-limited-ink); }
+.edition[data-edition='unlimited_or_unknown'] {
+  color: var(--ygo-text-quiet);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.lang {
+  font-family: var(--ygo-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ygo-text-muted);
+  letter-spacing: 0.12em;
+}
