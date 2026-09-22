@@ -1,0 +1,299 @@
+.page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 var(--ygo-size-lg);
+}
+
+@media (max-width: 767px) {
+  .page { padding: 0 var(--ygo-size-base); }
+}
+
+.hero {
+  padding: var(--ygo-size-3xl) 0 var(--ygo-size-2xl);
+}
+
+@media (max-width: 767px) {
+  .hero { padding: var(--ygo-size-xl) 0 var(--ygo-size-lg); }
+}
+
+.eyebrow {
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ygo-accent-gold);
+  margin: 0 0 var(--ygo-size-base) 0;
+}
+
+.heroTitle {
+  font-family: var(--ygo-font-display);
+  font-size: clamp(32px, 5vw, 56px);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  color: var(--ygo-text-primary);
+  margin: 0 0 var(--ygo-size-base) 0;
+  max-width: 22ch;
+}
+
+.heroSub {
+  font-family: var(--ygo-font-body);
+  font-size: clamp(15px, 1.6vw, 18px);
+  line-height: 1.5;
+  color: var(--ygo-text-muted);
+  margin: 0 0 var(--ygo-size-2xl) 0;
+  max-width: 60ch;
+}
+
+.heroSearch {
+  max-width: 720px;
+}
+
+.heroExamples {
+  margin-top: var(--ygo-size-base);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ygo-size-sm);
+  align-items: center;
+  color: var(--ygo-text-quiet);
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+}
+
+.heroExample {
+  font-family: var(--ygo-font-mono);
+  font-size: 11px;
+  color: var(--ygo-text-muted);
+  background: var(--ygo-ink-graphite);
+  padding: 2px 8px;
+  border-radius: var(--ygo-radius-sm);
+  border: 1px solid var(--ygo-line-hairline);
+}
+
+.section {
+  padding: var(--ygo-size-xl) 0;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ygo-size-lg);
+  margin-bottom: var(--ygo-size-lg);
+}
+
+.sectionTitle {
+  font-family: var(--ygo-font-display);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ygo-text-primary);
+  margin: 0;
+}
+
+.sectionMeta {
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+  color: var(--ygo-text-quiet);
+}
+
+.grid {
+  display: grid;
+  gap: var(--ygo-size-base);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  align-items: stretch;
+}
+
+.wideGrid {
+  display: grid;
+  gap: var(--ygo-size-base);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.iconicTile {
+  padding: var(--ygo-size-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-sm);
+}
+
+.iconicImageWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.iconicName {
+  font-family: var(--ygo-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  margin: 0;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+}
+
+.iconicMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.04em;
+}
+
+.iconicPrice {
+  font-family: var(--ygo-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ygo-text-primary);
+  font-size: 12.5px;
+}
+
+.iconicPriceSuffix {
+  font-family: var(--ygo-font-body);
+  font-size: 10px;
+  color: var(--ygo-text-quiet);
+  margin-left: 4px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.setTile {
+  padding: var(--ygo-size-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-xs);
+}
+
+.setName {
+  font-family: var(--ygo-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.setMetaRow {
+  display: flex;
+  gap: var(--ygo-size-sm);
+  align-items: center;
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.04em;
+}
+
+.setCode {
+  font-family: var(--ygo-font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  color: var(--ygo-accent-gold-strong);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gradedTile {
+  padding: var(--ygo-size-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-sm);
+}
+
+.gradedTileHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--ygo-size-sm);
+}
+
+.gradedTileName {
+  font-family: var(--ygo-font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  margin: 0;
+  line-height: 1.25;
+  flex: 1;
+  min-width: 0;
+}
+
+.mostValuableTile {
+  padding: var(--ygo-size-base);
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: var(--ygo-size-base);
+  align-items: center;
+}
+
+.mostValuableName {
+  font-family: var(--ygo-font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  margin: 0 0 var(--ygo-size-xs) 0;
+  line-height: 1.2;
+}
+
+.mostValuablePrice {
+  font-family: var(--ygo-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ygo-accent-gold-strong);
+  letter-spacing: 0;
+}
+
+.mostValuablePriceCurrency {
+  font-family: var(--ygo-font-body);
+  font-size: 10px;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.rarityTile {
+  padding: var(--ygo-size-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-sm);
+}
+
+.rarityLabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ygo-size-sm);
+}
+
+.raritySample {
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+  color: var(--ygo-text-muted);
+  line-height: 1.4;
+}
+
+.gradedTileImage {
+  display: flex;
+}
+
+.mostValuableImageWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.notice {
+  padding: var(--ygo-size-base) var(--ygo-size-lg);
+  border-radius: var(--ygo-radius-md);
+  background: rgba(196, 122, 28, 0.08);
+  border: 1px solid rgba(196, 122, 28, 0.25);
+  color: var(--ygo-status-limited-ink);
+  font-family: var(--ygo-font-body);
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: 780px;
+}

@@ -11,7 +11,7 @@
     "lint": "echo \"(market-data) lint placeholder\" && exit 0",
     "typecheck": "tsc --noEmit",
     "build": "echo \"(market-data) build placeholder\" && exit 0",
-    "test": "node --import tsx --test src/pricing.test.ts"
+    "test": "node --import tsx --test src/pricing.test.ts src/selection.test.ts"
   },
   "dependencies": {
     "@collector-network/database": "workspace:*"

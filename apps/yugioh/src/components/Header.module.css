@@ -1,0 +1,97 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--ygo-line-hairline);
+  background: linear-gradient(180deg,
+    rgba(5, 7, 12, 0.95) 0%,
+    rgba(5, 7, 12, 0.85) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--ygo-size-lg);
+  align-items: center;
+  padding: var(--ygo-size-base) var(--ygo-size-lg);
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--ygo-size-sm);
+  text-decoration: none;
+  color: var(--ygo-text-primary);
+}
+
+.brandMark {
+  font-family: var(--ygo-font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.brandSub {
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ygo-text-quiet);
+}
+
+.searchWrap {
+  min-width: 0;
+  max-width: 480px;
+}
+
+.nav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ygo-size-lg);
+}
+
+.navItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ygo-size-2xs);
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ygo-text-muted);
+  padding: var(--ygo-size-2xs) var(--ygo-size-sm);
+  border-radius: var(--ygo-radius-sm);
+}
+
+.navItem:hover { color: var(--ygo-text-primary); }
+
+.navItem[aria-disabled='true'] {
+  color: var(--ygo-text-quiet);
+  cursor: not-allowed;
+}
+
+.navItem[aria-disabled='true']::after {
+  content: 'soon';
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ygo-text-quiet);
+}
+
+@media (max-width: 767px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: var(--ygo-size-sm);
+    padding: var(--ygo-size-sm) var(--ygo-size-base);
+  }
+  .searchWrap { max-width: none; }
+  .nav { display: none; }
+}

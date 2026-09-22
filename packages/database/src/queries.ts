@@ -4,7 +4,7 @@ import type {
   TcgGame,
   TcgPrinting,
   TcgSet,
-} from './types.js';
+} from './types';
 
 // Low-level read helpers over the shared tcg_* tables. Game-agnostic — do
 // not put YGO/MTG/Pokémon semantics in here. Errors are re-thrown so that

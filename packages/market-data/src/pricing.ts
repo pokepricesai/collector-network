@@ -3,8 +3,8 @@ import type {
   TcgGradedPriceCurrent,
   TcgMarketPriceCurrent,
 } from '@collector-network/database';
-import { isRawObservation, toGradedQuote, toRetailQuote } from './mappers.js';
-import type { GradedQuote, PrintingPricing, RetailQuote } from './types.js';
+import { isRawObservation, toGradedQuote, toRetailQuote } from './mappers';
+import type { GradedQuote, PrintingPricing, RetailQuote } from './types';
 
 // Query helpers on top of tcg_market_prices_current and
 // tcg_graded_prices_current. Game-agnostic. Never merges currencies. Never

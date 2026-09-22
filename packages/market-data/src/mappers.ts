@@ -2,8 +2,8 @@ import type {
   TcgGradedPriceCurrent,
   TcgMarketPriceCurrent,
 } from '@collector-network/database';
-import type { GradedQuote, RetailQuote } from './types.js';
-import { RAW_GRADER } from './types.js';
+import type { GradedQuote, RetailQuote } from './types';
+import { RAW_GRADER } from './types';
 
 // Row → domain-shape mappers. Pure. No IO. Deterministic.
 

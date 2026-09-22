@@ -15,12 +15,12 @@ import {
   getPrintingPricingBatch,
   type PrintingPricing,
 } from '@collector-network/market-data';
-import { toYugiohGamedata, type YugiohGamedata } from './gamedata.js';
+import { toYugiohGamedata, type YugiohGamedata } from './gamedata';
 import {
   editionDisplayLabel,
   normaliseEdition,
   type EditionMarker,
-} from './edition.js';
+} from './edition';
 
 // Yu-Gi-Oh! server-only composition layer. Composes the shared database +
 // market-data primitives into shapes the (future) UI can render without

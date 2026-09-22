@@ -4,9 +4,9 @@ import type {
   TcgGradedPriceCurrent,
   TcgMarketPriceCurrent,
 } from '@collector-network/database';
-import { toGradedQuote, toRetailQuote } from './mappers.js';
-import { splitGradedRows } from './pricing.js';
-import { RAW_GRADER } from './types.js';
+import { toGradedQuote, toRetailQuote } from './mappers';
+import { splitGradedRows } from './pricing';
+import { RAW_GRADER } from './types';
 
 // Fixtures reflect the audited production shape — see docs/yugioh/data-audit.md.
 
