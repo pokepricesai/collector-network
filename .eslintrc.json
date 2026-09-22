@@ -1,0 +1,10 @@
+{
+  "root": true,
+  "ignorePatterns": [
+    "node_modules",
+    ".next",
+    "dist",
+    ".turbo",
+    "next-env.d.ts"
+  ]
+}

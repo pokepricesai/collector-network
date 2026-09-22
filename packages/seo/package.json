@@ -1,0 +1,18 @@
+{
+  "name": "@collector-network/seo",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "echo \"(seo) lint placeholder\" && exit 0",
+    "typecheck": "tsc --noEmit",
+    "build": "echo \"(seo) build placeholder\" && exit 0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
