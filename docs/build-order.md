@@ -3,12 +3,13 @@
 This is the current planned sequence. Each item is an explicit slice that
 ships before the next begins. Do not skip ahead.
 
-1. **Monorepo foundation.** *(this slice)*
+1. **Monorepo foundation.** *(complete — commit `23dd585`)*
    Workspace, tooling, shared package shells, initialised Yu-Gi-Oh app with
    only a placeholder homepage. No product work yet.
-2. **Yu-Gi-Oh research / product specification.**
+2. **Yu-Gi-Oh research / product specification.** *(complete — see [`yugioh/product-spec.md`](./yugioh/product-spec.md))*
    Competitive audit, target audience, differentiators, terminology
-   decisions, IA sketch, editorial voice. Written specs, no code.
+   decisions, IA sketch, editorial voice, exact V1 scope. Written specs, no
+   code.
 3. **Shared database / read layer.**
    Implement `@collector-network/database` (Supabase client + generated
    types) and `@collector-network/market-data` (read helpers on top of
