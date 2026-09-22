@@ -3,9 +3,34 @@
 > **Status:** research + specification complete. No frontend built.
 > Companion docs: [`research.md`](./research.md),
 > [`competitors.md`](./competitors.md),
-> [`data-gap.md`](./data-gap.md),
+> [`data-gap.md`](./data-gap.md) (reconciled with Slice 3),
+> [`data-audit.md`](./data-audit.md) (Slice 3 output),
+> [`data-ingestion-plan.md`](./data-ingestion-plan.md) (Slice 3 output),
 > [`seo-opportunities.md`](./seo-opportunities.md).
 > **Snapshot date:** 2026-09-22.
+
+> **Post-Slice-3 corrections (2026-09-22 audit):**
+>
+> - §F "Edition": production has no `unlimited` value. Edition axis is
+>   `1st_edition` (29,517) / `limited` (2,196) / NULL (54,428, meaning
+>   "Unlimited or unmarked"). The V1 edition filter must present the
+>   third option as "Unlimited / unmarked" with UX copy acknowledging
+>   the ambiguity.
+> - §H "Graded card opportunity": for vintage cards (LOB era), graded
+>   quotes attach to the Unlimited printing only — the 1st Edition
+>   printing has zero graded rows. This is an ingest issue, not a schema
+>   issue. Modern cards (BLMM etc.) do split graded by edition
+>   correctly. Slice 2's "1st Ed vintage PSA 10" wedge cannot be
+>   delivered honestly from current data alone. Fix tracked in
+>   [`data-ingestion-plan.md`](./data-ingestion-plan.md) §G1; V1 will
+>   ship without vintage-1st-Ed graded promises unless G1 lands first.
+> - §N "Card page": production model is more granular than assumed —
+>   `tcg_cards` is per-(set × collector_number × rarity), not
+>   per-logical-card. The two-URL model in §V (`/card/[slug]` +
+>   `/card/[slug]/printing/[…]`) still stands. See
+>   [`data-audit.md`](./data-audit.md) §4 for the resolution.
+> - §Y "Data-gap table" is superseded by the reconciled table in
+>   [`data-gap.md`](./data-gap.md).
 
 ## The one-sentence pitch
 

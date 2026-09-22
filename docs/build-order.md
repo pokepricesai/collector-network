@@ -10,11 +10,15 @@ ships before the next begins. Do not skip ahead.
    Competitive audit, target audience, differentiators, terminology
    decisions, IA sketch, editorial voice, exact V1 scope. Written specs, no
    code.
-3. **Shared database / read layer.**
-   Implement `@collector-network/database` (Supabase client + generated
-   types) and `@collector-network/market-data` (read helpers on top of
-   `tcg_market_prices_*` and `tcg_graded_prices_*`). Wired only against
-   development/staging credentials.
+3. **Shared database / read layer.** *(complete — see [`yugioh/data-audit.md`](./yugioh/data-audit.md))*
+   Implemented `@collector-network/database` (Supabase client + narrow
+   hand-written types matching production shape) and
+   `@collector-network/market-data` (read helpers that keep raw / graded
+   / retail-market separate and never merge currencies). Read against
+   production via anon key only. `apps/yugioh/src/server` composes the
+   two into a YGO-specific read layer (`getYugiohCardBundleByName`).
+   Blue-Eyes end-to-end proof: 69 tcg_cards → 127 printings → 131
+   retail + 58 raw obs + 455 graded quotes.
 4. **Yu-Gi-Oh visual / product system.**
    Yu-Gi-Oh-specific branding, typography, component vocabulary. Not shared
    with other games. Establishes the site's identity.

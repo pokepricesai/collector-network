@@ -8,9 +8,13 @@
     "start": "next start --port 3001",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "audit:blue-eyes": "node --env-file=.env.local --import tsx scripts/audit-blue-eyes.mts",
     "clean": "rimraf .next .turbo node_modules"
   },
   "dependencies": {
+    "@collector-network/database": "workspace:*",
+    "@collector-network/market-data": "workspace:*",
+    "@collector-network/network-config": "workspace:*",
     "next": "^15.1.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -22,6 +26,7 @@
     "eslint": "^9.17.0",
     "eslint-config-next": "^15.1.4",
     "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
 }

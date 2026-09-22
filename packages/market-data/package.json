@@ -10,9 +10,15 @@
   "scripts": {
     "lint": "echo \"(market-data) lint placeholder\" && exit 0",
     "typecheck": "tsc --noEmit",
-    "build": "echo \"(market-data) build placeholder\" && exit 0"
+    "build": "echo \"(market-data) build placeholder\" && exit 0",
+    "test": "node --import tsx --test src/pricing.test.ts"
+  },
+  "dependencies": {
+    "@collector-network/database": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
 }
