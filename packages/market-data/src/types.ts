@@ -18,8 +18,15 @@ export interface RetailQuote {
   updatedAt: string;
 }
 
+import type { GradedAttribution } from '@collector-network/database';
+
 export interface GradedQuote {
-  printingId: string;
+  // Exactly one of printingId or cardId is populated, matching the
+  // attribution class. Callers must never treat these as
+  // interchangeable — see the header comment on GradedAttribution.
+  printingId: string | null;
+  cardId: string | null;
+  attribution: GradedAttribution;
   grader: string;
   grade: string;
   currency: string;
@@ -33,13 +40,21 @@ export interface GradedQuote {
 // GradedQuote returned as "graded".
 export const RAW_GRADER = 'raw' as const;
 
+// Card-scoped pricing bucket: quotes that describe the card family as a
+// whole (attribution='card'). These CANNOT be attributed to a specific
+// physical printing and must render in a clearly separate panel.
+export interface CardScopedPricing {
+  cardId: string;
+  raw: GradedQuote[];    // attribution='card', grader='raw'
+  graded: GradedQuote[]; // attribution='card', grader != 'raw'
+}
+
 export interface PrintingPricing {
   printingId: string;
   // Retail marketplace listings — TCGplayer, Cardmarket, etc.
   market: RetailQuote[];
-  // grader='raw' observations from tcg_graded_prices_current. These are raw
-  // sales observations from grading aggregators, not marketplace listings.
-  raw: GradedQuote[];
-  // grader != 'raw' — actual slabbed cards (PSA/BGS/CGC/SGC/any).
-  graded: GradedQuote[];
+  // Everything below is strictly attribution='printing' — safe to
+  // render underneath the exact printing / edition / finish / language.
+  raw: GradedQuote[];    // grader='raw', attribution='printing'
+  graded: GradedQuote[]; // grader != 'raw', attribution='printing'
 }

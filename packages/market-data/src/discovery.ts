@@ -52,8 +52,12 @@ export interface TopGradedPrinting {
   quote: GradedQuote;
 }
 
-// Top graded slabs. Filters out `grader='raw'` at the query layer AND
-// re-guards at the map layer (defence in depth).
+// Top printing-scoped graded slabs — top-N by price. Filters:
+// - attribution='printing' (never returns card-scoped ambiguity)
+// - grader != 'raw' (never returns raw observations)
+// - onlyGrade10 by default (headline chase-card intent)
+// Callers may still exclude specific printing prefixes if they want
+// e.g. only 1st-Edition variants.
 export async function getMostValuableGradedPrintings(
   supabase: SupabaseClient,
   gameId: string,
@@ -68,6 +72,7 @@ export async function getMostValuableGradedPrintings(
     .from('tcg_graded_prices_current')
     .select('*')
     .eq('game_id', gameId)
+    .eq('attribution', 'printing')
     .neq('grader', 'raw')
     .gte('price', minPrice)
     .order('price', { ascending: false })
@@ -83,9 +88,9 @@ export async function getMostValuableGradedPrintings(
   }
   const rows = (data as TcgGradedPriceCurrent[] | null) ?? [];
   return rows
-    .filter((row) => !isRawObservation(row))
+    .filter((row) => !isRawObservation(row) && row.tcg_printing_id != null)
     .map((row) => ({
-      printingId: row.tcg_printing_id,
+      printingId: row.tcg_printing_id as string,
       quote: toGradedQuote(row),
     }));
 }

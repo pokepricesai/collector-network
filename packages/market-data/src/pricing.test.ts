@@ -18,6 +18,8 @@ function gradedRow(
 ): TcgGradedPriceCurrent {
   return {
     tcg_printing_id: LOB_UNL_PRINTING,
+    tcg_card_id: null,
+    attribution: 'printing',
     game_id: 'ygo',
     grader: 'psa',
     grade: '10',

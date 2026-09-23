@@ -28,6 +28,8 @@ export function toRetailQuote(row: TcgMarketPriceCurrent): RetailQuote {
 export function toGradedQuote(row: TcgGradedPriceCurrent): GradedQuote {
   return {
     printingId: row.tcg_printing_id,
+    cardId: row.tcg_card_id,
+    attribution: row.attribution,
     grader: row.grader,
     grade: row.grade,
     currency: row.currency,

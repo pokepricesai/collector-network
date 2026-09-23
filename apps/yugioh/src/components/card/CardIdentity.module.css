@@ -1,0 +1,337 @@
+.wrap {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: var(--ygo-size-2xl);
+  align-items: start;
+}
+
+@media (max-width: 767px) {
+  .wrap {
+    grid-template-columns: 1fr;
+    gap: var(--ygo-size-lg);
+  }
+}
+
+.imageCol {
+  position: sticky;
+  top: calc(64px + var(--ygo-size-lg));
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .imageCol { position: static; }
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-sm);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--ygo-size-sm);
+  font-family: var(--ygo-font-body);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ygo-text-muted);
+  flex-wrap: wrap;
+}
+
+.crumb {
+  color: var(--ygo-text-quiet);
+  text-decoration: none;
+}
+
+.crumb:hover { color: var(--ygo-text-primary); }
+
+.title {
+  font-family: var(--ygo-font-display);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ygo-text-primary);
+  margin: 0;
+  line-height: 1.1;
+}
+
+.typeLine {
+  font-family: var(--ygo-font-body);
+  font-size: 13.5px;
+  color: var(--ygo-text-muted);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ygo-size-sm);
+  flex-wrap: wrap;
+}
+
+.dot { color: var(--ygo-text-quiet); }
+
+.stats {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ygo-size-xl);
+  padding: var(--ygo-size-base) var(--ygo-size-lg);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  background: var(--ygo-ink-graphite);
+  flex-wrap: wrap;
+}
+
+.rulesText {
+  font-family: var(--ygo-font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ygo-text-primary);
+  white-space: pre-wrap;
+  background: var(--ygo-ink-onyx);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  padding: var(--ygo-size-lg);
+  margin: 0;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ygo-size-xs);
+  align-items: center;
+}
+
+.section {
+  padding: var(--ygo-size-2xl) 0;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ygo-size-lg);
+  margin-bottom: var(--ygo-size-lg);
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-family: var(--ygo-font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ygo-text-primary);
+  margin: 0;
+}
+
+.sectionCaption {
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+  color: var(--ygo-text-quiet);
+  max-width: 60ch;
+  margin: 0;
+}
+
+.pricingGrid {
+  display: grid;
+  gap: var(--ygo-size-base);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.priceCell {
+  padding: var(--ygo-size-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-xs);
+}
+
+.priceLabel {
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.priceValue {
+  font-family: var(--ygo-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+}
+
+.priceCurrency {
+  font-family: var(--ygo-font-body);
+  font-size: 10px;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.priceMeta {
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  color: var(--ygo-text-muted);
+  display: flex;
+  gap: var(--ygo-size-xs);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.gradedGrid {
+  display: flex;
+  gap: var(--ygo-size-sm);
+  flex-wrap: wrap;
+}
+
+.cardScopedNote {
+  padding: var(--ygo-size-base) var(--ygo-size-lg);
+  border-radius: var(--ygo-radius-md);
+  background: rgba(196, 122, 28, 0.08);
+  border: 1px solid rgba(196, 122, 28, 0.25);
+  color: var(--ygo-status-limited-ink);
+  font-family: var(--ygo-font-body);
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-bottom: var(--ygo-size-base);
+  max-width: 900px;
+}
+
+.variantsTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--ygo-font-body);
+  font-size: 12.5px;
+  background: var(--ygo-ink-onyx);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  overflow: hidden;
+}
+
+.variantsTable th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ygo-text-quiet);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--ygo-size-sm) var(--ygo-size-base);
+  border-bottom: 1px solid var(--ygo-line-hairline);
+}
+
+.variantsTable td {
+  padding: var(--ygo-size-sm) var(--ygo-size-base);
+  border-bottom: 1px solid var(--ygo-line-hairline);
+  vertical-align: middle;
+}
+
+.variantsTable tbody tr:last-child td { border-bottom: none; }
+
+.variantsTable tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+.variantRowActive td {
+  background: rgba(232, 192, 105, 0.05);
+}
+
+.variantLink {
+  color: var(--ygo-text-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.variantLink:hover {
+  color: var(--ygo-accent-gold-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dim {
+  color: var(--ygo-text-quiet);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.setCode {
+  font-family: var(--ygo-font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  color: var(--ygo-accent-gold-strong);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.priceNum {
+  font-family: var(--ygo-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.gameGrid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--ygo-size-sm) var(--ygo-size-base);
+  font-family: var(--ygo-font-body);
+  font-size: 13px;
+  padding: var(--ygo-size-lg);
+  background: var(--ygo-ink-onyx);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+}
+
+.gameLabel {
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  padding-top: 2px;
+}
+
+.gameValue {
+  color: var(--ygo-text-primary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ygo-size-xs);
+  align-items: center;
+}
+
+.marketRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ygo-size-sm);
+  padding: var(--ygo-size-sm) var(--ygo-size-base);
+  border-bottom: 1px solid var(--ygo-line-hairline);
+  font-family: var(--ygo-font-body);
+  font-size: 12.5px;
+  color: var(--ygo-text-primary);
+}
+
+.marketRow:last-child { border-bottom: none; }
+
+.marketSource {
+  color: var(--ygo-text-muted);
+  font-family: var(--ygo-font-body);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.marketPrice {
+  margin-left: auto;
+  font-family: var(--ygo-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.emptyState {
+  padding: var(--ygo-size-lg);
+  border: 1px dashed var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  color: var(--ygo-text-quiet);
+  font-family: var(--ygo-font-body);
+  font-size: 13px;
+  text-align: center;
+}

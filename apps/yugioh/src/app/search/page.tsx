@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { CardImageFrame } from '../../components/CardImageFrame';
 import { EditionBadge } from '../../components/EditionBadge';
 import { Footer } from '../../components/Footer';
@@ -7,13 +8,13 @@ import { RarityBadge } from '../../components/RarityBadge';
 import { SearchBar } from '../../components/SearchBar';
 import { Surface } from '../../components/Surface';
 import { RarityRefractorLine } from '../../components/signature/RarityRefractorLine';
+import { normalisePrintingKey, toCardSlug } from '../../lib/slug';
 import { search, type CardFamilyResult, type CardVariant } from '../../server/search';
 import styles from './page.module.css';
 
-// Search results are their own destination in Slice 5. Individual
-// printings are NOT clickable — the physical printing / logical card
-// routes arrive in Slice 6. We say so visibly rather than link to
-// non-existent pages.
+// Slice 6: search results now link into the real card + printing
+// pages. Family names go to /card/[slug]; each variant row on a
+// set-code match goes to /card/[slug]/printing/[collector]/[key].
 
 export const metadata: Metadata = {
   title: 'Search — Duelist Prices',
@@ -111,19 +112,30 @@ function SearchResponseView({
 }
 
 function FamilyCard({ family }: { family: CardFamilyResult }) {
+  const cardSlug = toCardSlug(family.name);
+  const cardHref = `/card/${cardSlug}`;
   return (
     <Surface variant="card">
       <div className={styles.familyCard}>
         <div className={styles.familyImage}>
-          <CardImageFrame
-            src={family.representativeImage}
-            alt={family.name}
-            rarity={family.rarityRange[0]}
-            maxWidth={140}
-          />
+          <Link href={cardHref} aria-label={`Open ${family.name}`}>
+            <CardImageFrame
+              src={family.representativeImage}
+              alt={family.name}
+              rarity={family.rarityRange[0]}
+              maxWidth={140}
+            />
+          </Link>
         </div>
         <div style={{ minWidth: 0 }}>
-          <h2 className={styles.familyName}>{family.name}</h2>
+          <h2 className={styles.familyName}>
+            <Link
+              href={cardHref}
+              style={{ color: 'inherit', textDecoration: 'none' }}
+            >
+              {family.name}
+            </Link>
+          </h2>
           <RarityRefractorLine rarity={family.rarityRange[0]} />
           <p className={styles.familyMeta}>
             <span className={styles.familyPrice}>
@@ -149,45 +161,65 @@ function FamilyCard({ family }: { family: CardFamilyResult }) {
               <span className={styles.dim}>+{family.rarityRange.length - 8} more</span>
             )}
           </div>
-          <VariantsTable variants={family.variants} />
+          <VariantsTable variants={family.variants} cardSlug={cardSlug} />
         </div>
       </div>
       <div className={styles.disabledClickHint}>
-        Individual card and printing pages arrive in the next slice — for now
-        this row is a summary destination.
+        Click a set row to open that printing, or the card image / name to open
+        the full card family page.
       </div>
     </Surface>
   );
 }
 
 function SetCodeCard({ result }: { result: { code: string; matches: CardVariant[] } }) {
+  const firstCard = result.matches[0]?.card;
+  const cardSlug = firstCard ? toCardSlug(firstCard.name) : '';
+  const cardHref = cardSlug ? `/card/${cardSlug}` : '#';
   return (
     <Surface variant="market">
       <div className={styles.familyCard}>
         <div className={styles.familyImage}>
-          <CardImageFrame
-            src={result.matches[0]?.card?.images?.small ?? null}
-            alt={result.matches[0]?.card?.name ?? result.code}
-            rarity={result.matches[0]?.card?.rarity}
-            maxWidth={140}
-          />
+          {cardSlug ? (
+            <Link href={cardHref}>
+              <CardImageFrame
+                src={firstCard?.images?.small ?? null}
+                alt={firstCard?.name ?? result.code}
+                rarity={firstCard?.rarity}
+                maxWidth={140}
+              />
+            </Link>
+          ) : (
+            <CardImageFrame
+              src={firstCard?.images?.small ?? null}
+              alt={firstCard?.name ?? result.code}
+              rarity={firstCard?.rarity}
+              maxWidth={140}
+            />
+          )}
         </div>
         <div style={{ minWidth: 0 }}>
           <h2 className={styles.familyName}>
-            {result.matches[0]?.card?.name ?? result.code}
+            {cardSlug ? (
+              <Link href={cardHref} style={{ color: 'inherit', textDecoration: 'none' }}>
+                {firstCard?.name ?? result.code}
+              </Link>
+            ) : (
+              (firstCard?.name ?? result.code)
+            )}
           </h2>
           <p className={styles.familyMeta}>
             <span className={styles.setCode}>{result.code}</span>
             <span>{result.matches.length} matching card {result.matches.length === 1 ? 'entry' : 'entries'}</span>
           </p>
-          <VariantsTable variants={result.matches} />
+          <VariantsTable variants={result.matches} cardSlug={cardSlug} />
         </div>
       </div>
     </Surface>
   );
 }
 
-function VariantsTable({ variants }: { variants: CardVariant[] }) {
+function VariantsTable({ variants, cardSlug }: { variants: CardVariant[]; cardSlug: string }) {
   return (
     <table className={styles.variantsTable}>
       <thead>
@@ -205,9 +237,29 @@ function VariantsTable({ variants }: { variants: CardVariant[] }) {
           const editions = Array.from(
             new Set(v.printings.map((p) => p.edition)),
           );
+          // A variant may have multiple printings (1st Ed + Unlimited).
+          // Link the ROW to the first printing; if the user wants a
+          // specific edition they can click through to the card page
+          // and pick from the table there.
+          const firstPrinting = v.printings[0];
+          const href =
+            cardSlug && firstPrinting && v.card.collector_number
+              ? `/card/${cardSlug}/printing/${encodeURIComponent(
+                  v.card.collector_number,
+                )}/${encodeURIComponent(
+                  normalisePrintingKey(firstPrinting.tcggraph_printing_key),
+                )}`
+              : null;
+          const setCell = href ? (
+            <Link href={href} style={{ color: 'inherit', textDecoration: 'none' }}>
+              {v.set?.name ?? v.card.set_id}
+            </Link>
+          ) : (
+            <span>{v.set?.name ?? v.card.set_id}</span>
+          );
           return (
             <tr key={v.card.id}>
-              <td>{v.set?.name ?? v.card.set_id}</td>
+              <td>{setCell}</td>
               <td>
                 <span className={styles.setCode}>
                   {v.card.collector_number ?? '—'}
@@ -247,8 +299,8 @@ function VariantsTable({ variants }: { variants: CardVariant[] }) {
         {variants.length > 10 && (
           <tr>
             <td colSpan={6} className={styles.dim}>
-              +{variants.length - 10} more variants — collapsed for now,
-              full pagination arrives with card pages.
+              +{variants.length - 10} more variants — open the card page
+              to browse everything.
             </td>
           </tr>
         )}

@@ -11,6 +11,7 @@ import {
   type TcgSet,
 } from '@collector-network/database';
 import {
+  getMostValuableGradedPrintings,
   getMostValuableRetailPrintings,
   getRetailQuotesForPrintings,
   selectPreferredRetailQuote,
@@ -228,45 +229,15 @@ async function loadLatestSets(supabase: SupabaseClient): Promise<LatestSet[]> {
 async function loadGradedHighlights(
   supabase: SupabaseClient,
 ): Promise<GradedHighlight[]> {
-  // Query at the source: only fetch grade-10 slabs on printings whose
-  // ID ends in `:1st-edition:en`. This naturally excludes the Slice-3
-  // vintage LOB-era graded ambiguity (where graded attaches to
-  // `:normal:en` only), while surfacing genuine 1st-Edition modern
-  // graded slabs from post-2018 sets like MAMO/RA05/ALIN/BLGG.
-  const { data: gradedRows, error: gErr } = await supabase
-    .from('tcg_graded_prices_current')
-    .select('*')
-    .eq('game_id', YGO_GAME_ID)
-    .neq('grader', 'raw')
-    .eq('grade', '10')
-    .gte('price', 200)
-    .like('tcg_printing_id', '%:1st-edition:en')
-    .order('price', { ascending: false })
-    .limit(24);
-  if (gErr) throw new Error(gErr.message);
-  type GradedRow = {
-    tcg_printing_id: string;
-    grader: string;
-    grade: string;
-    currency: string;
-    price: number | null;
-    card_sales_volume: number | null;
-    updated_at: string;
-    ingested_at: string;
-    source_run_id: string | null;
-  };
-  const top = ((gradedRows as GradedRow[] | null) ?? []).map((row) => ({
-    printingId: row.tcg_printing_id,
-    quote: {
-      printingId: row.tcg_printing_id,
-      grader: row.grader,
-      grade: row.grade,
-      currency: row.currency,
-      price: row.price,
-      cardSalesVolume: row.card_sales_volume,
-      updatedAt: row.updated_at,
-    } as GradedQuote,
-  }));
+  // Post-attribution-fix: every attribution='printing' row is a safe
+  // per-printing quote. The shared helper enforces both filters
+  // (attribution + grader != raw). We still ask for grade 10 only
+  // and a $200 floor to keep the headline lean.
+  const top = await getMostValuableGradedPrintings(supabase, YGO_GAME_ID, {
+    limit: 24,
+    minPrice: 200,
+    onlyGrade10: true,
+  });
   if (top.length === 0) return [];
 
   const printingIds = top.map((t) => t.printingId);

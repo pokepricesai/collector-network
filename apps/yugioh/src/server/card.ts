@@ -1,0 +1,426 @@
+import {
+  getPrintingsForCards,
+  getSetsByIds,
+  type SupabaseClient,
+  type TcgCard,
+  type TcgPrinting,
+  type TcgSet,
+} from '@collector-network/database';
+import {
+  getCardScopedPricing,
+  getCardScopedPricingForCards,
+  getPrintingPricing,
+  getPrintingPricingBatch,
+  selectPreferredRetailQuote,
+  type CardScopedPricing,
+  type GradedQuote,
+  type PrintingPricing,
+  type RetailQuote,
+} from '@collector-network/market-data';
+import { normaliseEdition, type EditionMarker } from './edition';
+import { toYugiohGamedata, type YugiohGamedata } from './gamedata';
+import { getYugiohClient } from './read';
+import { normalisePrintingKey, slugMatches, slugToIlikePattern } from '../lib/slug';
+
+// Yu-Gi-Oh! server-only composition for /card/[slug] and
+// /card/[slug]/printing/[collector-number]/[printing-key]. Attribution
+// is honoured strictly:
+//   • per-printing pricing on printing pages
+//   • card-scoped pricing always in its own labelled panel
+//   • card-scoped quotes NEVER placed under a specific edition heading
+
+const YGO_GAME_ID = 'ygo';
+
+// ── Public shapes ─────────────────────────────────────────────────
+
+export interface PrintingVariant {
+  printing: TcgPrinting;
+  card: TcgCard;
+  set: TcgSet | null;
+  edition: EditionMarker;
+  printingKey: string;       // URL segment: normal / 1st-edition / foil / limited
+  bestUsdRetail: RetailQuote | null;
+  bestEurRetail: RetailQuote | null;
+  printingScopedGraded: GradedQuote[]; // attribution='printing' slabs (grader != raw)
+  printingScopedRaw: GradedQuote[];    // attribution='printing' raw observations
+  marketQuotes: RetailQuote[];         // full retail listings
+}
+
+export interface LogicalCardData {
+  name: string;
+  slug: string;
+  gamedata: YugiohGamedata;
+  rulesText: string | null;
+  representativeImage: string | null;
+  representativeCard: TcgCard;
+  cards: TcgCard[];
+  sets: Map<string, TcgSet>;
+  variants: PrintingVariant[];
+  rarityRange: string[];
+  editionRange: EditionMarker[];
+  usdPriceLow: number | null;
+  usdPriceHigh: number | null;
+  cardScopedPricing: CardScopedPricing[]; // one entry per tcg_cards row
+}
+
+export interface PhysicalPrintingData {
+  card: TcgCard;
+  set: TcgSet | null;
+  printing: TcgPrinting;
+  edition: EditionMarker;
+  printingKey: string;
+  gamedata: YugiohGamedata;
+  pricing: PrintingPricing;
+  cardScopedPricing: CardScopedPricing; // shown as a labelled "card-scoped" panel
+  logicalSlug: string;
+  siblingVariants: PrintingVariant[]; // other printings of the same card family
+}
+
+// ── Logical card page loader ──────────────────────────────────────
+
+export async function getYugiohLogicalCardBySlug(
+  slug: string,
+  supabase: SupabaseClient = getYugiohClient(),
+): Promise<LogicalCardData | null> {
+  const cleaned = slug.trim().toLowerCase();
+  if (cleaned.length === 0) return null;
+
+  // ILIKE with the slug's pattern narrows the DB scan; JS-side
+  // re-slugging confirms an exact slug match to eliminate false
+  // positives from cards whose names collide under the lossy slug.
+  const ilikePattern = slugToIlikePattern(cleaned);
+  const { data: candidates, error } = await supabase
+    .from('tcg_cards')
+    .select('*')
+    .eq('game_id', YGO_GAME_ID)
+    .ilike('name', ilikePattern)
+    .limit(500);
+  if (error) {
+    throw new Error(
+      `[yugioh/card] getYugiohLogicalCardBySlug(${slug}): ${error.message}`,
+    );
+  }
+  const rows = (candidates as TcgCard[] | null) ?? [];
+  const matching = rows.filter((c) => slugMatches(c.name, cleaned));
+  if (matching.length === 0) return null;
+
+  // Prefer the most common name if the slug happens to match multiple
+  // distinct names (unlikely but possible). Group by name and pick the
+  // largest bucket.
+  const byName = new Map<string, TcgCard[]>();
+  for (const c of matching) {
+    const bucket = byName.get(c.name) ?? [];
+    bucket.push(c);
+    byName.set(c.name, bucket);
+  }
+  const [chosenName, cards] = Array.from(byName.entries()).sort(
+    (a, b) => b[1].length - a[1].length,
+  )[0]!;
+
+  return composeLogicalCard(supabase, chosenName, cleaned, cards);
+}
+
+async function composeLogicalCard(
+  supabase: SupabaseClient,
+  name: string,
+  slug: string,
+  cards: TcgCard[],
+): Promise<LogicalCardData> {
+  const cardIds = cards.map((c) => c.id);
+  const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
+
+  const [printings, sets, cardScopedMap] = await Promise.all([
+    getPrintingsForCards(supabase, cardIds),
+    getSetsByIds(supabase, setIds),
+    getCardScopedPricingForCards(supabase, cardIds),
+  ]);
+
+  const setsById = new Map(sets.map((s) => [s.id, s]));
+  const cardsById = new Map(cards.map((c) => [c.id, c]));
+  const pricingByPrintingId = await getPrintingPricingBatch(
+    supabase,
+    printings.map((p) => p.id),
+  );
+
+  const variants: PrintingVariant[] = printings.map((printing) => {
+    const card = cardsById.get(printing.tcg_card_id)!;
+    const set = setsById.get(printing.set_id) ?? null;
+    const pricing = pricingByPrintingId.get(printing.id) ?? {
+      printingId: printing.id,
+      market: [],
+      raw: [],
+      graded: [],
+    };
+    return {
+      printing,
+      card,
+      set,
+      edition: normaliseEdition(printing.edition),
+      printingKey: normalisePrintingKey(printing.tcggraph_printing_key),
+      bestUsdRetail: selectPreferredRetailQuote(pricing.market, 'USD'),
+      bestEurRetail: selectPreferredRetailQuote(pricing.market, 'EUR'),
+      printingScopedGraded: pricing.graded,
+      printingScopedRaw: pricing.raw,
+      marketQuotes: pricing.market,
+    } satisfies PrintingVariant;
+  });
+
+  // Sort variants deterministically: 1st Ed first, then limited, then
+  // others; within a tier, most-recently-released set first; then by
+  // set code + collector number for stability.
+  variants.sort((a, b) => {
+    const editionOrder = (e: EditionMarker) =>
+      e === '1st_edition' ? 0 : e === 'limited' ? 1 : 2;
+    if (editionOrder(a.edition) !== editionOrder(b.edition))
+      return editionOrder(a.edition) - editionOrder(b.edition);
+    const releaseA = a.set?.released_at ?? '';
+    const releaseB = b.set?.released_at ?? '';
+    if (releaseA !== releaseB) return releaseB.localeCompare(releaseA);
+    return (a.printing.collector_number ?? '').localeCompare(
+      b.printing.collector_number ?? '',
+    );
+  });
+
+  const representativeCard =
+    cards.find((c) => c.images?.large || c.images?.normal || c.images?.small) ??
+    cards[0]!;
+  const representativeImage =
+    representativeCard.images?.large ??
+    representativeCard.images?.normal ??
+    representativeCard.images?.small ??
+    null;
+
+  const rarityRange = Array.from(
+    new Set(cards.map((c) => c.rarity).filter((r): r is string => !!r)),
+  );
+  const editionRange = Array.from(new Set(variants.map((v) => v.edition)));
+
+  const usdPrices = variants
+    .map((v) => v.bestUsdRetail?.price)
+    .filter((p): p is number => p != null);
+  const usdPriceLow = usdPrices.length > 0 ? Math.min(...usdPrices) : null;
+  const usdPriceHigh = usdPrices.length > 0 ? Math.max(...usdPrices) : null;
+
+  const cardScopedPricing = cards
+    .map((c) => cardScopedMap.get(c.id))
+    .filter((cs): cs is CardScopedPricing => cs != null && (cs.raw.length > 0 || cs.graded.length > 0));
+
+  return {
+    name,
+    slug,
+    gamedata: toYugiohGamedata(representativeCard.gamedata),
+    rulesText: representativeCard.rules_text,
+    representativeImage,
+    representativeCard,
+    cards,
+    sets: setsById,
+    variants,
+    rarityRange,
+    editionRange,
+    usdPriceLow,
+    usdPriceHigh,
+    cardScopedPricing,
+  };
+}
+
+// ── Physical printing page loader ─────────────────────────────────
+
+export async function getYugiohPhysicalPrintingByRoute(
+  cardSlug: string,
+  collectorNumber: string,
+  printingKey: string,
+  supabase: SupabaseClient = getYugiohClient(),
+): Promise<PhysicalPrintingData | null> {
+  const normalisedKey = normalisePrintingKey(printingKey);
+  const upperCn = collectorNumber.trim().toUpperCase();
+
+  const { data: cardRows, error: cErr } = await supabase
+    .from('tcg_cards')
+    .select('*')
+    .eq('game_id', YGO_GAME_ID)
+    .eq('collector_number', upperCn);
+  if (cErr) {
+    throw new Error(`[yugioh/printing] card lookup: ${cErr.message}`);
+  }
+  const cards = (cardRows as TcgCard[] | null) ?? [];
+  const matchingCards = cards.filter((c) => slugMatches(c.name, cardSlug));
+  if (matchingCards.length === 0) return null;
+
+  // Prefer the card that has a printing matching the requested key.
+  const cardIds = matchingCards.map((c) => c.id);
+  const { data: printingRows, error: pErr } = await supabase
+    .from('tcg_printings')
+    .select('*')
+    .in('tcg_card_id', cardIds);
+  if (pErr) {
+    throw new Error(`[yugioh/printing] printings lookup: ${pErr.message}`);
+  }
+  const printings = (printingRows as TcgPrinting[] | null) ?? [];
+  const targetPrinting = printings.find(
+    (p) => normalisePrintingKey(p.tcggraph_printing_key) === normalisedKey,
+  );
+  if (!targetPrinting) return null;
+
+  const card = matchingCards.find((c) => c.id === targetPrinting.tcg_card_id);
+  if (!card) return null;
+
+  // Sibling variants: all other printings across the same-name family
+  // (not just this tcg_cards row). Reuse the logical composition.
+  const logical = await composeLogicalCard(
+    supabase,
+    card.name,
+    cardSlug,
+    matchingCards,
+  );
+  const siblingVariants = logical.variants.filter(
+    (v) => v.printing.id !== targetPrinting.id,
+  );
+
+  const [pricing, set, cardScoped] = await Promise.all([
+    getPrintingPricing(supabase, targetPrinting.id),
+    (async () => {
+      const sets = await getSetsByIds(supabase, [card.set_id]);
+      return sets[0] ?? null;
+    })(),
+    getCardScopedPricing(supabase, card.id),
+  ]);
+
+  return {
+    card,
+    set,
+    printing: targetPrinting,
+    edition: normaliseEdition(targetPrinting.edition),
+    printingKey: normalisedKey,
+    gamedata: toYugiohGamedata(card.gamedata),
+    pricing,
+    cardScopedPricing: cardScoped,
+    logicalSlug: cardSlug,
+    siblingVariants,
+  };
+}
+
+// ── Sitemap helpers ───────────────────────────────────────────────
+
+export interface CardSitemapRow {
+  slug: string;
+  updatedAt: string | null;
+}
+
+export async function listAllCardSlugs(
+  supabase: SupabaseClient = getYugiohClient(),
+  cursor: string | null = null,
+  limit = 5000,
+): Promise<{ rows: CardSitemapRow[]; nextCursor: string | null }> {
+  // We do NOT want to slug 38k+ card names in a single query — Postgres
+  // must return the raw name, we slug JS-side. Paginate by name asc
+  // + cursor.
+  let query = supabase
+    .from('tcg_cards')
+    .select('name,updated_at')
+    .eq('game_id', YGO_GAME_ID)
+    .order('name', { ascending: true })
+    .limit(limit);
+  if (cursor) query = query.gt('name', cursor);
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`[yugioh/card] listAllCardSlugs: ${error.message}`);
+  }
+  const rows = ((data as Array<{ name: string; updated_at: string | null }> | null) ?? [])
+    .reduce<Map<string, string | null>>((acc, r) => {
+      // De-duplicate: many tcg_cards rows share the same name (per-
+      // rarity, per-set). Sitemap wants one URL per logical card.
+      const slug = (r.name ?? '').trim();
+      if (!slug) return acc;
+      const prev = acc.get(slug);
+      if (!prev || (r.updated_at && r.updated_at > prev)) {
+        acc.set(slug, r.updated_at);
+      }
+      return acc;
+    }, new Map());
+
+  const out: CardSitemapRow[] = [];
+  for (const [name, updatedAt] of rows) {
+    const s = toCardSlugSafe(name);
+    if (s) out.push({ slug: s, updatedAt });
+  }
+  const lastName = (data as Array<{ name: string }> | null)?.at(-1)?.name ?? null;
+  const nextCursor = data && data.length === limit ? lastName : null;
+  return { rows: out, nextCursor };
+}
+
+export interface PrintingSitemapRow {
+  cardSlug: string;
+  collectorNumber: string;
+  printingKey: string;
+  updatedAt: string | null;
+}
+
+export async function listAllPrintingRoutes(
+  supabase: SupabaseClient = getYugiohClient(),
+  cursor: string | null = null,
+  limit = 5000,
+): Promise<{ rows: PrintingSitemapRow[]; nextCursor: string | null }> {
+  // For printing URLs we need card_name + collector_number +
+  // printing-key. Join in application code via a card-id lookup so
+  // the query stays PostgREST-clean.
+  let query = supabase
+    .from('tcg_printings')
+    .select('id,tcg_card_id,collector_number,tcggraph_printing_key,updated_at')
+    .eq('game_id', YGO_GAME_ID)
+    .order('id', { ascending: true })
+    .limit(limit);
+  if (cursor) query = query.gt('id', cursor);
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`[yugioh/card] listAllPrintingRoutes: ${error.message}`);
+  }
+  type PRow = {
+    id: string;
+    tcg_card_id: string;
+    collector_number: string | null;
+    tcggraph_printing_key: string | null;
+    updated_at: string | null;
+  };
+  const printings = (data as PRow[] | null) ?? [];
+  if (printings.length === 0) return { rows: [], nextCursor: null };
+
+  const cardIds = Array.from(new Set(printings.map((p) => p.tcg_card_id)));
+  const { data: cardRows, error: cErr } = await supabase
+    .from('tcg_cards')
+    .select('id,name')
+    .in('id', cardIds);
+  if (cErr) throw new Error(`[yugioh/card] card-name lookup: ${cErr.message}`);
+  const nameByCardId = new Map(
+    ((cardRows as Array<{ id: string; name: string }> | null) ?? []).map(
+      (r) => [r.id, r.name],
+    ),
+  );
+  const out: PrintingSitemapRow[] = [];
+  for (const p of printings) {
+    const name = nameByCardId.get(p.tcg_card_id);
+    if (!name || !p.collector_number) continue;
+    const slug = toCardSlugSafe(name);
+    if (!slug) continue;
+    out.push({
+      cardSlug: slug,
+      collectorNumber: p.collector_number,
+      printingKey: normalisePrintingKey(p.tcggraph_printing_key),
+      updatedAt: p.updated_at,
+    });
+  }
+  const lastId = printings.at(-1)?.id ?? null;
+  const nextCursor = printings.length === limit ? lastId : null;
+  return { rows: out, nextCursor };
+}
+
+// Local wrapper — importing the slug helper here forces us to
+// re-export the same module at build time. Keep it small.
+function toCardSlugSafe(name: string): string | null {
+  const raw = name.normalize('NFKD').replace(/[̀-ͯ]/g, '');
+  const s = raw
+    .replace(/[‘’'`]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s || null;
+}

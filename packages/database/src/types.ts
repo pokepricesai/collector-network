@@ -86,14 +86,27 @@ export interface TcgMarketPriceCurrent {
   source_run_id: string | null;
 }
 
+// `attribution` is the ingest-side promise about how tightly the graded
+// quote can be attached to a physical card:
+//   'printing' — quote is tied to the exact tcg_printings row.
+//                Safe to render underneath a specific edition/variant.
+//   'card'     — quote is tied to the tcg_cards row (set × collector
+//                × rarity family) but the source data did not
+//                distinguish edition / finish / language. MUST be
+//                displayed in a card-scoped panel and NEVER attributed
+//                to a specific physical printing.
+export type GradedAttribution = 'printing' | 'card';
+
 export interface TcgGradedPriceCurrent {
-  tcg_printing_id: string;
+  tcg_printing_id: string | null;
+  tcg_card_id: string | null;
   game_id: string;
   grader: string;
   grade: string;
   currency: string;
   price: number | null;
   card_sales_volume: number | null;
+  attribution: GradedAttribution;
   updated_at: string;
   ingested_at: string;
   source_run_id: string | null;

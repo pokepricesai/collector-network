@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ANALYTICS_EVENTS, trackEvent } from '../lib/analytics-events';
+import { toCardSlug } from '../lib/slug';
 import styles from './SearchBar.module.css';
 
 interface SearchBarProps {
@@ -88,10 +89,13 @@ export function SearchBar({
         name: s.name,
         variantCount: s.variantCount,
       });
+      // Suggestions carry an exact card name — go directly to that
+      // card's page rather than a search-results detour.
       setValue(s.name);
-      submit(s.name);
+      setOpen(false);
+      router.push(`/card/${toCardSlug(s.name)}`);
     },
-    [submit],
+    [router],
   );
 
   const onKeyDown = useCallback(
