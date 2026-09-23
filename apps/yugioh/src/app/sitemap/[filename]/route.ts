@@ -4,6 +4,15 @@ import {
   listAllPrintingRoutes,
 } from '../../../server/card';
 import {
+  listYugiohArchetypesForDirectory,
+  listYugiohRaritiesForDirectory,
+  listYugiohSetsForDirectory,
+} from '../../../server/browse';
+import {
+  RARITY_FAMILY_LABELS,
+  type RarityFamily,
+} from '../../../design/tokens';
+import {
   SITEMAP_BYTE_CAP,
   SITEMAP_CACHE_HEADERS,
   SITEMAP_URL_CAP,
@@ -45,6 +54,9 @@ export async function GET(
     'printings-0',
     'printings-1',
     'printings-2',
+    'sets',
+    'rarities',
+    'archetypes',
   ];
   if (!validShards.includes(shard as SitemapShard)) {
     return new NextResponse(`unknown sitemap shard: ${shard}`, { status: 404 });
@@ -56,21 +68,57 @@ export async function GET(
 async function buildShard(shard: SitemapShard): Promise<Entry[]> {
   const url = siteUrl();
   if (shard === 'base') {
+    const now = new Date().toISOString();
     return [
-      {
-        loc: `${url}/`,
-        lastmod: new Date().toISOString(),
-        changefreq: 'daily',
-        priority: 1.0,
-      },
+      { loc: `${url}/`, lastmod: now, changefreq: 'daily', priority: 1.0 },
+      { loc: `${url}/sets`, lastmod: now, changefreq: 'daily', priority: 0.9 },
+      { loc: `${url}/rarities`, lastmod: now, changefreq: 'weekly', priority: 0.8 },
+      { loc: `${url}/archetypes`, lastmod: now, changefreq: 'weekly', priority: 0.8 },
     ];
   }
-  if (shard === 'cards') {
-    return buildCards(url);
-  }
+  if (shard === 'cards') return buildCards(url);
+  if (shard === 'sets') return buildSets(url);
+  if (shard === 'rarities') return buildRarities(url);
+  if (shard === 'archetypes') return buildArchetypes(url);
   const printingShard: 0 | 1 | 2 =
     shard === 'printings-0' ? 0 : shard === 'printings-1' ? 1 : 2;
   return buildPrintings(url, printingShard);
+}
+
+async function buildSets(url: string): Promise<Entry[]> {
+  const entries = await listYugiohSetsForDirectory();
+  return entries.slice(0, SITEMAP_URL_CAP).map((entry) => ({
+    loc: `${url}/set/${encodeURIComponent(entry.set.code.toLowerCase())}`,
+    lastmod: entry.set.updated_at ?? entry.set.released_at ?? null,
+    changefreq: 'weekly',
+    priority: 0.8,
+  }));
+}
+
+async function buildRarities(url: string): Promise<Entry[]> {
+  const entries = await listYugiohRaritiesForDirectory();
+  return entries
+    .filter((e) => e.totalCards > 0)
+    .slice(0, SITEMAP_URL_CAP)
+    .map((entry) => ({
+      loc: `${url}/rarity/${entry.family as RarityFamily}`,
+      lastmod: null,
+      changefreq: 'weekly',
+      priority: 0.7,
+      // RARITY_FAMILY_LABELS reference kept so a type change to the
+      // enum breaks this shard at compile time.
+      _label: RARITY_FAMILY_LABELS[entry.family as RarityFamily],
+    })) as Entry[];
+}
+
+async function buildArchetypes(url: string): Promise<Entry[]> {
+  const entries = await listYugiohArchetypesForDirectory();
+  return entries.slice(0, SITEMAP_URL_CAP).map((entry) => ({
+    loc: `${url}/archetype/${entry.slug}`,
+    lastmod: null,
+    changefreq: 'weekly',
+    priority: 0.6,
+  }));
 }
 
 async function buildCards(url: string): Promise<Entry[]> {

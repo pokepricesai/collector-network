@@ -7,6 +7,9 @@ export const SITEMAP_SHARDS = [
   'printings-0',
   'printings-1',
   'printings-2',
+  'sets',
+  'rarities',
+  'archetypes',
 ] as const;
 
 export type SitemapShard = (typeof SITEMAP_SHARDS)[number];

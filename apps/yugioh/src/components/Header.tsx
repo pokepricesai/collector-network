@@ -9,11 +9,10 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  // "Cards" nav is search-first — the dedicated /cards index arrives
-  // with Slice 7. For now it routes to the empty-query search page.
   { label: 'Cards', href: '/search' },
-  { label: 'Sets', disabled: true },
-  { label: 'Archetypes', disabled: true },
+  { label: 'Sets', href: '/sets' },
+  { label: 'Rarities', href: '/rarities' },
+  { label: 'Archetypes', href: '/archetypes' },
   { label: 'Market', disabled: true },
   { label: 'F&L', disabled: true },
 ];

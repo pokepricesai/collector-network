@@ -20,7 +20,9 @@ import {
   type PhysicalPrintingData,
 } from '../../../../../../server/card';
 import { normaliseFnl } from '../../../../../../lib/fnl';
+import { normaliseRarity } from '../../../../../../lib/rarity';
 import { siteUrl } from '../../../../../../lib/site-url';
+import { toCardSlug } from '../../../../../../lib/slug';
 import styles from '../../../../../../components/card/CardIdentity.module.css';
 
 // /card/[slug]/printing/[collectorNumber]/[printingKey]
@@ -127,6 +129,17 @@ export default async function PrintingPage({ params }: Props) {
                 Duelist Prices
               </Link>{' '}
               <span className={styles.dot}>·</span>{' '}
+              {data.set && (
+                <>
+                  <Link
+                    href={`/set/${encodeURIComponent(data.set.code.toLowerCase())}`}
+                    className={styles.crumb}
+                  >
+                    {data.set.name}
+                  </Link>{' '}
+                  <span className={styles.dot}>·</span>{' '}
+                </>
+              )}
               <Link href={`/card/${data.logicalSlug}`} className={styles.crumb}>
                 {data.card.name}
               </Link>{' '}
@@ -174,7 +187,12 @@ export default async function PrintingPage({ params }: Props) {
               )}
               {gd.race && <span>{gd.race}</span>}
               <span className={styles.dot}>·</span>
-              <RarityBadge rarity={data.card.rarity} />
+              <Link
+                href={`/rarity/${normaliseRarity(data.card.rarity)}`}
+                style={{ textDecoration: 'none' }}
+              >
+                <RarityBadge rarity={data.card.rarity} />
+              </Link>
               <EditionBadge edition={data.printing.edition} />
               {data.printing.finish && (
                 <span className={styles.dim}>{data.printing.finish}</span>
@@ -186,6 +204,41 @@ export default async function PrintingPage({ params }: Props) {
                 </>
               )}
             </p>
+
+            {gd.archetypes.length > 0 && (
+              <p className={styles.typeLine}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'var(--ygo-text-quiet)',
+                  }}
+                >
+                  Archetype
+                </span>
+                {gd.archetypes.map((a) => (
+                  <Link
+                    key={a}
+                    href={`/archetype/${toCardSlug(a)}`}
+                    style={{
+                      color: 'var(--ygo-accent-gold-strong)',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: 3,
+                    }}
+                  >
+                    {a}
+                  </Link>
+                ))}
+              </p>
+            )}
+
+            {data.pricingDegraded && (
+              <div className={styles.cardScopedNote}>
+                Pricing is temporarily unavailable for this printing — retry
+                in a moment. Card metadata is still displayed.
+              </div>
+            )}
 
             {isMonster && (
               <div className={styles.stats}>

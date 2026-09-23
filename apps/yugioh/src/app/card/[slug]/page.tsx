@@ -15,7 +15,9 @@ import { VariantsTable } from '../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
 import { getYugiohLogicalCardBySlug, type LogicalCardData } from '../../../server/card';
 import { normaliseFnl } from '../../../lib/fnl';
+import { normaliseRarity } from '../../../lib/rarity';
 import { siteUrl } from '../../../lib/site-url';
+import { toCardSlug } from '../../../lib/slug';
 import styles from '../../../components/card/CardIdentity.module.css';
 
 // /card/[slug] — the logical card page. Aggregates all tcg_cards rows
@@ -166,9 +168,18 @@ export default async function LogicalCardPage({ params }: Props) {
             )}
 
             <div className={styles.badges}>
-              {data.rarityRange.slice(0, 6).map((r) => (
-                <RarityBadge key={r} rarity={r} />
-              ))}
+              {data.rarityRange.slice(0, 6).map((r) => {
+                const family = normaliseRarity(r);
+                return (
+                  <Link
+                    key={r}
+                    href={`/rarity/${family}`}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <RarityBadge rarity={r} />
+                  </Link>
+                );
+              })}
               {data.rarityRange.length > 6 && (
                 <span className={styles.dim}>+{data.rarityRange.length - 6} more</span>
               )}
@@ -183,9 +194,27 @@ export default async function LogicalCardPage({ params }: Props) {
                 <span className={styles.gameLabel}>Archetype</span>
                 <span className={styles.gameValue}>
                   {gd.archetypes.map((a) => (
-                    <span key={a}>{a}</span>
+                    <Link
+                      key={a}
+                      href={`/archetype/${toCardSlug(a)}`}
+                      className={styles.crumb}
+                      style={{
+                        color: 'var(--ygo-accent-gold-strong)',
+                        textDecoration: 'underline',
+                        textUnderlineOffset: 3,
+                      }}
+                    >
+                      {a}
+                    </Link>
                   ))}
                 </span>
+              </div>
+            )}
+
+            {data.pricingDegraded && (
+              <div className={styles.cardScopedNote}>
+                Pricing is temporarily unavailable for parts of this card —
+                retry in a moment. Card metadata is still displayed.
               </div>
             )}
           </div>

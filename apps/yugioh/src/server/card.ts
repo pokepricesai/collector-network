@@ -20,6 +20,7 @@ import {
 import { normaliseEdition, type EditionMarker } from './edition';
 import { toYugiohGamedata, type YugiohGamedata } from './gamedata';
 import { getYugiohClient } from './read';
+import { safe } from './safe';
 import { normalisePrintingKey, slugMatches, slugToIlikePattern, toCardSlug } from '../lib/slug';
 
 // Yu-Gi-Oh! server-only composition for /card/[slug] and
@@ -61,6 +62,10 @@ export interface LogicalCardData {
   usdPriceLow: number | null;
   usdPriceHigh: number | null;
   cardScopedPricing: CardScopedPricing[]; // one entry per tcg_cards row
+  // Slice 7 fail-soft: true when a secondary pricing read timed out or
+  // errored. Card metadata still renders; the UI shows a "temporarily
+  // unavailable" note over pricing panels.
+  pricingDegraded: boolean;
 }
 
 export interface PhysicalPrintingData {
@@ -74,6 +79,8 @@ export interface PhysicalPrintingData {
   cardScopedPricing: CardScopedPricing; // shown as a labelled "card-scoped" panel
   logicalSlug: string;
   siblingVariants: PrintingVariant[]; // other printings of the same card family
+  // Slice 7 fail-soft: true when a secondary pricing read timed out.
+  pricingDegraded: boolean;
 }
 
 // ── Logical card page loader ──────────────────────────────────────
@@ -129,18 +136,32 @@ async function composeLogicalCard(
   const cardIds = cards.map((c) => c.id);
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
 
-  const [printings, sets, cardScopedMap] = await Promise.all([
+  // printings + sets are structural — a failure there means the page
+  // can't render, so let those propagate. Pricing (both card-scoped and
+  // printing-scoped) is secondary — wrap in safe() so a Supabase
+  // hiccup renders a valid 200 with a "pricing unavailable" note
+  // rather than a route-level 500 (Slice 6 cold-hit regression fix).
+  const [printings, sets, cardScopedMapResult] = await Promise.all([
     getPrintingsForCards(supabase, cardIds),
     getSetsByIds(supabase, setIds),
-    getCardScopedPricingForCards(supabase, cardIds),
+    safe('card-scoped-pricing', () =>
+      getCardScopedPricingForCards(supabase, cardIds),
+    ),
   ]);
 
   const setsById = new Map(sets.map((s) => [s.id, s]));
   const cardsById = new Map(cards.map((c) => [c.id, c]));
-  const pricingByPrintingId = await getPrintingPricingBatch(
-    supabase,
-    printings.map((p) => p.id),
+  const printingPricingResult = await safe('printing-pricing', () =>
+    getPrintingPricingBatch(supabase, printings.map((p) => p.id)),
   );
+  const pricingByPrintingId = printingPricingResult.ok
+    ? printingPricingResult.value
+    : new Map<string, PrintingPricing>();
+  const cardScopedMap = cardScopedMapResult.ok
+    ? cardScopedMapResult.value
+    : new Map<string, CardScopedPricing>();
+  const pricingDegraded =
+    !printingPricingResult.ok || !cardScopedMapResult.ok;
 
   const variants: PrintingVariant[] = printings.map((printing) => {
     const card = cardsById.get(printing.tcg_card_id)!;
@@ -220,6 +241,7 @@ async function composeLogicalCard(
     usdPriceLow,
     usdPriceHigh,
     cardScopedPricing,
+    pricingDegraded,
   };
 }
 
@@ -276,14 +298,27 @@ export async function getYugiohPhysicalPrintingByRoute(
     (v) => v.printing.id !== targetPrinting.id,
   );
 
-  const [pricing, set, cardScoped] = await Promise.all([
-    getPrintingPricing(supabase, targetPrinting.id),
+  // Fail-soft on pricing: metadata renders even if a Supabase call
+  // times out or errors mid-stream. Set lookup is cheap and structural
+  // so it stays outside safe().
+  const [pricingResult, set, cardScopedResult] = await Promise.all([
+    safe('printing-scoped-pricing', () =>
+      getPrintingPricing(supabase, targetPrinting.id),
+    ),
     (async () => {
       const sets = await getSetsByIds(supabase, [card.set_id]);
       return sets[0] ?? null;
     })(),
-    getCardScopedPricing(supabase, card.id),
+    safe('printing-card-scoped-pricing', () =>
+      getCardScopedPricing(supabase, card.id),
+    ),
   ]);
+  const pricing: PrintingPricing = pricingResult.ok
+    ? pricingResult.value
+    : { printingId: targetPrinting.id, market: [], raw: [], graded: [] };
+  const cardScoped: CardScopedPricing = cardScopedResult.ok
+    ? cardScopedResult.value
+    : { cardId: card.id, raw: [], graded: [] };
 
   return {
     card,
@@ -296,6 +331,10 @@ export async function getYugiohPhysicalPrintingByRoute(
     cardScopedPricing: cardScoped,
     logicalSlug: cardSlug,
     siblingVariants,
+    pricingDegraded:
+      logical.pricingDegraded ||
+      !pricingResult.ok ||
+      !cardScopedResult.ok,
   };
 }
 
