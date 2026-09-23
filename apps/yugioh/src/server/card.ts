@@ -20,7 +20,7 @@ import {
 import { normaliseEdition, type EditionMarker } from './edition';
 import { toYugiohGamedata, type YugiohGamedata } from './gamedata';
 import { getYugiohClient } from './read';
-import { normalisePrintingKey, slugMatches, slugToIlikePattern } from '../lib/slug';
+import { normalisePrintingKey, slugMatches, slugToIlikePattern, toCardSlug } from '../lib/slug';
 
 // Yu-Gi-Oh! server-only composition for /card/[slug] and
 // /card/[slug]/printing/[collector-number]/[printing-key]. Attribution
@@ -421,14 +421,9 @@ export async function listAllPrintingRoutes(
   return { rows: out, nextCursor };
 }
 
-// Local wrapper — importing the slug helper here forces us to
-// re-export the same module at build time. Keep it small.
+// Delegates to the canonical slugger in lib/slug.ts so the sitemap
+// output stays byte-identical to what the /card/[slug] route resolves
+// against. Returns null for names that would produce an empty slug.
 function toCardSlugSafe(name: string): string | null {
-  const raw = name.normalize('NFKD').replace(/[̀-ͯ]/g, '');
-  const s = raw
-    .replace(/[‘’'`]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return s || null;
+  return toCardSlug(name) || null;
 }

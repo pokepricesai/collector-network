@@ -38,9 +38,7 @@ export function printingShardForSlug(slug: string): 0 | 1 | 2 {
   return 0;
 }
 
-export function siteUrl(): string {
-  return process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://duelistprices.example';
-}
+export { siteUrl } from './site-url';
 
 // Escape XML special chars in a URL. Applied to every <loc>.
 export function xmlEscape(v: string): string {

@@ -15,6 +15,7 @@ import { VariantsTable } from '../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
 import { getYugiohLogicalCardBySlug, type LogicalCardData } from '../../../server/card';
 import { normaliseFnl } from '../../../lib/fnl';
+import { siteUrl } from '../../../lib/site-url';
 import styles from '../../../components/card/CardIdentity.module.css';
 
 // /card/[slug] — the logical card page. Aggregates all tcg_cards rows
@@ -38,8 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       robots: { index: false, follow: true },
     };
   }
-  const siteUrl = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://duelistprices.example';
-  const canonical = `${siteUrl}/card/${data.slug}`;
+  const canonical = `${siteUrl()}/card/${data.slug}`;
   const rarityBits =
     data.rarityRange.length > 0 ? ` · ${data.rarityRange.slice(0, 3).join(', ')}` : '';
   const description = `${data.name} — every printing, rarity and edition. Raw retail plus graded market values on the Yu-Gi-Oh! collector catalogue.${rarityBits}`;
@@ -66,8 +66,7 @@ export default async function LogicalCardPage({ params }: Props) {
   const data = await getYugiohLogicalCardBySlug(slug);
   if (!data) notFound();
 
-  const siteUrl = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://duelistprices.example';
-  const jsonLd = buildCardJsonLd(data, siteUrl);
+  const jsonLd = buildCardJsonLd(data, siteUrl());
 
   const banlist = data.gamedata.banlist?.tcg;
   const fnlState = normaliseFnl(banlist);

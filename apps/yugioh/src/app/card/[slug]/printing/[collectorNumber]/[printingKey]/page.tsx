@@ -20,6 +20,7 @@ import {
   type PhysicalPrintingData,
 } from '../../../../../../server/card';
 import { normaliseFnl } from '../../../../../../lib/fnl';
+import { siteUrl } from '../../../../../../lib/site-url';
 import styles from '../../../../../../components/card/CardIdentity.module.css';
 
 // /card/[slug]/printing/[collectorNumber]/[printingKey]
@@ -52,8 +53,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       robots: { index: false, follow: true },
     };
   }
-  const siteUrl = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://duelistprices.example';
-  const canonical = `${siteUrl}/card/${data.logicalSlug}/printing/${encodeURIComponent(
+  const canonical = `${siteUrl()}/card/${data.logicalSlug}/printing/${encodeURIComponent(
     data.printing.collector_number ?? '',
   )}/${encodeURIComponent(data.printingKey)}`;
   const editionLabel =
@@ -90,8 +90,7 @@ export default async function PrintingPage({ params }: Props) {
   );
   if (!data) notFound();
 
-  const siteUrl = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://duelistprices.example';
-  const jsonLd = buildPrintingJsonLd(data, siteUrl);
+  const jsonLd = buildPrintingJsonLd(data, siteUrl());
 
   const banlist = data.gamedata.banlist?.tcg;
   const fnlState = normaliseFnl(banlist);

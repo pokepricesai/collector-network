@@ -166,15 +166,65 @@ async function main() {
   console.log(`non-English printings (would clash if collector+key duplicates): ${nonEnPrintings.length}`);
 
   if (collisions.length > 0) {
-    console.log(`\n--- COLLISIONS (first 20) ---`);
+    console.log(`\n--- PRINTING ROUTE COLLISIONS (first 20) ---`);
     for (const c of collisions.slice(0, 20)) {
       console.log(`  ${c.route}`);
       for (const id of c.printingIds) console.log(`      -> ${id}`);
     }
-    console.log(`\n!! ROUTE UNIQUENESS FAILED — ${collisions.length} collisions !!`);
+    console.log(`\n!! PRINTING ROUTE UNIQUENESS FAILED — ${collisions.length} collisions !!`);
     process.exit(1);
   }
-  console.log(`\n✓ ROUTE UNIQUENESS PROVEN — ${totalRoutes.toLocaleString('en-US')} unique routes / ${routable.toLocaleString('en-US')} routable printings`);
+  console.log(`\n✓ PRINTING ROUTE UNIQUENESS PROVEN — ${totalRoutes.toLocaleString('en-US')} unique routes / ${routable.toLocaleString('en-US')} routable printings`);
+
+  // ── Logical-card slug uniqueness audit ────────────────────────
+  console.log('\n\n=== Logical-card /card/[slug] uniqueness ===');
+  const distinctNames = new Set<string>();
+  const namesPerCard = new Map<string, string>();
+  for (const cardId of uniqueCardIds) {
+    const name = names.get(cardId);
+    if (!name) continue;
+    namesPerCard.set(cardId, name);
+    distinctNames.add(name);
+  }
+  console.log(`distinct card names in tcg_cards          : ${distinctNames.size.toLocaleString('en-US')}`);
+
+  const slugToNames = new Map<string, Set<string>>();
+  let emptySlugCount = 0;
+  for (const name of distinctNames) {
+    const s = toCardSlug(name);
+    if (!s) {
+      emptySlugCount += 1;
+      continue;
+    }
+    const bucket = slugToNames.get(s) ?? new Set<string>();
+    bucket.add(name);
+    slugToNames.set(s, bucket);
+  }
+  const uniqueSlugs = slugToNames.size;
+  const slugCollisions: Array<{ slug: string; names: string[] }> = [];
+  for (const [slug, ns] of slugToNames) {
+    if (ns.size > 1) slugCollisions.push({ slug, names: [...ns] });
+  }
+
+  console.log(`unique /card/[slug] routes                : ${uniqueSlugs.toLocaleString('en-US')}`);
+  console.log(`  names that slugged to empty              : ${emptySlugCount}`);
+  console.log(`  distinct-name → unique-slug delta        : ${(distinctNames.size - emptySlugCount - uniqueSlugs).toLocaleString('en-US')}`);
+  console.log(`  slug collisions (>1 name → same slug)    : ${slugCollisions.length.toLocaleString('en-US')}`);
+
+  if (slugCollisions.length > 0) {
+    console.log(`\n--- SLUG COLLISIONS (first 20) ---`);
+    for (const c of slugCollisions.slice(0, 20)) {
+      console.log(`  /card/${c.slug}`);
+      for (const n of c.names) console.log(`      <- ${JSON.stringify(n)}`);
+    }
+    console.log(`\n!! SLUG UNIQUENESS FAILED — ${slugCollisions.length} collisions !!`);
+    process.exit(2);
+  }
+  if (emptySlugCount > 0) {
+    console.log(`\n!! ${emptySlugCount} name(s) produced an empty slug and would be unreachable !!`);
+    process.exit(3);
+  }
+  console.log(`\n✓ LOGICAL-CARD SLUG UNIQUENESS PROVEN — ${uniqueSlugs.toLocaleString('en-US')} unique slugs / ${distinctNames.size.toLocaleString('en-US')} distinct card names, zero collisions`);
 }
 
 main().catch((err) => {

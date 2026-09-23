@@ -11,6 +11,7 @@ import {
   MostValuable,
   RarityDiscovery,
 } from '../components/homepage/Sections';
+import { siteUrl } from '../lib/site-url';
 import { getYugiohHomepageData } from '../server/homepage';
 
 // The homepage renders live from production Supabase via the Slice 3
@@ -18,12 +19,14 @@ import { getYugiohHomepageData } from '../server/homepage';
 // independently and failures degrade to a placeholder — the page never
 // crashes because one query failed.
 
+const SITE_URL = siteUrl();
+
 export const metadata: Metadata = {
   title:
     'Duelist Prices — Yu-Gi-Oh! collector catalogue · printings, editions, graded values',
   description:
     'Find the exact Yu-Gi-Oh! card you own. Compare every printing, edition, and rarity. Raw prices and graded values side by side.',
-  alternates: { canonical: 'https://duelistprices.example/' },
+  alternates: { canonical: `${SITE_URL}/` },
 };
 
 // Revalidate the homepage every 15 minutes. Long enough that traffic
@@ -33,19 +36,18 @@ export const revalidate = 900;
 
 export default async function HomePage() {
   const payload = await getYugiohHomepageData();
-  const siteUrl = 'https://duelistprices.example';
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'Duelist Prices',
-    url: siteUrl,
+    url: SITE_URL,
     description:
       'Yu-Gi-Oh! collector catalogue — printings, editions, rarities and graded values.',
     potentialAction: {
       '@type': 'SearchAction',
       target: {
         '@type': 'EntryPoint',
-        urlTemplate: `${siteUrl}/search?q={search_term_string}`,
+        urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
       },
       'query-input': 'required name=search_term_string',
     },

@@ -67,3 +67,36 @@ test('normalisePrintingKey accepts common values', () => {
   assert.equal(normalisePrintingKey(null), 'normal');
   assert.equal(normalisePrintingKey(undefined), 'normal');
 });
+
+// Sept 23 2026 regression: production has 89 names containing `!` and
+// 11 containing `?`. Without the suffix, `Ectoplasmic Fortification`
+// and `Ectoplasmic Fortification!` collide on `ectoplasmic-fortification`.
+
+test('bang and question marks produce disambiguator suffix', () => {
+  assert.equal(toCardSlug('Ectoplasmic Fortification'), 'ectoplasmic-fortification');
+  assert.equal(toCardSlug('Ectoplasmic Fortification!'), 'ectoplasmic-fortification--x');
+  assert.equal(toCardSlug('How Did Dai Get Here?'), 'how-did-dai-get-here--q');
+  assert.equal(toCardSlug('Bingo Machine, Go!!!'), 'bingo-machine-go--xxx');
+  assert.equal(toCardSlug('BIG Win!?'), 'big-win--xq');
+  assert.equal(toCardSlug('Danger! Chupacabra!'), 'danger-chupacabra--xx');
+});
+
+test('two names distinguished only by bang produce distinct slugs', () => {
+  const a = toCardSlug('Ectoplasmic Fortification');
+  const b = toCardSlug('Ectoplasmic Fortification!');
+  assert.notEqual(a, b);
+});
+
+test('slugToIlikePattern strips disambiguator suffix so ILIKE matches the base name', () => {
+  assert.equal(slugToIlikePattern('ectoplasmic-fortification--x'), 'ectoplasmic%fortification');
+  assert.equal(slugToIlikePattern('how-did-dai-get-here--q'), 'how%did%dai%get%here');
+  assert.equal(slugToIlikePattern('bingo-machine-go--xxx'), 'bingo%machine%go');
+  // Non-suffixed slugs unchanged.
+  assert.equal(slugToIlikePattern('blue-eyes-white-dragon'), 'blue%eyes%white%dragon');
+});
+
+test('slugMatches round-trips for bang-marked names', () => {
+  assert.equal(slugMatches('Ectoplasmic Fortification!', 'ectoplasmic-fortification--x'), true);
+  assert.equal(slugMatches('Ectoplasmic Fortification', 'ectoplasmic-fortification--x'), false);
+  assert.equal(slugMatches('Ectoplasmic Fortification!', 'ectoplasmic-fortification'), false);
+});
