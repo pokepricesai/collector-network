@@ -306,45 +306,50 @@ export interface CardSitemapRow {
   updatedAt: string | null;
 }
 
+// Cursor is now an offset number (encoded as string). Range-based
+// paging via .range(from,to) sidesteps two production quirks:
+//   1. Supabase's PostgREST default 1000-row cap on .limit()
+//   2. Statement timeouts on ORDER BY id/name over 38k+ rows without
+//      a hot index on the sort column.
+// Rows come back in whatever the default order is (PK). That's fine
+// for a sitemap since we de-dupe by slug application-side.
 export async function listAllCardSlugs(
   supabase: SupabaseClient = getYugiohClient(),
   cursor: string | null = null,
-  limit = 5000,
 ): Promise<{ rows: CardSitemapRow[]; nextCursor: string | null }> {
-  // We do NOT want to slug 38k+ card names in a single query — Postgres
-  // must return the raw name, we slug JS-side. Paginate by name asc
-  // + cursor.
-  let query = supabase
+  const from = cursor ? parseInt(cursor, 10) : 0;
+  const PAGE = 1000; // PostgREST default cap; smaller = under timeout
+  const to = from + PAGE - 1;
+  const { data, error } = await supabase
     .from('tcg_cards')
     .select('name,updated_at')
     .eq('game_id', YGO_GAME_ID)
-    .order('name', { ascending: true })
-    .limit(limit);
-  if (cursor) query = query.gt('name', cursor);
-  const { data, error } = await query;
+    .range(from, to);
   if (error) {
-    throw new Error(`[yugioh/card] listAllCardSlugs: ${error.message}`);
+    throw new Error(`[yugioh/card] listAllCardSlugs(from=${from}): ${error.message}`);
   }
-  const rows = ((data as Array<{ name: string; updated_at: string | null }> | null) ?? [])
-    .reduce<Map<string, string | null>>((acc, r) => {
-      // De-duplicate: many tcg_cards rows share the same name (per-
-      // rarity, per-set). Sitemap wants one URL per logical card.
-      const slug = (r.name ?? '').trim();
-      if (!slug) return acc;
-      const prev = acc.get(slug);
-      if (!prev || (r.updated_at && r.updated_at > prev)) {
-        acc.set(slug, r.updated_at);
-      }
-      return acc;
-    }, new Map());
+  const rowsRaw =
+    (data as Array<{ name: string; updated_at: string | null }> | null) ?? [];
+  const dedup = rowsRaw.reduce<Map<string, string | null>>((acc, r) => {
+    // De-duplicate by name within THIS batch. Cross-batch dedup is
+    // still needed but happens in the caller (sitemap uses a Set).
+    const name = (r.name ?? '').trim();
+    if (!name) return acc;
+    const prev = acc.get(name);
+    if (!prev || (r.updated_at && r.updated_at > prev)) {
+      acc.set(name, r.updated_at);
+    }
+    return acc;
+  }, new Map());
 
   const out: CardSitemapRow[] = [];
-  for (const [name, updatedAt] of rows) {
+  for (const [name, updatedAt] of dedup) {
     const s = toCardSlugSafe(name);
     if (s) out.push({ slug: s, updatedAt });
   }
-  const lastName = (data as Array<{ name: string }> | null)?.at(-1)?.name ?? null;
-  const nextCursor = data && data.length === limit ? lastName : null;
+  // Continue paging while the previous batch was full. When Supabase
+  // returns fewer rows than requested we're at the tail.
+  const nextCursor = rowsRaw.length === PAGE ? String(from + PAGE) : null;
   return { rows: out, nextCursor };
 }
 
@@ -355,24 +360,25 @@ export interface PrintingSitemapRow {
   updatedAt: string | null;
 }
 
+// Same range-based paging as listAllCardSlugs. Cursor is offset-as-
+// string. Sub-batches the card-name lookup so a page of 1000 printings
+// resolves in ≤2 tcg_cards queries (each capped at ~500 IDs).
 export async function listAllPrintingRoutes(
   supabase: SupabaseClient = getYugiohClient(),
   cursor: string | null = null,
-  limit = 5000,
 ): Promise<{ rows: PrintingSitemapRow[]; nextCursor: string | null }> {
-  // For printing URLs we need card_name + collector_number +
-  // printing-key. Join in application code via a card-id lookup so
-  // the query stays PostgREST-clean.
-  let query = supabase
+  const from = cursor ? parseInt(cursor, 10) : 0;
+  const PAGE = 1000;
+  const to = from + PAGE - 1;
+  const { data, error } = await supabase
     .from('tcg_printings')
     .select('id,tcg_card_id,collector_number,tcggraph_printing_key,updated_at')
     .eq('game_id', YGO_GAME_ID)
-    .order('id', { ascending: true })
-    .limit(limit);
-  if (cursor) query = query.gt('id', cursor);
-  const { data, error } = await query;
+    .range(from, to);
   if (error) {
-    throw new Error(`[yugioh/card] listAllPrintingRoutes: ${error.message}`);
+    throw new Error(
+      `[yugioh/card] listAllPrintingRoutes(from=${from}): ${error.message}`,
+    );
   }
   type PRow = {
     id: string;
@@ -385,16 +391,19 @@ export async function listAllPrintingRoutes(
   if (printings.length === 0) return { rows: [], nextCursor: null };
 
   const cardIds = Array.from(new Set(printings.map((p) => p.tcg_card_id)));
-  const { data: cardRows, error: cErr } = await supabase
-    .from('tcg_cards')
-    .select('id,name')
-    .in('id', cardIds);
-  if (cErr) throw new Error(`[yugioh/card] card-name lookup: ${cErr.message}`);
-  const nameByCardId = new Map(
-    ((cardRows as Array<{ id: string; name: string }> | null) ?? []).map(
-      (r) => [r.id, r.name],
-    ),
-  );
+  const nameByCardId = new Map<string, string>();
+  for (let i = 0; i < cardIds.length; i += 500) {
+    const batch = cardIds.slice(i, i + 500);
+    const { data: cardRows, error: cErr } = await supabase
+      .from('tcg_cards')
+      .select('id,name')
+      .in('id', batch);
+    if (cErr) throw new Error(`[yugioh/card] card-name lookup: ${cErr.message}`);
+    for (const r of (cardRows as Array<{ id: string; name: string }> | null) ?? []) {
+      nameByCardId.set(r.id, r.name);
+    }
+  }
+
   const out: PrintingSitemapRow[] = [];
   for (const p of printings) {
     const name = nameByCardId.get(p.tcg_card_id);
@@ -408,8 +417,7 @@ export async function listAllPrintingRoutes(
       updatedAt: p.updated_at,
     });
   }
-  const lastId = printings.at(-1)?.id ?? null;
-  const nextCursor = printings.length === limit ? lastId : null;
+  const nextCursor = printings.length === PAGE ? String(from + PAGE) : null;
   return { rows: out, nextCursor };
 }
 

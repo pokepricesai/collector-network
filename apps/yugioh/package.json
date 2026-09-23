@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "audit:blue-eyes": "node --env-file=.env.local --import tsx scripts/audit-blue-eyes.mts",
     "audit:homepage": "node --env-file=.env.local --import tsx scripts/audit-homepage.mts",
+    "audit:routes": "node --env-file=.env.local --import tsx scripts/verify-slice-6.mts",
     "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts",
     "clean": "rimraf .next .turbo node_modules"
   },
