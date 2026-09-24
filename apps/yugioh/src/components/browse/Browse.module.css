@@ -376,6 +376,12 @@
   background: var(--ygo-ink-onyx);
   text-decoration: none;
   color: inherit;
+  /* Grid items default to min-content width — a single long card name
+     or an overlaid collector-number chip can push a tile past its
+     track, which cascades into horizontal overflow at mobile widths.
+     Force the tile to obey its allocated grid track. */
+  min-width: 0;
+  overflow: hidden;
   transition: transform var(--ygo-motion-base) var(--ygo-motion-ease),
               border-color var(--ygo-motion-base) var(--ygo-motion-ease),
               box-shadow var(--ygo-motion-base) var(--ygo-motion-ease);
