@@ -15,10 +15,16 @@ import { Surface } from '../../../../../../components/Surface';
 import { GradedStrip } from '../../../../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../../../../components/signature/RarityRefractorLine';
+import { PriceHistoryChart } from '../../../../../../components/chart/PriceHistoryChart';
 import {
   getYugiohPhysicalPrintingByRoute,
   type PhysicalPrintingData,
 } from '../../../../../../server/card';
+import {
+  getYugiohCardScopedPriceHistory,
+  getYugiohPrintingPriceHistory,
+} from '../../../../../../server/history';
+import { safe } from '../../../../../../server/safe';
 import { normaliseFnl } from '../../../../../../lib/fnl';
 import { normaliseRarity } from '../../../../../../lib/rarity';
 import { siteUrl } from '../../../../../../lib/site-url';
@@ -104,6 +110,24 @@ export default async function PrintingPage({ params }: Props) {
   // scoped data goes into its own labelled panel.
   const hasPrintingGraded = data.pricing.graded.length > 0;
   const hasCardScopedGraded = data.cardScopedPricing.graded.length > 0;
+
+  // Slice A: fetch daily price history in parallel with the initial
+  // page render. Both wrapped in safe() so a slow daily-table read
+  // never keeps the page from rendering; the chart section shows a
+  // "history temporarily unavailable" state instead.
+  const [printingHistoryResult, cardScopedHistoryResult] = await Promise.all([
+    safe('history-printing', () => getYugiohPrintingPriceHistory(data.printing.id)),
+    hasCardScopedGraded
+      ? safe('history-card-scoped', () =>
+          getYugiohCardScopedPriceHistory(data.card.id),
+        )
+      : Promise.resolve({ ok: true as const, value: null, error: null }),
+  ]);
+  const printingHistory = printingHistoryResult.ok ? printingHistoryResult.value : null;
+  const cardScopedHistory =
+    cardScopedHistoryResult.ok && cardScopedHistoryResult.value
+      ? cardScopedHistoryResult.value
+      : null;
 
   return (
     <>
@@ -300,6 +324,52 @@ export default async function PrintingPage({ params }: Props) {
           )}
         </section>
 
+        {/* Slice A: price history for this exact printing. Retail
+            series (always printing-scoped by nature) plus any
+            attribution='printing' graded series. Card-scoped graded
+            history lives in its own labelled panel below. */}
+        {printingHistory && (
+          <section className={styles.section}>
+            <header className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Price history</h2>
+              <p className={styles.sectionCaption}>
+                Daily snapshots of retail plus any printing-scoped
+                graded prices for this exact printing. Currency is never
+                converted; each series preserves its source currency.
+              </p>
+            </header>
+            <PriceHistoryChart
+              title="Retail + printing-scoped graded"
+              subtitle={
+                printingHistory.gradedPrinting.length > 0
+                  ? 'Both retail and graded series describe this exact printing.'
+                  : 'Only retail history has printing-scoped observations for this printing.'
+              }
+              series={[
+                ...printingHistory.retail.map((s, i) => ({
+                  key: `retail:${s.key}`,
+                  label: s.label,
+                  currency: s.currency,
+                  points: s.points,
+                  colour: i === 0 ? '#e8c069' : undefined,
+                })),
+                ...printingHistory.gradedPrinting.map((s) => ({
+                  key: `graded:${s.key}`,
+                  label: s.label,
+                  currency: s.currency,
+                  points: s.points,
+                })),
+              ]}
+              daysCovered={printingHistory.daysCovered}
+              footerNote={
+                printingHistory.firstObservation
+                  ? `Available: ${printingHistory.firstObservation} to ${printingHistory.lastObservation}.`
+                  : undefined
+              }
+            />
+          </section>
+        )}
+
         {/* Graded — exact printing (attribution='printing' only) */}
         <section className={styles.section}>
           <header className={styles.sectionHeader}>
@@ -367,6 +437,26 @@ export default async function PrintingPage({ params }: Props) {
               quotes={data.cardScopedPricing.graded}
               emptyLabel="No card-scoped graded quotes right now."
             />
+            {cardScopedHistory && cardScopedHistory.gradedCard.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <PriceHistoryChart
+                  title="Graded history · card family"
+                  subtitle="Card-scoped attribution — not tied to this exact printing."
+                  series={cardScopedHistory.gradedCard.map((s) => ({
+                    key: `card:${s.key}`,
+                    label: s.label,
+                    currency: s.currency,
+                    points: s.points,
+                  }))}
+                  daysCovered={cardScopedHistory.daysCovered}
+                  footerNote={
+                    cardScopedHistory.firstObservation
+                      ? `Available: ${cardScopedHistory.firstObservation} to ${cardScopedHistory.lastObservation}.`
+                      : undefined
+                  }
+                />
+              </div>
+            )}
           </section>
         )}
 

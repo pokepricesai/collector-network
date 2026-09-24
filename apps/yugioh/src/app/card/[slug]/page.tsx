@@ -13,7 +13,10 @@ import { Surface } from '../../../components/Surface';
 import { GradedStrip } from '../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
+import { PriceHistoryChart } from '../../../components/chart/PriceHistoryChart';
 import { getYugiohLogicalCardBySlug, type LogicalCardData } from '../../../server/card';
+import { getYugiohCardScopedPriceHistory } from '../../../server/history';
+import { safe } from '../../../server/safe';
 import { normaliseFnl } from '../../../lib/fnl';
 import { normaliseRarity } from '../../../lib/rarity';
 import { siteUrl } from '../../../lib/site-url';
@@ -297,7 +300,7 @@ export default async function LogicalCardPage({ params }: Props) {
   );
 }
 
-function CardScopedGradedSection({ data }: { data: LogicalCardData }) {
+async function CardScopedGradedSection({ data }: { data: LogicalCardData }) {
   const totalCardScopedQuotes = data.cardScopedPricing.reduce(
     (n, cs) => n + cs.graded.length + cs.raw.length,
     0,
@@ -306,6 +309,51 @@ function CardScopedGradedSection({ data }: { data: LogicalCardData }) {
 
   // Flatten across all tcg_cards rows in the family.
   const graded = data.cardScopedPricing.flatMap((cs) => cs.graded);
+
+  // Slice A: fetch card-scoped daily history for each tcg_cards row
+  // in the family, in parallel. Wrapped in safe() so a slow read
+  // never blocks the page. Series arrive grouped by grader/grade so
+  // the chart handles them without knowing about the underlying
+  // per-tcg_cards fan-out.
+  const historyResults = await Promise.all(
+    data.cardScopedPricing.map((cs) =>
+      safe('card-scoped-history', () =>
+        getYugiohCardScopedPriceHistory(cs.cardId),
+      ),
+    ),
+  );
+  const seriesByKey = new Map<
+    string,
+    { key: string; label: string; currency: string; points: { date: string; price: number }[] }
+  >();
+  let daysCovered = 0;
+  const firsts: string[] = [];
+  const lasts: string[] = [];
+  for (const result of historyResults) {
+    if (!result.ok || !result.value) continue;
+    for (const s of result.value.gradedCard) {
+      const existing = seriesByKey.get(s.key);
+      if (existing) {
+        existing.points.push(...s.points);
+      } else {
+        seriesByKey.set(s.key, {
+          key: s.key,
+          label: s.label,
+          currency: s.currency,
+          points: [...s.points],
+        });
+      }
+    }
+    daysCovered = Math.max(daysCovered, result.value.daysCovered);
+    if (result.value.firstObservation) firsts.push(result.value.firstObservation);
+    if (result.value.lastObservation) lasts.push(result.value.lastObservation);
+  }
+  const firstObs = firsts.length ? firsts.sort()[0]! : null;
+  const lastObs = lasts.length ? lasts.sort().at(-1)! : null;
+  const chartSeries = Array.from(seriesByKey.values()).map((s) => ({
+    ...s,
+    points: s.points.sort((a, b) => a.date.localeCompare(b.date)),
+  }));
 
   return (
     <section className={styles.section}>
@@ -324,6 +372,19 @@ function CardScopedGradedSection({ data }: { data: LogicalCardData }) {
         quotes={graded}
         emptyLabel="No card-scoped graded quotes right now."
       />
+      {chartSeries.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <PriceHistoryChart
+            title="Graded price history · card family"
+            subtitle="Card-scoped attribution — not tied to any specific printing."
+            series={chartSeries}
+            daysCovered={daysCovered}
+            footerNote={
+              firstObs ? `Available: ${firstObs} to ${lastObs}.` : undefined
+            }
+          />
+        </div>
+      )}
     </section>
   );
 }
