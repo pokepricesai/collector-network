@@ -33,14 +33,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   if (!isValidFamily(slug)) {
     return {
-      title: 'Rarity family not found — Duelist Prices',
+      title: 'Rarity family not found — YGOPrices',
       robots: { index: false, follow: true },
     };
   }
   const data = await getYugiohRarityBySlug(slug);
   if (!data) {
     return {
-      title: 'Rarity family not found — Duelist Prices',
+      title: 'Rarity family not found — YGOPrices',
       robots: { index: false, follow: true },
     };
   }

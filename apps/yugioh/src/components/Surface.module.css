@@ -6,6 +6,31 @@
   box-shadow: var(--surface-shadow, none);
   position: relative;
   isolation: isolate;
+  transition: transform var(--ygo-motion-base) var(--ygo-motion-ease),
+              box-shadow var(--ygo-motion-base) var(--ygo-motion-ease),
+              border-color var(--ygo-motion-base) var(--ygo-motion-ease);
+}
+
+/* Inset highlight along the top edge picks up the ambient purple/red
+   haze on the body, giving panels a subtle metallic bevel without any
+   heavy shadow. */
+.surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* When a Surface is wrapped in an <a> or <Link>, elevate on hover:
+   subtle lift + gold-tinted edge. Also fires on keyboard focus of
+   the wrapping link so accessibility stays intact. */
+a:hover > .surface,
+a:focus-visible > .surface {
+  transform: translateY(-1px);
+  box-shadow: var(--ygo-shadow-card-hover);
+  border-color: rgba(201, 162, 74, 0.28);
 }
 
 .base     { --surface-bg: var(--ygo-ink-abyss); }

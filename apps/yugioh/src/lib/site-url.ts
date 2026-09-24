@@ -10,7 +10,7 @@
 // needed.
 
 // eslint-disable-next-line @typescript-eslint/dot-notation
-const FALLBACK = 'https://duelistprices.example';
+const FALLBACK = 'https://ygoprices.example';
 
 export function siteUrl(): string {
   const configured = process.env['NEXT_PUBLIC_SITE_URL'];

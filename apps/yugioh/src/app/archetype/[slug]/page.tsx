@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getYugiohArchetypeBySlug(slug);
   if (!data) {
     return {
-      title: 'Archetype not found — Duelist Prices',
+      title: 'Archetype not found — YGOPrices',
       robots: { index: false, follow: true },
     };
   }

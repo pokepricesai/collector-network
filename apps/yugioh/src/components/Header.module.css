@@ -22,25 +22,22 @@
 
 .brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--ygo-size-sm);
   text-decoration: none;
   color: var(--ygo-text-primary);
+  /* Preserve intrinsic aspect ratio; height controls the size. */
 }
 
-.brandMark {
-  font-family: var(--ygo-font-display);
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-}
-
-.brandSub {
-  font-family: var(--ygo-font-body);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ygo-text-quiet);
+.brandLogo {
+  display: block;
+  height: 44px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+  /* Slight drop shadow makes the logo pop off the near-black navbar
+     without haloing at the edges. */
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
 }
 
 .searchWrap {
@@ -86,12 +83,19 @@
   color: var(--ygo-text-quiet);
 }
 
+@media (max-width: 1023px) {
+  .brandLogo { height: 38px; max-width: 180px; }
+}
+
 @media (max-width: 767px) {
   .row {
-    grid-template-columns: 1fr;
-    gap: var(--ygo-size-sm);
+    grid-template-columns: auto 1fr;
+    grid-template-areas: 'brand search';
+    gap: var(--ygo-size-base);
     padding: var(--ygo-size-sm) var(--ygo-size-base);
   }
-  .searchWrap { max-width: none; }
+  .brand { grid-area: brand; }
+  .searchWrap { grid-area: search; max-width: none; }
+  .brandLogo { height: 30px; max-width: 130px; }
   .nav { display: none; }
 }

@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   );
   if (!data) {
     return {
-      title: 'Printing not found — Duelist Prices',
+      title: 'Printing not found — YGOPrices',
       robots: { index: false, follow: true },
     };
   }
@@ -126,7 +126,7 @@ export default async function PrintingPage({ params }: Props) {
           <div className={styles.header}>
             <p className={styles.eyebrow}>
               <Link href="/" className={styles.crumb}>
-                Duelist Prices
+                YGOPrices
               </Link>{' '}
               <span className={styles.dot}>·</span>{' '}
               {data.set && (

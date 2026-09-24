@@ -23,7 +23,7 @@ const SITE_URL = siteUrl();
 
 export const metadata: Metadata = {
   title:
-    'Duelist Prices — Yu-Gi-Oh! collector catalogue · printings, editions, graded values',
+    'YGOPrices — Yu-Gi-Oh! collector catalogue · printings, editions, graded values',
   description:
     'Find the exact Yu-Gi-Oh! card you own. Compare every printing, edition, and rarity. Raw prices and graded values side by side.',
   alternates: { canonical: `${SITE_URL}/` },
@@ -39,7 +39,7 @@ export default async function HomePage() {
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: 'Duelist Prices',
+    name: 'YGOPrices',
     url: SITE_URL,
     description:
       'Yu-Gi-Oh! collector catalogue — printings, editions, rarities and graded values.',

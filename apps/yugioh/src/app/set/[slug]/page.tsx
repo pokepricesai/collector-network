@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { CardImageFrame } from '../../../components/CardImageFrame';
 import { EditionBadge } from '../../../components/EditionBadge';
 import { Footer } from '../../../components/Footer';
 import { Header } from '../../../components/Header';
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getYugiohSetBySlug(slug);
   if (!data) {
     return {
-      title: 'Set not found — Duelist Prices',
+      title: 'Set not found — YGOPrices',
       robots: { index: false, follow: true },
     };
   }
@@ -183,70 +184,67 @@ export default async function SetPage({ params }: Props) {
               Card checklist ({data.uniqueCardCount} unique · {data.variantCount} variants)
             </h2>
             <p className={styles.sectionCaption}>
-              Sorted by collector number. Each row is one rarity variant — a
-              card printed at multiple rarities appears once per rarity. Click
-              any row to open the logical card with every printing across every
-              set.
+              Sorted by collector number. Each tile is one rarity variant —
+              a card printed at multiple rarities appears once per rarity.
+              Click any tile for the full print history and market values.
             </p>
           </header>
-          <table className={styles.cardsTable}>
-            <thead>
-              <tr>
-                <th>Card #</th>
-                <th>Name</th>
-                <th>Rarity</th>
-                <th style={{ textAlign: 'right' }}>USD</th>
-                <th style={{ textAlign: 'right' }}>EUR</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedCards.map((entry) => {
-                const slug = toCardSlug(entry.card.name);
-                return (
-                  <tr key={entry.card.id}>
-                    <td>
-                      <span className={styles.setCode}>
-                        {entry.card.collector_number ?? '—'}
+          <div className={styles.setCardGrid}>
+            {sortedCards.map((entry) => {
+              const slug = toCardSlug(entry.card.name);
+              const image = entry.card.images?.small ?? entry.card.images?.normal ?? null;
+              return (
+                <Link
+                  key={entry.card.id}
+                  href={`/card/${slug}`}
+                  className={styles.setCardTile}
+                  aria-label={`${entry.card.name} — ${entry.card.rarity ?? 'card'} · ${entry.card.collector_number ?? ''}`}
+                >
+                  <div className={styles.setCardImageWrap}>
+                    <CardImageFrame
+                      src={image}
+                      alt={entry.card.name}
+                      rarity={entry.card.rarity}
+                      gloss={false}
+                    />
+                    {entry.card.collector_number && (
+                      <span className={styles.setCardNumber}>
+                        {entry.card.collector_number}
                       </span>
-                    </td>
-                    <td>
-                      <Link
-                        href={`/card/${slug}`}
-                        className={styles.cardLink}
-                      >
-                        {entry.card.name}
-                      </Link>
-                    </td>
-                    <td>
+                    )}
+                  </div>
+                  <div className={styles.setCardBody}>
+                    <p className={styles.setCardName} title={entry.card.name}>
+                      {entry.card.name}
+                    </p>
+                    <div className={styles.setCardMetaRow}>
                       <RarityBadge rarity={entry.card.rarity} />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
+                    </div>
+                    <div className={styles.setCardPriceRow}>
                       {entry.bestUsdRetail?.price != null ? (
-                        <span className={styles.priceNum}>
-                          ${entry.bestUsdRetail.price.toLocaleString('en-US', {
+                        <span className={styles.setCardPrice}>
+                          $
+                          {entry.bestUsdRetail.price.toLocaleString('en-US', {
                             maximumFractionDigits: 2,
                           })}
                         </span>
                       ) : (
-                        <span className={styles.dim}>—</span>
+                        <span className={styles.setCardPriceDim}>—</span>
                       )}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {entry.bestEurRetail?.price != null ? (
-                        <span className={styles.priceNum}>
-                          €{entry.bestEurRetail.price.toLocaleString('en-US', {
+                      {entry.bestEurRetail?.price != null && (
+                        <span className={styles.setCardPriceAlt}>
+                          €
+                          {entry.bestEurRetail.price.toLocaleString('en-US', {
                             maximumFractionDigits: 2,
                           })}
                         </span>
-                      ) : (
-                        <span className={styles.dim}>—</span>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </section>
       </main>
       <Footer />

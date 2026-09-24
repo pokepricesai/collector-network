@@ -10,6 +10,35 @@
 
 .hero {
   padding: var(--ygo-size-3xl) 0 var(--ygo-size-2xl);
+  position: relative;
+  isolation: isolate;
+}
+
+/* Card-back-inspired duel-grid wash sits behind the hero at ~5% and
+   fades toward the sides so headline text has clean breathing room. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -16px -32px 0;
+  z-index: -1;
+  background: var(--ygo-bg-duel-grid);
+  opacity: 0.6;
+  mask-image: radial-gradient(ellipse at 30% 40%, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 70%);
+  -webkit-mask-image: radial-gradient(ellipse at 30% 40%, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 70%);
+  pointer-events: none;
+}
+
+/* Second layer: faint gold linework running diagonally through the
+   hero. Half opacity of the grid so the two textures coexist without
+   competing. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ygo-bg-gold-linework);
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 @media (max-width: 767px) {

@@ -21,9 +21,22 @@ export function Header({ compactSearch = true }: { compactSearch?: boolean }) {
   return (
     <header className={styles.header}>
       <div className={styles.row}>
-        <Link href="/" className={styles.brand} aria-label="Duelist Prices — homepage (provisional name)">
-          <span className={styles.brandMark}>Duelist Prices</span>
-          <span className={styles.brandSub}>· provisional</span>
+        <Link href="/" className={styles.brand} aria-label="YGOPrices — home">
+          {/* Native <img> so we do not need to configure the Next
+              image loader for a local static asset. Intrinsic size is
+              2172×724; width/height reserve aspect ratio and prevent
+              CLS. Loaded with priority (fetchPriority="high") because
+              it's above-the-fold on every route. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/ygoprices-logo.png"
+            alt="YGOPrices"
+            className={styles.brandLogo}
+            width={2172}
+            height={724}
+            fetchPriority="high"
+            decoding="async"
+          />
         </Link>
         <div className={styles.searchWrap}>
           {compactSearch && (

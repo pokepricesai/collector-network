@@ -27,6 +27,54 @@
   --ygo-accent-gold-strong: #e8c069;
   --ygo-accent-gold-deep: #7e6428;
 
+  /* ── Brand accents (pulled from the YGOPrices logo) ─────────────── */
+  --ygo-accent-crimson: #b12a2f;       /* Y-block red */
+  --ygo-accent-crimson-strong: #e14e50;
+  --ygo-accent-crimson-deep: #5a1214;
+  --ygo-accent-royal: #6a3ea1;         /* purple energy behind logo */
+  --ygo-accent-royal-strong: #9668d0;
+  --ygo-accent-royal-deep: #2b1547;
+  --ygo-accent-ember: #e57a1c;         /* orange highlight glint */
+  --ygo-accent-ember-soft: rgba(229, 122, 28, 0.35);
+
+  /* ── Ambient background textures ────────────────────────────────── */
+  /* Very subtle radial haze anchored top-centre, evoking the logo's
+     purple/red backglow without hitting SaaS-gradient territory. Used
+     on the <body> as a fixed layer. */
+  --ygo-bg-hero-haze: radial-gradient(circle at 50% -10%,
+    rgba(150, 100, 220, 0.18) 0%,
+    rgba(80, 40, 140, 0.10) 25%,
+    rgba(5, 7, 12, 0) 55%),
+    radial-gradient(circle at 85% 15%,
+    rgba(229, 122, 28, 0.10) 0%,
+    rgba(229, 122, 28, 0) 40%),
+    radial-gradient(circle at 15% 25%,
+    rgba(177, 42, 47, 0.12) 0%,
+    rgba(177, 42, 47, 0) 40%);
+
+  /* Card-back-inspired concentric grid, drawn as CSS conic + repeating
+     linear gradients. Used at very low opacity (3-6%) as a texture
+     under panels or heroes. */
+  --ygo-bg-duel-grid:
+    repeating-linear-gradient(0deg,
+      rgba(201, 162, 74, 0.05) 0px,
+      rgba(201, 162, 74, 0.05) 1px,
+      transparent 1px,
+      transparent 40px),
+    repeating-linear-gradient(90deg,
+      rgba(201, 162, 74, 0.05) 0px,
+      rgba(201, 162, 74, 0.05) 1px,
+      transparent 1px,
+      transparent 40px);
+
+  /* Faint diagonal gold linework — used as a wash on major hero
+     panels and section boundaries. */
+  --ygo-bg-gold-linework: repeating-linear-gradient(135deg,
+    rgba(232, 192, 105, 0.045) 0px,
+    rgba(232, 192, 105, 0.045) 1px,
+    transparent 1px,
+    transparent 12px);
+
   /* ── Status colours (F&L semantic) ───────────────────────────────── */
   --ygo-status-forbidden: #b13232;
   --ygo-status-forbidden-ink: #ffdede;
@@ -150,6 +198,9 @@
   --ygo-shadow-premium: 0 1px 0 rgba(255,255,255,0.06) inset,
                         0 18px 40px rgba(0,0,0,0.6),
                         0 0 0 1px rgba(201,162,74,0.08);
+  --ygo-shadow-card-hover: 0 1px 0 rgba(255,255,255,0.05) inset,
+                           0 8px 20px rgba(0,0,0,0.55),
+                           0 0 0 1px rgba(201,162,74,0.18);
 
   --ygo-motion-fast: 120ms;
   --ygo-motion-base: 200ms;
@@ -168,6 +219,26 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   margin: 0;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Ambient brand haze — sits below all content at ~15% opacity max,
+   anchored top-centre so pages have a subtle purple/red backdrop
+   without any element competing with content. Fixed so scrolling
+   feels grounded. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: var(--ygo-bg-hero-haze);
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 *,

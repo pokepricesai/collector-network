@@ -5,12 +5,21 @@ export function Footer() {
     <footer className={styles.footer}>
       <div className={styles.inner}>
         <div>
-          <p className={styles.brand}>Duelist Prices</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/ygoprices-logo.png"
+            alt="YGOPrices"
+            className={styles.brandLogo}
+            width={2172}
+            height={724}
+            loading="lazy"
+            decoding="async"
+          />
           <p className={styles.text}>
             A collector-first Yu-Gi-Oh! catalogue. Focused on exact
             printings, editions, rarities, and both raw and graded market
             values. Part of the Collector Network family of specialist
-            trading-card sites. Site name and branding are provisional.
+            trading-card sites.
           </p>
         </div>
         <div>

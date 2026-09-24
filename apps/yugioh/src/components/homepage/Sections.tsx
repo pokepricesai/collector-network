@@ -40,13 +40,15 @@ export function Section({ title, meta, children }: SectionProps) {
 export function Hero() {
   return (
     <section className={styles.hero}>
-      <p className={styles.eyebrow}>Yu-Gi-Oh! · collector database</p>
+      <p className={styles.eyebrow}>Yu-Gi-Oh! · collector catalogue + market</p>
       <h1 className={styles.heroTitle}>
-        Find the exact Yu-Gi-Oh!&nbsp;card you own.
+        Every Yu-Gi-Oh!&nbsp;card, printing and rarity — with live prices.
       </h1>
       <p className={styles.heroSub}>
-        Compare every printing, edition, and rarity. See raw prices and
-        graded values side by side. Search by name, set code, or archetype.
+        The collector-first Yu-Gi-Oh! reference. Full print history and
+        rarity ladder for every card, raw retail alongside graded slab
+        values, per-set checklists, Forbidden &amp; Limited, and a market
+        overview that never fabricates trend data.
       </p>
       <div className={styles.heroSearch}>
         <SearchBar size="lg" autoFocus placeholder="e.g. Blue-Eyes White Dragon, LOB-001, Sky Striker" />

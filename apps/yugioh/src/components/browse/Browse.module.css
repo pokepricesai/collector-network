@@ -351,6 +351,126 @@
   margin: 0 0 var(--ygo-size-base) 0;
 }
 
+/* ── Set-page card grid ─────────────────────────────────────────── */
+
+.setCardGrid {
+  display: grid;
+  gap: var(--ygo-size-lg);
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+@media (max-width: 767px) {
+  .setCardGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--ygo-size-base);
+  }
+}
+
+.setCardTile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-sm);
+  padding: var(--ygo-size-sm);
+  border-radius: var(--ygo-radius-md);
+  border: 1px solid var(--ygo-line-hairline);
+  background: var(--ygo-ink-onyx);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--ygo-motion-base) var(--ygo-motion-ease),
+              border-color var(--ygo-motion-base) var(--ygo-motion-ease),
+              box-shadow var(--ygo-motion-base) var(--ygo-motion-ease);
+}
+
+.setCardTile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(201, 162, 74, 0.35);
+  box-shadow: var(--ygo-shadow-card-hover);
+}
+
+.setCardImageWrap {
+  position: relative;
+  display: block;
+}
+
+/* Collector number overlaid on the top-right of the artwork so the
+   number remains scannable without occupying its own text row and
+   giving each tile more vertical real estate for the image itself. */
+.setCardNumber {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-family: var(--ygo-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ygo-accent-gold-strong);
+  background: rgba(5, 7, 12, 0.75);
+  border: 1px solid rgba(201, 162, 74, 0.35);
+  border-radius: var(--ygo-radius-sm);
+  padding: 2px 6px;
+  text-transform: uppercase;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.setCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 2px 2px;
+}
+
+.setCardName {
+  margin: 0;
+  font-family: var(--ygo-font-display);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ygo-text-primary);
+  /* Two-line clamp keeps tiles the same height even on long names. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.5em;
+}
+
+.setCardMetaRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.setCardPriceRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ygo-size-xs);
+  margin-top: 2px;
+}
+
+.setCardPrice {
+  font-family: var(--ygo-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+}
+
+.setCardPriceDim {
+  font-family: var(--ygo-font-mono);
+  font-size: 12px;
+  color: var(--ygo-text-quiet);
+}
+
+.setCardPriceAlt {
+  font-family: var(--ygo-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--ygo-text-muted);
+}
+
 .metaValue {
   font-family: var(--ygo-font-mono);
   font-variant-numeric: tabular-nums;

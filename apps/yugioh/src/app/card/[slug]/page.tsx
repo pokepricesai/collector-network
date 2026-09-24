@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getYugiohLogicalCardBySlug(slug);
   if (!data) {
     return {
-      title: 'Card not found — Duelist Prices',
+      title: 'Card not found — YGOPrices',
       robots: { index: false, follow: true },
     };
   }
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     alternates: { canonical },
     openGraph: {
-      title: `${data.name} — Duelist Prices`,
+      title: `${data.name} — YGOPrices`,
       description,
       url: canonical,
       type: 'article',
@@ -103,7 +103,7 @@ export default async function LogicalCardPage({ params }: Props) {
           <div className={styles.header}>
             <p className={styles.eyebrow}>
               <Link href="/" className={styles.crumb}>
-                Duelist Prices
+                YGOPrices
               </Link>{' '}
               <span className={styles.dot}>·</span>{' '}
               <span className={styles.crumb}>Cards</span>{' '}

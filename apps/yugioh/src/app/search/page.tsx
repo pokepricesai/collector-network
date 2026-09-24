@@ -17,7 +17,7 @@ import styles from './page.module.css';
 // set-code match goes to /card/[slug]/printing/[collector]/[key].
 
 export const metadata: Metadata = {
-  title: 'Search — Duelist Prices',
+  title: 'Search — YGOPrices',
   robots: { index: false, follow: true }, // don't index search-result URLs
 };
 
