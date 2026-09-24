@@ -7,6 +7,11 @@
 
 .pill {
   display: inline-flex;
+  /* Wrap cells to a second row when the pill would otherwise exceed
+     its container. Container was previously white-space:nowrap-locked
+     and forced its parent tile past the grid track on the homepage
+     "Most valuable printings" section at every viewport. */
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 0;
   padding: 0;
@@ -17,6 +22,8 @@
   overflow: hidden;
   line-height: 1;
   box-shadow: var(--ygo-shadow-raised);
+  /* Never grow past whatever inline-flex context we're in. */
+  max-width: 100%;
 }
 
 .cell {
@@ -29,9 +36,15 @@
   border-right: 1px solid var(--ygo-line-hairline);
   letter-spacing: 0.04em;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .cell:last-child { border-right: none; }
+
+/* When cells wrap, the border-right on a cell that becomes the last
+   in its row would look odd; but since only the true last cell keeps
+   border-right removed and wrapped rows still show it consistently,
+   the seam remains visually intentional. No dedicated rule needed. */
 
 .code {
   font-size: 14px;

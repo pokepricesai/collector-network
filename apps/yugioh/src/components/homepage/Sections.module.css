@@ -258,6 +258,12 @@
   align-items: center;
 }
 
+/* Grid children default to min-content width. The right-hand cell
+   contains a PrintingFingerprint pill whose intrinsic min-content
+   width is the sum of every non-wrapping cell — previously pushed the
+   tile past its wideGrid track. */
+.mostValuableTile > * { min-width: 0; }
+
 .mostValuableName {
   font-family: var(--ygo-font-display);
   font-size: 14px;
