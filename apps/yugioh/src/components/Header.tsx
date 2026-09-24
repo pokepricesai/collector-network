@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { getCurrentUser } from '@collector-network/auth';
+import { readYgoProfile } from '../lib/user-profile';
+import { AccountMenu } from './AccountMenu';
 import { SearchBar } from './SearchBar';
 import styles from './Header.module.css';
 
@@ -17,7 +20,14 @@ const NAV: NavItem[] = [
   { label: 'F&L', href: '/forbidden-limited' },
 ];
 
-export function Header({ compactSearch = true }: { compactSearch?: boolean }) {
+export async function Header({ compactSearch = true }: { compactSearch?: boolean }) {
+  const user = await getCurrentUser();
+  const profile = user ? readYgoProfile(user) : null;
+  const photoUrl = user
+    ? ((user.user_metadata?.['avatar_url'] as string | undefined) ??
+      (user.user_metadata?.['picture'] as string | undefined) ??
+      null)
+    : null;
   return (
     <header className={styles.header}>
       <div className={styles.row}>
@@ -61,6 +71,19 @@ export function Header({ compactSearch = true }: { compactSearch?: boolean }) {
             ),
           )}
         </nav>
+        <div className={styles.accountSlot}>
+          <AccountMenu
+            user={
+              user
+                ? {
+                    displayName: profile?.displayName ?? '',
+                    avatarKey: profile?.avatarKey ?? 'dragon',
+                    photoUrl,
+                  }
+                : null
+            }
+          />
+        </div>
       </div>
     </header>
   );

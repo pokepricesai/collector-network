@@ -1,0 +1,33 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ygo-radius-pill);
+  background: var(--ygo-ink-onyx);
+  border: 1.5px solid var(--ygo-line-hairline);
+  color: var(--ygo-accent-gold);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.svg {
+  width: 62%;
+  height: 62%;
+  display: block;
+}
+
+/* Per-avatar tint accents drawn from the YGOPrices palette. */
+.k-dragon      { color: var(--ygo-accent-crimson-strong); border-color: rgba(225, 78, 80, 0.45); }
+.k-spellcaster { color: var(--ygo-accent-royal-strong); border-color: rgba(150, 104, 208, 0.45); }
+.k-trap        { color: #d68a4a; border-color: rgba(214, 138, 74, 0.45); }
+.k-spell       { color: #4aa080; border-color: rgba(74, 160, 128, 0.45); }
+.k-star        { color: var(--ygo-accent-gold-strong); border-color: rgba(232, 192, 105, 0.55); }
+.k-eye         { color: var(--ygo-accent-royal-strong); border-color: rgba(150, 104, 208, 0.5); }
+.k-card-stack  { color: var(--ygo-accent-gold-strong); border-color: rgba(232, 192, 105, 0.45); }
+
+.photo {
+  border-radius: var(--ygo-radius-pill);
+  object-fit: cover;
+  border: 1.5px solid var(--ygo-line-hairline);
+  display: block;
+}

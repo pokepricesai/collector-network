@@ -12,12 +12,17 @@
 
 .row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   gap: var(--ygo-size-lg);
   align-items: center;
   padding: var(--ygo-size-base) var(--ygo-size-lg);
   max-width: 1440px;
   margin: 0 auto;
+}
+
+.accountSlot {
+  display: inline-flex;
+  align-items: center;
 }
 
 .brand {
@@ -89,13 +94,14 @@
 
 @media (max-width: 767px) {
   .row {
-    grid-template-columns: auto 1fr;
-    grid-template-areas: 'brand search';
-    gap: var(--ygo-size-base);
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'brand search account';
+    gap: var(--ygo-size-sm);
     padding: var(--ygo-size-sm) var(--ygo-size-base);
   }
   .brand { grid-area: brand; }
-  .searchWrap { grid-area: search; max-width: none; }
-  .brandLogo { height: 30px; max-width: 130px; }
+  .searchWrap { grid-area: search; max-width: none; min-width: 0; }
+  .accountSlot { grid-area: account; }
+  .brandLogo { height: 30px; max-width: 110px; }
   .nav { display: none; }
 }

@@ -11,7 +11,22 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: ['/', '/card/'],
-        disallow: ['/api/', '/dev/', '/search'],
+        disallow: [
+          '/api/',
+          '/dev/',
+          '/search',
+          // Slice C: personal / auth surfaces. All page-level metadata
+          // is already noindex, follow — these belt-and-braces
+          // disallow lines keep well-behaved crawlers out entirely.
+          '/account',
+          '/settings',
+          '/collection',
+          '/watchlist',
+          '/decks',
+          '/sign-in',
+          '/sign-up',
+          '/auth/',
+        ],
       },
     ],
     sitemap: `${siteUrl()}/sitemap.xml`,

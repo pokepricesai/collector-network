@@ -15,13 +15,16 @@
     "audit:market": "node --env-file=.env.local --import tsx scripts/verify-slice-8.mts",
     "audit:finder": "node --env-file=.env.local --import tsx scripts/verify-card-finder.mts",
     "bench": "node --import tsx scripts/perf-benchmark.mts",
-    "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts src/server/history.test.ts src/lib/finder-filters.test.ts",
+    "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts src/server/history.test.ts src/lib/finder-filters.test.ts src/lib/return-to.test.ts src/lib/user-profile.test.ts",
     "clean": "rimraf .next .turbo node_modules"
   },
   "dependencies": {
+    "@collector-network/auth": "workspace:^",
     "@collector-network/database": "workspace:*",
     "@collector-network/market-data": "workspace:*",
     "@collector-network/network-config": "workspace:*",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.45.4",
     "next": "^15.1.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

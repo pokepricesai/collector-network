@@ -1,0 +1,135 @@
+.wrap { position: relative; }
+
+.loggedOut {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ygo-size-sm);
+  margin-left: var(--ygo-size-sm);
+}
+
+.linkSecondary {
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ygo-text-muted);
+  padding: 4px 8px;
+  border-radius: var(--ygo-radius-sm);
+  text-decoration: none;
+}
+
+.linkSecondary:hover { color: var(--ygo-text-primary); }
+
+.linkPrimary {
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ygo-ink-abyss);
+  background: var(--ygo-accent-gold);
+  border: 1px solid var(--ygo-accent-gold);
+  padding: 5px 10px;
+  border-radius: var(--ygo-radius-sm);
+  text-decoration: none;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ygo-size-xs);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--ygo-radius-pill);
+  padding: 2px 8px 2px 2px;
+  cursor: pointer;
+  color: var(--ygo-text-muted);
+  font-family: var(--ygo-font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: border-color var(--ygo-motion-fast) var(--ygo-motion-ease),
+              color var(--ygo-motion-fast) var(--ygo-motion-ease);
+  margin-left: var(--ygo-size-sm);
+}
+
+.trigger:hover {
+  color: var(--ygo-text-primary);
+  border-color: var(--ygo-line-hairline);
+}
+
+.triggerName {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  font-size: 10px;
+  color: var(--ygo-text-quiet);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  padding: 6px;
+  background: rgba(5, 7, 12, 0.98);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  box-shadow: var(--ygo-shadow-premium);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--ygo-radius-sm);
+  font-family: var(--ygo-font-body);
+  font-size: 13px;
+  color: var(--ygo-text-primary);
+  text-decoration: none;
+}
+
+.item:hover {
+  background: rgba(201, 162, 74, 0.08);
+  color: var(--ygo-accent-gold-strong);
+}
+
+.sep {
+  border: 0;
+  border-top: 1px solid var(--ygo-line-hairline);
+  margin: 4px 0;
+}
+
+.signOutForm { margin: 0; }
+
+.signOutButton {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--ygo-radius-sm);
+  border: 0;
+  background: transparent;
+  font-family: var(--ygo-font-body);
+  font-size: 13px;
+  color: var(--ygo-status-forbidden-ink);
+  cursor: pointer;
+}
+
+.signOutButton:hover { background: rgba(177, 42, 47, 0.1); }
+
+/* Mobile: swap the "Sign in / Create account" full text for a
+   single compact "Sign in" pill so the header row stays clean.
+   Signed-in trigger hides the display name text — avatar-only. */
+@media (max-width: 767px) {
+  .linkSecondary { display: none; }
+  .triggerName { display: none; }
+  .trigger { padding: 2px; margin-left: 0; }
+}
