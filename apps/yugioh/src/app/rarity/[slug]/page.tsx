@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { CardBrowseTile } from '../../../components/card-visual/CardBrowseTile';
+import { CardMiniThumb } from '../../../components/card-visual/CardMiniThumb';
 import { Footer } from '../../../components/Footer';
 import { Header } from '../../../components/Header';
-import { RarityBadge } from '../../../components/RarityBadge';
 import { Surface } from '../../../components/Surface';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
 import {
@@ -130,6 +131,15 @@ export default async function RarityPage({ params }: Props) {
                   style={{ textDecoration: 'none' }}
                 >
                   <Surface variant="premium" className={styles.topTile}>
+                    <CardMiniThumb
+                      src={
+                        entry.card.images?.small ??
+                        entry.card.images?.normal ??
+                        null
+                      }
+                      alt={entry.card.name}
+                      size="md"
+                    />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p className={styles.topName}>{entry.card.name}</p>
                       <p className={styles.topMeta}>
@@ -194,69 +204,30 @@ export default async function RarityPage({ params }: Props) {
         <section className={styles.section}>
           <header className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>
-              Sample cards ({data.cards.length})
+              Sample cards ({Math.min(data.cards.length, 60)})
             </h2>
             <p className={styles.sectionCaption}>
-              A cross-section of cards in this rarity family. Click any card
-              to see every printing across every set.
+              A visual cross-section of cards in this rarity family. Click
+              any tile to see every printing across every set.
             </p>
           </header>
-          <table className={styles.cardsTable}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Set</th>
-                <th>Card #</th>
-                <th>Rarity</th>
-                <th style={{ textAlign: 'right' }}>USD</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.cards.slice(0, 60).map((entry) => (
-                <tr key={entry.card.id}>
-                  <td>
-                    <Link
-                      href={`/card/${toCardSlug(entry.card.name)}`}
-                      className={styles.cardLink}
-                    >
-                      {entry.card.name}
-                    </Link>
-                  </td>
-                  <td>
-                    {entry.set ? (
-                      <Link
-                        href={`/set/${encodeURIComponent(entry.set.code.toLowerCase())}`}
-                        style={{ color: 'inherit', textDecoration: 'none' }}
-                      >
-                        {entry.set.name}
-                      </Link>
-                    ) : (
-                      <span className={styles.dim}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={styles.setCode}>
-                      {entry.card.collector_number ?? '—'}
-                    </span>
-                  </td>
-                  <td>
-                    <RarityBadge rarity={entry.card.rarity} />
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    {entry.bestUsdRetail?.price != null ? (
-                      <span className={styles.priceNum}>
-                        ${entry.bestUsdRetail.price.toLocaleString('en-US', {
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                    ) : (
-                      <span className={styles.dim}>—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className={styles.setCardGrid}>
+            {data.cards.slice(0, 60).map((entry) => (
+              <CardBrowseTile
+                key={entry.card.id}
+                href={`/card/${toCardSlug(entry.card.name)}`}
+                name={entry.card.name}
+                rarity={entry.card.rarity}
+                image={
+                  entry.card.images?.small ?? entry.card.images?.normal ?? null
+                }
+                collectorNumber={entry.card.collector_number}
+                setLine={entry.set?.code?.toUpperCase() ?? null}
+                bestUsdRetail={entry.bestUsdRetail?.price ?? null}
+                bestEurRetail={entry.bestEurRetail?.price ?? null}
+              />
+            ))}
+          </div>
         </section>
       </main>
       <Footer />

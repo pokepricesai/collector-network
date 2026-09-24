@@ -9,6 +9,7 @@ import { RarityBadge } from '../../components/RarityBadge';
 import { Surface } from '../../components/Surface';
 import { siteUrl } from '../../lib/site-url';
 import { toCardSlug } from '../../lib/slug';
+import { CardMiniThumb } from '../../components/card-visual/CardMiniThumb';
 import type { FnlPageData, FnlSectionData } from '../../server/fnl';
 import { getYugiohForbiddenLimited } from '../../server/fnl';
 import { safe } from '../../server/safe';
@@ -281,24 +282,41 @@ function FnlSection({
             {section.cards.map((entry) => (
               <tr key={entry.card.id}>
                 <td>
-                  <Link
-                    href={`/card/${toCardSlug(entry.card.name)}`}
-                    className={styles.cardLink}
-                  >
-                    {entry.card.name}
-                  </Link>
-                  {entry.archetypes.length > 0 && (
-                    <div
-                      style={{
-                        fontFamily: 'var(--ygo-font-body)',
-                        fontSize: 11,
-                        color: 'var(--ygo-text-quiet)',
-                        marginTop: 2,
-                      }}
+                  <div className={styles.thumbCell}>
+                    <Link
+                      href={`/card/${toCardSlug(entry.card.name)}`}
+                      aria-label={entry.card.name}
                     >
-                      {entry.archetypes.slice(0, 2).join(' · ')}
+                      <CardMiniThumb
+                        src={
+                          entry.card.images?.small ??
+                          entry.card.images?.normal ??
+                          null
+                        }
+                        alt={entry.card.name}
+                        size="sm"
+                      />
+                    </Link>
+                    <div className={styles.thumbCellText}>
+                      <Link
+                        href={`/card/${toCardSlug(entry.card.name)}`}
+                        className={styles.cardLink}
+                      >
+                        {entry.card.name}
+                      </Link>
+                      {entry.archetypes.length > 0 && (
+                        <span
+                          style={{
+                            fontFamily: 'var(--ygo-font-body)',
+                            fontSize: 11,
+                            color: 'var(--ygo-text-quiet)',
+                          }}
+                        >
+                          {entry.archetypes.slice(0, 2).join(' · ')}
+                        </span>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </td>
                 <td>
                   {entry.frameType ? (

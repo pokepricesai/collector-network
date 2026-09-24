@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CardMiniThumb } from '../card-visual/CardMiniThumb';
 import { EditionBadge } from '../EditionBadge';
 import { RarityBadge } from '../RarityBadge';
 import type { GradedRankingEntry, RetailRankingEntry } from '../../server/market';
@@ -50,18 +51,32 @@ export function RetailRankingTable({ entries, showRank = true, currency }: Retai
                 </td>
               )}
               <td>
-                <Link href={printingHref} className={styles.cardLink}>
-                  {entry.card.name}
-                </Link>
-                <div
-                  style={{
-                    fontFamily: 'var(--ygo-font-mono)',
-                    fontSize: 11,
-                    color: 'var(--ygo-text-quiet)',
-                    marginTop: 2,
-                  }}
-                >
-                  {entry.printing.collector_number}
+                <div className={styles.thumbCell}>
+                  <Link href={printingHref} aria-label={entry.card.name}>
+                    <CardMiniThumb
+                      src={
+                        entry.card.images?.small ??
+                        entry.card.images?.normal ??
+                        null
+                      }
+                      alt={entry.card.name}
+                      size="sm"
+                    />
+                  </Link>
+                  <div className={styles.thumbCellText}>
+                    <Link href={printingHref} className={styles.cardLink}>
+                      {entry.card.name}
+                    </Link>
+                    <span
+                      style={{
+                        fontFamily: 'var(--ygo-font-mono)',
+                        fontSize: 11,
+                        color: 'var(--ygo-text-quiet)',
+                      }}
+                    >
+                      {entry.printing.collector_number}
+                    </span>
+                  </div>
                 </div>
               </td>
               <td>
@@ -150,18 +165,32 @@ export function GradedRankingTable({ entries }: GradedTableProps) {
                 </span>
               </td>
               <td>
-                <Link href={printingHref} className={styles.cardLink}>
-                  {entry.card.name}
-                </Link>
-                <div
-                  style={{
-                    fontFamily: 'var(--ygo-font-mono)',
-                    fontSize: 11,
-                    color: 'var(--ygo-text-quiet)',
-                    marginTop: 2,
-                  }}
-                >
-                  {entry.printing.collector_number}
+                <div className={styles.thumbCell}>
+                  <Link href={printingHref} aria-label={entry.card.name}>
+                    <CardMiniThumb
+                      src={
+                        entry.card.images?.small ??
+                        entry.card.images?.normal ??
+                        null
+                      }
+                      alt={entry.card.name}
+                      size="sm"
+                    />
+                  </Link>
+                  <div className={styles.thumbCellText}>
+                    <Link href={printingHref} className={styles.cardLink}>
+                      {entry.card.name}
+                    </Link>
+                    <span
+                      style={{
+                        fontFamily: 'var(--ygo-font-mono)',
+                        fontSize: 11,
+                        color: 'var(--ygo-text-quiet)',
+                      }}
+                    >
+                      {entry.printing.collector_number}
+                    </span>
+                  </div>
                 </div>
               </td>
               <td>

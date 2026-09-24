@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { CardImageFrame } from '../../../components/CardImageFrame';
+import { CardBrowseTile } from '../../../components/card-visual/CardBrowseTile';
+import { CardMiniThumb } from '../../../components/card-visual/CardMiniThumb';
 import { EditionBadge } from '../../../components/EditionBadge';
 import { Footer } from '../../../components/Footer';
 import { Header } from '../../../components/Header';
-import { RarityBadge } from '../../../components/RarityBadge';
 import { Surface } from '../../../components/Surface';
 import { normaliseRarity } from '../../../lib/rarity';
 import { siteUrl } from '../../../lib/site-url';
@@ -120,6 +120,15 @@ export default async function SetPage({ params }: Props) {
                   style={{ textDecoration: 'none' }}
                 >
                   <Surface variant="premium" className={styles.topTile}>
+                    <CardMiniThumb
+                      src={
+                        entry.card.images?.small ??
+                        entry.card.images?.normal ??
+                        null
+                      }
+                      alt={entry.card.name}
+                      size="md"
+                    />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p className={styles.topName}>{entry.card.name}</p>
                       <p className={styles.topMeta}>
@@ -190,60 +199,20 @@ export default async function SetPage({ params }: Props) {
             </p>
           </header>
           <div className={styles.setCardGrid}>
-            {sortedCards.map((entry) => {
-              const slug = toCardSlug(entry.card.name);
-              const image = entry.card.images?.small ?? entry.card.images?.normal ?? null;
-              return (
-                <Link
-                  key={entry.card.id}
-                  href={`/card/${slug}`}
-                  className={styles.setCardTile}
-                  aria-label={`${entry.card.name} — ${entry.card.rarity ?? 'card'} · ${entry.card.collector_number ?? ''}`}
-                >
-                  <div className={styles.setCardImageWrap}>
-                    <CardImageFrame
-                      src={image}
-                      alt={entry.card.name}
-                      rarity={entry.card.rarity}
-                      gloss={false}
-                    />
-                    {entry.card.collector_number && (
-                      <span className={styles.setCardNumber}>
-                        {entry.card.collector_number}
-                      </span>
-                    )}
-                  </div>
-                  <div className={styles.setCardBody}>
-                    <p className={styles.setCardName} title={entry.card.name}>
-                      {entry.card.name}
-                    </p>
-                    <div className={styles.setCardMetaRow}>
-                      <RarityBadge rarity={entry.card.rarity} />
-                    </div>
-                    <div className={styles.setCardPriceRow}>
-                      {entry.bestUsdRetail?.price != null ? (
-                        <span className={styles.setCardPrice}>
-                          $
-                          {entry.bestUsdRetail.price.toLocaleString('en-US', {
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      ) : (
-                        <span className={styles.setCardPriceDim}>—</span>
-                      )}
-                      {entry.bestEurRetail?.price != null && (
-                        <span className={styles.setCardPriceAlt}>
-                          €
-                          {entry.bestEurRetail.price.toLocaleString('en-US', {
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+            {sortedCards.map((entry) => (
+              <CardBrowseTile
+                key={entry.card.id}
+                href={`/card/${toCardSlug(entry.card.name)}`}
+                name={entry.card.name}
+                rarity={entry.card.rarity}
+                image={
+                  entry.card.images?.small ?? entry.card.images?.normal ?? null
+                }
+                collectorNumber={entry.card.collector_number}
+                bestUsdRetail={entry.bestUsdRetail?.price ?? null}
+                bestEurRetail={entry.bestEurRetail?.price ?? null}
+              />
+            ))}
           </div>
         </section>
       </main>

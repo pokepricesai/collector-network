@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AttributeChip } from '../../../components/AttributeIcon';
+import { CardBrowseTile } from '../../../components/card-visual/CardBrowseTile';
+import { CardMiniThumb } from '../../../components/card-visual/CardMiniThumb';
 import { CardClassBadge } from '../../../components/CardClassBadge';
 import { FnlBadge } from '../../../components/FnlBadge';
 import { Footer } from '../../../components/Footer';
 import { Header } from '../../../components/Header';
-import { RarityBadge } from '../../../components/RarityBadge';
 import { Surface } from '../../../components/Surface';
 import { normaliseFnl } from '../../../lib/fnl';
 import { siteUrl } from '../../../lib/site-url';
@@ -104,6 +105,15 @@ export default async function ArchetypePage({ params }: Props) {
                   style={{ textDecoration: 'none' }}
                 >
                   <Surface variant="premium" className={styles.topTile}>
+                    <CardMiniThumb
+                      src={
+                        entry.card.images?.small ??
+                        entry.card.images?.normal ??
+                        null
+                      }
+                      alt={entry.card.name}
+                      size="md"
+                    />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p className={styles.topName}>{entry.card.name}</p>
                       <p className={styles.topMeta}>
@@ -213,69 +223,31 @@ export default async function ArchetypePage({ params }: Props) {
         <section className={styles.section}>
           <header className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>
-              Member cards ({data.cards.length})
+              Member cards ({Math.min(data.cards.length, 100)}
+              {data.cards.length > 100 ? ` of ${data.cards.length}` : ''})
             </h2>
             <p className={styles.sectionCaption}>
-              Every card that carries the {data.name} archetype tag in production data.
-              Click any card to see every printing across every set.
+              Every card that carries the {data.name} archetype tag. Click
+              any tile for the full print history and market values.
             </p>
           </header>
-          <table className={styles.cardsTable}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Set</th>
-                <th>Card #</th>
-                <th>Rarity</th>
-                <th style={{ textAlign: 'right' }}>USD</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.cards.slice(0, 100).map((entry) => (
-                <tr key={entry.card.id}>
-                  <td>
-                    <Link
-                      href={`/card/${toCardSlug(entry.card.name)}`}
-                      className={styles.cardLink}
-                    >
-                      {entry.card.name}
-                    </Link>
-                  </td>
-                  <td>
-                    {entry.set ? (
-                      <Link
-                        href={`/set/${encodeURIComponent(entry.set.code.toLowerCase())}`}
-                        style={{ color: 'inherit', textDecoration: 'none' }}
-                      >
-                        {entry.set.name}
-                      </Link>
-                    ) : (
-                      <span className={styles.dim}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={styles.setCode}>
-                      {entry.card.collector_number ?? '—'}
-                    </span>
-                  </td>
-                  <td>
-                    <RarityBadge rarity={entry.card.rarity} />
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    {entry.bestUsdRetail?.price != null ? (
-                      <span className={styles.priceNum}>
-                        ${entry.bestUsdRetail.price.toLocaleString('en-US', {
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                    ) : (
-                      <span className={styles.dim}>—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className={styles.setCardGrid}>
+            {data.cards.slice(0, 100).map((entry) => (
+              <CardBrowseTile
+                key={entry.card.id}
+                href={`/card/${toCardSlug(entry.card.name)}`}
+                name={entry.card.name}
+                rarity={entry.card.rarity}
+                image={
+                  entry.card.images?.small ?? entry.card.images?.normal ?? null
+                }
+                collectorNumber={entry.card.collector_number}
+                setLine={entry.set?.code?.toUpperCase() ?? null}
+                bestUsdRetail={entry.bestUsdRetail?.price ?? null}
+                bestEurRetail={entry.bestEurRetail?.price ?? null}
+              />
+            ))}
+          </div>
           {data.cards.length > 100 && (
             <p className={styles.dim} style={{ marginTop: 12 }}>
               Showing the first 100 member cards. Full member listing arrives with the

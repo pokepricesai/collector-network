@@ -1,0 +1,38 @@
+.wrap {
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: var(--ygo-radius-sm);
+  overflow: hidden;
+  background: var(--ygo-ink-abyss);
+  border: 1px solid var(--ygo-line-hairline);
+  flex-shrink: 0;
+}
+
+/* Reserve the exact 59:86 card aspect so slots do not shift as
+   thumbnails stream in. */
+.sm {
+  width: 42px;
+  aspect-ratio: 59 / 86;
+}
+
+.md {
+  width: 60px;
+  aspect-ratio: 59 / 86;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg,
+      rgba(201, 162, 74, 0.05) 0%,
+      rgba(106, 62, 161, 0.05) 100%);
+}

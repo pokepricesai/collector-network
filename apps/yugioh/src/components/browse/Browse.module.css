@@ -471,6 +471,35 @@
   color: var(--ygo-text-muted);
 }
 
+.setCardSetLine {
+  font-family: var(--ygo-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ygo-text-quiet);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Tabular row for market ranking tables: thumbnail column plus card
+   info. Kept generic so RetailRankingTable and GradedRankingTable can
+   share it. */
+.thumbCell {
+  display: flex;
+  align-items: center;
+  gap: var(--ygo-size-sm);
+  min-width: 0;
+}
+
+.thumbCellText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
 .metaValue {
   font-family: var(--ygo-font-mono);
   font-variant-numeric: tabular-nums;
