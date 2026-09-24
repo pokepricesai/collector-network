@@ -14,6 +14,7 @@ import type { FnlPageData, FnlSectionData } from '../../server/fnl';
 import { getYugiohForbiddenLimited } from '../../server/fnl';
 import { safe } from '../../server/safe';
 import styles from '../../components/browse/Browse.module.css';
+import mobile from '../../components/market/MarketRankingRow.module.css';
 
 export const revalidate = 3600;
 
@@ -267,7 +268,13 @@ function FnlSection({
       {section.cards.length === 0 ? (
         <div className={styles.notice}>No cards in this section.</div>
       ) : (
-        <table className={styles.cardsTable}>
+        <>
+        {/* Desktop / tablet: existing full table, wrapped in a
+            component-local scroll container so any residual overflow
+            (7 columns is tight around 800-900 px) stays inside the
+            component and never propagates to document-level. */}
+        <div className={mobile.tableScroll}>
+        <table className={`${styles.cardsTable} ${mobile.desktopTable}`}>
           <thead>
             <tr>
               <th>Card</th>
@@ -369,6 +376,80 @@ function FnlSection({
             ))}
           </tbody>
         </table>
+        </div>
+
+        {/* Mobile stacked list — reuses the market-ranking row layout
+            (thumb + name + meta + price). Restriction status carried
+            by the section badge above (Forbidden / Limited / Semi-
+            Limited); no need to repeat it per-row. */}
+        <ol className={mobile.list} aria-label={`${meta.title} cards`}>
+          {section.cards.map((entry) => {
+            const href = `/card/${toCardSlug(entry.card.name)}`;
+            return (
+              <li key={entry.card.id} className={mobile.item}>
+                {/* Rank slot omitted — F&L rows are alphabetical, not
+                    ranked. Empty span preserves grid columns. */}
+                <span />
+                <Link href={href} className={mobile.thumb} aria-label={entry.card.name}>
+                  <CardMiniThumb
+                    src={
+                      entry.card.images?.small ??
+                      entry.card.images?.normal ??
+                      null
+                    }
+                    alt={entry.card.name}
+                    size="md"
+                  />
+                </Link>
+                <div className={mobile.body}>
+                  <Link href={href} className={mobile.name}>
+                    {entry.card.name}
+                  </Link>
+                  <span className={mobile.metaLine}>
+                    {entry.set ? (
+                      <Link
+                        href={`/set/${encodeURIComponent(entry.set.code.toLowerCase())}`}
+                        className={mobile.setLink}
+                      >
+                        <span className={mobile.setCode}>
+                          {entry.set.code.toUpperCase()}
+                        </span>
+                      </Link>
+                    ) : null}
+                    {entry.card.collector_number && (
+                      <>
+                        <span className={mobile.metaDot}>·</span>
+                        <span>{entry.card.collector_number}</span>
+                      </>
+                    )}
+                  </span>
+                  <span className={mobile.metaLine}>
+                    <RarityBadge rarity={entry.card.rarity} />
+                    {entry.frameType && (
+                      <CardClassBadge cardClass={entry.frameType} />
+                    )}
+                    {entry.attribute && (
+                      <AttributeChip attribute={entry.attribute} />
+                    )}
+                  </span>
+                </div>
+                <div className={mobile.priceCol}>
+                  {entry.bestUsdRetail?.price != null ? (
+                    <span className={mobile.price}>
+                      $
+                      {entry.bestUsdRetail.price.toLocaleString('en-US', {
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  ) : (
+                    <span className={styles.dim}>—</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        </>
       )}
     </section>
   );
