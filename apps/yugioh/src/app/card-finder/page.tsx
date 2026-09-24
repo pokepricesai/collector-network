@@ -123,10 +123,18 @@ function FinderResults({
       <div className={styles.resultsHeader}>
         <span className={styles.resultsCount}>
           <span className={styles.resultsCountStrong}>
-            {result.totalMatches.toLocaleString('en-US')}
+            {result.totalIdentities.toLocaleString('en-US')}
           </span>{' '}
-          {result.totalMatches === 1 ? 'card' : 'cards'} match
+          {result.totalIdentities === 1 ? 'card' : 'cards'} match
           {structured ? ' current filters' : ''}
+          {result.totalRawRows > result.totalIdentities && (
+            <>
+              {' '}
+              <span style={{ color: 'var(--ygo-text-quiet)' }}>
+                (across {result.totalRawRows.toLocaleString('en-US')} printings)
+              </span>
+            </>
+          )}
         </span>
         <span className={styles.sortRow}>
           <span>Sort:</span>
@@ -135,7 +143,9 @@ function FinderResults({
           </strong>
         </span>
         <span className={styles.timings}>
-          {result.timings.totalMs}ms · db {result.timings.queryMs}ms · price {result.timings.priceMs}ms
+          {result.timings.totalMs}ms · scan {result.timings.candidateScanMs}ms
+          {result.timings.priceMs > 0 ? ` · price ${result.timings.priceMs}ms` : ''}
+          {' '}· hydrate {result.timings.hydrateMs}ms
         </span>
       </div>
 
@@ -156,10 +166,18 @@ function FinderResults({
         </div>
       )}
 
+      {result.priceCapability === 'refused-large' && (
+        <div className={styles.truncatedNote}>
+          Price filter and price sort are disabled while the candidate set
+          holds more than 3,000 cards — narrow with another filter (attribute,
+          type, rarity, archetype …) and price ordering will re-enable.
+        </div>
+      )}
+
       {result.truncated && (
         <div className={styles.truncatedNote}>
-          Showing the top matches from the first {result.pageSize * result.totalPages}+
-          candidates. Add a filter to narrow the search further.
+          Candidate scan capped. Narrow with another filter to see every
+          matching identity.
         </div>
       )}
 
