@@ -11,6 +11,11 @@
 .hero {
   padding: var(--ygo-size-3xl) 0 var(--ygo-size-2xl);
   position: relative;
+  /* Clip the ::before/::after decorators to the hero's box so the
+     duel-grid + gold-linework wash cannot spill past the page
+     container and push document.scrollWidth past the viewport at any
+     breakpoint. */
+  overflow: hidden;
   isolation: isolate;
 }
 
@@ -19,7 +24,7 @@
 .hero::before {
   content: '';
   position: absolute;
-  inset: -16px -32px 0;
+  inset: -16px 0 0;
   z-index: -1;
   background: var(--ygo-bg-duel-grid);
   opacity: 0.6;

@@ -12,6 +12,17 @@
  *   └──┴────────┴────────────────────┘
  */
 
+/* Wraps the desktop table so its horizontal scroll (should any
+   in-between viewport not quite fit all six columns) is contained
+   inside the component and never propagates to document-level
+   overflow. Hidden entirely at mobile widths — the stacked list
+   takes over instead. */
+.tableScroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
 .list {
   display: none;
   flex-direction: column;
@@ -132,5 +143,6 @@
 /* At mobile widths: hide the desktop table, show the stacked list. */
 @media (max-width: 767px) {
   .list { display: flex; }
+  .tableScroll { display: none; }
   .desktopTable { display: none !important; }
 }

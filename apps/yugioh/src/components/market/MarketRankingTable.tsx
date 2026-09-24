@@ -32,6 +32,7 @@ export function RetailRankingTable({ entries, showRank = true, currency }: Retai
   const symbol = currency === 'USD' ? '$' : '€';
   return (
     <>
+      <div className={mobile.tableScroll}>
       <table className={`${styles.cardsTable} ${mobile.desktopTable}`}>
         <thead>
           <tr>
@@ -133,6 +134,7 @@ export function RetailRankingTable({ entries, showRank = true, currency }: Retai
           })}
         </tbody>
       </table>
+      </div>
 
       {/* Mobile stacked list — hidden ≥ 768px via CSS. */}
       <ol className={mobile.list} aria-label={`Top ${entries.length} by ${currency} retail`}>
@@ -216,6 +218,7 @@ interface GradedTableProps {
 export function GradedRankingTable({ entries }: GradedTableProps) {
   return (
     <>
+      <div className={mobile.tableScroll}>
       <table className={`${styles.cardsTable} ${mobile.desktopTable}`}>
         <thead>
           <tr>
@@ -313,6 +316,7 @@ export function GradedRankingTable({ entries }: GradedTableProps) {
           })}
         </tbody>
       </table>
+      </div>
 
       {/* Mobile stacked list — hidden ≥ 768px via CSS. */}
       <ol className={mobile.list} aria-label={`Top ${entries.length} graded`}>
