@@ -133,7 +133,12 @@ export function AuthForm({ mode }: Props) {
         <span>or</span>
       </div>
 
-      <form onSubmit={onSubmit} className={styles.form}>
+      {/* method="post" defends against submits before JS hydrates:
+          the browser POSTs same-URL (no route handler → 405) instead
+          of the default GET, which would ship credentials in the
+          address bar. onSubmit's preventDefault handles the normal
+          hydrated case. */}
+      <form onSubmit={onSubmit} method="post" className={styles.form}>
         <label className={styles.field}>
           <span className={styles.label}>Email</span>
           <input
