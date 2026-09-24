@@ -1,4 +1,3 @@
-import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 import {
   listAllCardSlugs,
@@ -9,7 +8,7 @@ import {
   listYugiohRaritiesForDirectory,
   listYugiohSetsForDirectory,
 } from '../../../server/browse';
-import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from '../../../server/cache';
+import { CACHE_TTL } from '../../../server/cache';
 import {
   RARITY_FAMILY_LABELS,
   type RarityFamily,
@@ -158,12 +157,15 @@ async function _cardInventoryRaw(): Promise<CardInventoryRow[]> {
   return out;
 }
 
-const cachedFullCardInventory = withCacheBypass(
+// The card inventory (~40k rows deduped) and printing inventory
+// (~86k rows) are both larger than Next.js Data Cache's 2MB entry
+// limit, so unstable_cache silently drops them. Per-instance
+// memoisation gives us cross-shard sharing within a warm Lambda:
+// the first sitemap shard to render pays the scan cost; the other
+// two shards on the same instance return instantly.
+const cachedFullCardInventory = memoiseInstance(
   _cardInventoryRaw,
-  unstable_cache(_cardInventoryRaw, ['ygo:sitemapCardInventory', 'v1'], {
-    revalidate: CACHE_TTL.SITEMAP_DAILY,
-    tags: [CACHE_TAGS.SITEMAP],
-  }),
+  CACHE_TTL.SITEMAP_DAILY,
 );
 
 interface PrintingInventoryRow {
@@ -196,13 +198,35 @@ async function _printingInventoryRaw(): Promise<PrintingInventoryRow[]> {
   return out;
 }
 
-const cachedFullPrintingInventory = withCacheBypass(
+const cachedFullPrintingInventory = memoiseInstance(
   _printingInventoryRaw,
-  unstable_cache(_printingInventoryRaw, ['ygo:sitemapPrintingInventory', 'v1'], {
-    revalidate: CACHE_TTL.SITEMAP_DAILY,
-    tags: [CACHE_TAGS.SITEMAP],
-  }),
+  CACHE_TTL.SITEMAP_DAILY,
 );
+
+// Per-instance TTL memoisation for payloads that exceed the Data
+// Cache's 2MB entry limit. Serialises concurrent misses (single
+// in-flight promise) so a burst of shard requests within one Lambda
+// instance runs the scan exactly once. TTL is in seconds.
+function memoiseInstance<T>(
+  fn: () => Promise<T>,
+  ttlSeconds: number,
+): () => Promise<T> {
+  let cache: { value: T; expiresAt: number } | null = null;
+  let inflight: Promise<T> | null = null;
+  return async () => {
+    if (cache && Date.now() < cache.expiresAt) return cache.value;
+    if (inflight) return inflight;
+    inflight = fn()
+      .then((value) => {
+        cache = { value, expiresAt: Date.now() + ttlSeconds * 1000 };
+        return value;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+    return inflight;
+  };
+}
 
 async function buildCards(url: string): Promise<Entry[]> {
   const inventory = await cachedFullCardInventory();

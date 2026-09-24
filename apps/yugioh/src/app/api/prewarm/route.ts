@@ -51,6 +51,9 @@ const ALLOWLIST: readonly string[] = [
   '/sitemap/sets.xml',
   '/sitemap/rarities.xml',
   '/sitemap/archetypes.xml',
+  '/sitemap/cards.xml',
+  // printings shards are ~40s cold and too expensive for the cron
+  // window; crawlers hit them on their own cadence.
 ];
 
 const CONCURRENCY = 3;
