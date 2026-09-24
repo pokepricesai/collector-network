@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import {
   getPrintingsForCards,
   getSetsByIds,
@@ -17,6 +18,7 @@ import {
   type PrintingPricing,
   type RetailQuote,
 } from '@collector-network/market-data';
+import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from './cache';
 import { normaliseEdition, type EditionMarker } from './edition';
 import { toYugiohGamedata, type YugiohGamedata } from './gamedata';
 import { getYugiohClient } from './read';
@@ -85,10 +87,10 @@ export interface PhysicalPrintingData {
 
 // ── Logical card page loader ──────────────────────────────────────
 
-export async function getYugiohLogicalCardBySlug(
+async function _getYugiohLogicalCardBySlug(
   slug: string,
-  supabase: SupabaseClient = getYugiohClient(),
 ): Promise<LogicalCardData | null> {
+  const supabase = getYugiohClient();
   const cleaned = slug.trim().toLowerCase();
   if (cleaned.length === 0) return null;
 
@@ -126,6 +128,18 @@ export async function getYugiohLogicalCardBySlug(
 
   return composeLogicalCard(supabase, chosenName, cleaned, cards);
 }
+
+// Per-slug composition cache. Same 30-minute TTL as set/rarity/
+// archetype entities so pricing stays roughly aligned with those
+// pages; identity work (printings + sets join) is where most of the
+// gain comes from.
+export const getYugiohLogicalCardBySlug = withCacheBypass(
+  _getYugiohLogicalCardBySlug,
+  unstable_cache(_getYugiohLogicalCardBySlug, ['ygo:logicalCardBySlug', 'v1'], {
+    revalidate: CACHE_TTL.ENTITY_MEDIUM,
+    tags: [CACHE_TAGS.CARD],
+  }),
+);
 
 async function composeLogicalCard(
   supabase: SupabaseClient,
@@ -247,12 +261,12 @@ async function composeLogicalCard(
 
 // ── Physical printing page loader ─────────────────────────────────
 
-export async function getYugiohPhysicalPrintingByRoute(
+async function _getYugiohPhysicalPrintingByRoute(
   cardSlug: string,
   collectorNumber: string,
   printingKey: string,
-  supabase: SupabaseClient = getYugiohClient(),
 ): Promise<PhysicalPrintingData | null> {
+  const supabase = getYugiohClient();
   const normalisedKey = normalisePrintingKey(printingKey);
   const upperCn = collectorNumber.trim().toUpperCase();
 
@@ -337,6 +351,15 @@ export async function getYugiohPhysicalPrintingByRoute(
       !cardScopedResult.ok,
   };
 }
+
+export const getYugiohPhysicalPrintingByRoute = withCacheBypass(
+  _getYugiohPhysicalPrintingByRoute,
+  unstable_cache(
+    _getYugiohPhysicalPrintingByRoute,
+    ['ygo:physicalPrintingByRoute', 'v1'],
+    { revalidate: CACHE_TTL.ENTITY_MEDIUM, tags: [CACHE_TAGS.CARD] },
+  ),
+);
 
 // ── Sitemap helpers ───────────────────────────────────────────────
 

@@ -2,12 +2,17 @@
 // Slice 7 verification. Proves uniqueness of the new browse routes:
 // /set/[code], /rarity/[family], /archetype/[slug].
 
-import { toCardSlug } from '../src/lib/slug.ts';
-import {
+// Scripts run outside a Next.js request context, where unstable_cache
+// throws. Set the bypass flag before any server-side module load so
+// the cached wrappers dispatch to their uncached implementations.
+process.env['BYPASS_YGO_CACHE'] = '1';
+
+const { toCardSlug } = await import('../src/lib/slug.ts');
+const {
   listYugiohArchetypesForDirectory,
   listYugiohRaritiesForDirectory,
   listYugiohSetsForDirectory,
-} from '../src/server/browse.ts';
+} = await import('../src/server/browse.ts');
 
 async function main() {
   console.log('=== Slice 7 route uniqueness verification ===\n');

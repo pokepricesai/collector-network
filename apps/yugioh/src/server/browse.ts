@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import {
   countCardsAndUniqueInSets,
   getCardsBySet,
@@ -7,7 +8,6 @@ import {
   getSetsByIds,
   listAllArchetypeEntries,
   listAllSets,
-  type SupabaseClient,
   type TcgCard,
   type TcgPrinting,
   type TcgSet,
@@ -21,6 +21,7 @@ import {
 import type { RarityFamily } from '../design/tokens';
 import { normaliseRarity } from '../lib/rarity';
 import { toCardSlug } from '../lib/slug';
+import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from './cache';
 import { getYugiohClient } from './read';
 import { safe } from './safe';
 
@@ -39,9 +40,8 @@ export interface SetDirectoryEntry {
   uniqueCardCount: number;
 }
 
-export async function listYugiohSetsForDirectory(
-  supabase: SupabaseClient = getYugiohClient(),
-): Promise<SetDirectoryEntry[]> {
+async function _listYugiohSetsForDirectory(): Promise<SetDirectoryEntry[]> {
+  const supabase = getYugiohClient();
   const sets = await listAllSets(supabase, YGO_GAME_ID);
   const counts = await countCardsAndUniqueInSets(
     supabase,
@@ -56,6 +56,17 @@ export async function listYugiohSetsForDirectory(
     };
   });
 }
+
+// Long-cached: the set catalogue changes on a rough monthly cadence
+// (major set releases). Cheap for us to hold a 6h snapshot; big win on
+// cold /sets and every sitemap shard that iterates sets.
+export const listYugiohSetsForDirectory = withCacheBypass(
+  _listYugiohSetsForDirectory,
+  unstable_cache(_listYugiohSetsForDirectory, ['ygo:setsDirectory', 'v1'], {
+    revalidate: CACHE_TTL.TAXONOMY_LONG,
+    tags: [CACHE_TAGS.TAXONOMY],
+  }),
+);
 
 export interface SetPageCardEntry {
   card: TcgCard;
@@ -76,10 +87,8 @@ export interface SetPageData {
   pricingDegraded: boolean;
 }
 
-export async function getYugiohSetBySlug(
-  slug: string,
-  supabase: SupabaseClient = getYugiohClient(),
-): Promise<SetPageData | null> {
+async function _getYugiohSetBySlug(slug: string): Promise<SetPageData | null> {
+  const supabase = getYugiohClient();
   const set = await getSetByCodeInsensitive(supabase, YGO_GAME_ID, slug);
   if (!set) return null;
 
@@ -173,6 +182,18 @@ export async function getYugiohSetBySlug(
   };
 }
 
+// Medium-cached: /set/[code] embeds pricing but the composition
+// (checklist + rarity breakdown + top-N) is the bulk of the cost. A
+// 30-minute TTL keeps prices reasonably fresh while shielding the DB
+// from repeat scans.
+export const getYugiohSetBySlug = withCacheBypass(
+  _getYugiohSetBySlug,
+  unstable_cache(_getYugiohSetBySlug, ['ygo:setBySlug', 'v1'], {
+    revalidate: CACHE_TTL.ENTITY_MEDIUM,
+    tags: [CACHE_TAGS.ENTITY],
+  }),
+);
+
 // ── Rarities ──────────────────────────────────────────────────────
 
 export interface RarityDirectoryEntry {
@@ -181,9 +202,8 @@ export interface RarityDirectoryEntry {
   totalCards: number;
 }
 
-export async function listYugiohRaritiesForDirectory(
-  supabase: SupabaseClient = getYugiohClient(),
-): Promise<RarityDirectoryEntry[]> {
+async function _listYugiohRaritiesForDirectory(): Promise<RarityDirectoryEntry[]> {
+  const supabase = getYugiohClient();
   const counts = await getRarityCounts(supabase, YGO_GAME_ID);
   const byFamily = new Map<RarityFamily, RarityDirectoryEntry>();
   for (const [rarity, count] of counts) {
@@ -199,6 +219,18 @@ export async function listYugiohRaritiesForDirectory(
     (a, b) => b.totalCards - a.totalCards,
   );
 }
+
+// Long-cached: rarity taxonomy shifts glacially (new rarity families
+// arrive every year or so). Also drives the /rarity/[family] pages
+// and sitemap enumeration.
+export const listYugiohRaritiesForDirectory = withCacheBypass(
+  _listYugiohRaritiesForDirectory,
+  unstable_cache(
+    _listYugiohRaritiesForDirectory,
+    ['ygo:raritiesDirectory', 'v1'],
+    { revalidate: CACHE_TTL.TAXONOMY_LONG, tags: [CACHE_TAGS.TAXONOMY] },
+  ),
+);
 
 export interface RarityPageCardEntry {
   card: TcgCard;
@@ -220,10 +252,8 @@ export interface RarityPageData {
 
 const RARITY_PAGE_CARD_CAP = 200;
 
-export async function getYugiohRarityBySlug(
-  slug: string,
-  supabase: SupabaseClient = getYugiohClient(),
-): Promise<RarityPageData | null> {
+async function _getYugiohRarityBySlug(slug: string): Promise<RarityPageData | null> {
+  const supabase = getYugiohClient();
   const family = slug as RarityFamily;
   const counts = await getRarityCounts(supabase, YGO_GAME_ID);
   const rarities: string[] = [];
@@ -236,30 +266,46 @@ export async function getYugiohRarityBySlug(
   }
   if (rarities.length === 0) return null;
 
-  // Fetch cards for every rarity in the family, capped at
-  // RARITY_PAGE_CARD_CAP for the page (a directory page shouldn't
-  // stream all 17k Commons).
+  // Fetch cards for every rarity in the family in parallel, then slice
+  // to the display cap. A rarity family tends to have 1-5 raw rarity
+  // names; running these sequentially cost 4-5s wall-clock on Starlight
+  // before Slice 9.
+  const perRarityCap = Math.min(
+    RARITY_PAGE_CARD_CAP,
+    Math.ceil(RARITY_PAGE_CARD_CAP / Math.max(1, rarities.length)) + 20,
+  );
+  const perRarityResults = await Promise.all(
+    rarities.map(async (rarity) => {
+      const { data, error } = await supabase
+        .from('tcg_cards')
+        .select('*')
+        .eq('game_id', YGO_GAME_ID)
+        .eq('rarity', rarity)
+        .limit(perRarityCap);
+      if (error) {
+        throw new Error(`[yugioh/browse] rarity cards: ${error.message}`);
+      }
+      return (data as TcgCard[] | null) ?? [];
+    }),
+  );
   const cards: TcgCard[] = [];
-  for (const rarity of rarities) {
-    const { data, error } = await supabase
-      .from('tcg_cards')
-      .select('*')
-      .eq('game_id', YGO_GAME_ID)
-      .eq('rarity', rarity)
-      .limit(Math.min(RARITY_PAGE_CARD_CAP - cards.length, 1000));
-    if (error) throw new Error(`[yugioh/browse] rarity cards: ${error.message}`);
-    cards.push(...(((data as TcgCard[] | null) ?? [])));
+  for (const batch of perRarityResults) {
+    cards.push(...batch);
     if (cards.length >= RARITY_PAGE_CARD_CAP) break;
   }
+  cards.length = Math.min(cards.length, RARITY_PAGE_CARD_CAP);
 
   const truncated = totalCards > cards.length;
 
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
-  const sets = await getSetsByIds(supabase, setIds);
-  const setsById = new Map(sets.map((s) => [s.id, s]));
-
   const cardIds = cards.map((c) => c.id);
-  const printings = await getPrintingsForCards(supabase, cardIds);
+
+  // Sets + printings are independent — parallel fetch.
+  const [sets, printings] = await Promise.all([
+    getSetsByIds(supabase, setIds),
+    getPrintingsForCards(supabase, cardIds),
+  ]);
+  const setsById = new Map(sets.map((s) => [s.id, s]));
   const printingIds = printings.map((p) => p.id);
   const printingsByCardId = new Map<string, TcgPrinting[]>();
   for (const p of printings) {
@@ -321,6 +367,15 @@ export async function getYugiohRarityBySlug(
   };
 }
 
+// Medium-cached: /rarity/[family] embeds pricing.
+export const getYugiohRarityBySlug = withCacheBypass(
+  _getYugiohRarityBySlug,
+  unstable_cache(_getYugiohRarityBySlug, ['ygo:rarityBySlug', 'v1'], {
+    revalidate: CACHE_TTL.ENTITY_MEDIUM,
+    tags: [CACHE_TAGS.ENTITY],
+  }),
+);
+
 // ── Archetypes ─────────────────────────────────────────────────────
 
 export interface ArchetypeDirectoryEntry {
@@ -330,12 +385,11 @@ export interface ArchetypeDirectoryEntry {
 }
 
 // Slice 7 archetype directory. Aggregates every gamedata.archetypes
-// tag across all ~38k cards. Slow-ish (~15s cold) but revalidate=1h
-// on the directory page + full-workspace ISR softens the cost.
-export async function listYugiohArchetypesForDirectory(
-  supabase: SupabaseClient = getYugiohClient(),
-): Promise<ArchetypeDirectoryEntry[]> {
-  const entries = await listAllArchetypeEntries(supabase, YGO_GAME_ID);
+// tag across all ~38k cards. Slow-ish (~15s cold) — Slice 9 wraps
+// this in unstable_cache so the ~10s scan runs once every 6h instead
+// of once per unique request.
+async function _listYugiohArchetypesForDirectory(): Promise<ArchetypeDirectoryEntry[]> {
+  const entries = await archetypeScan();
   const counts = new Map<string, number>();
   for (const e of entries) {
     for (const arc of e.archetypes) {
@@ -360,6 +414,17 @@ export async function listYugiohArchetypesForDirectory(
   );
 }
 
+// Long-cached: the archetype tag set changes when new expansions
+// introduce new tags — infrequently at the population level.
+export const listYugiohArchetypesForDirectory = withCacheBypass(
+  _listYugiohArchetypesForDirectory,
+  unstable_cache(
+    _listYugiohArchetypesForDirectory,
+    ['ygo:archetypesDirectory', 'v1'],
+    { revalidate: CACHE_TTL.TAXONOMY_LONG, tags: [CACHE_TAGS.TAXONOMY] },
+  ),
+);
+
 export interface ArchetypePageCardEntry {
   card: TcgCard;
   set: TcgSet | null;
@@ -379,11 +444,50 @@ export interface ArchetypePageData {
   pricingDegraded: boolean;
 }
 
-export async function getYugiohArchetypeBySlug(
+// The full archetype-scan is expensive (~38k rows / ~2.3MB serialized)
+// — too big for Next.js's 2MB Data Cache entry limit. We memoise
+// per-instance instead: within a single Vercel Lambda / server
+// process, a scan performed once serves every downstream request for
+// TAXONOMY_LONG seconds. Different instances repeat the scan cold
+// (~10s) but the derived directory/per-slug composition sits behind
+// its own Data Cache, so the practical cross-instance cost is small.
+async function _archetypeScan() {
+  const supabase = getYugiohClient();
+  return listAllArchetypeEntries(supabase, YGO_GAME_ID);
+}
+
+let archetypeScanCache: {
+  value: Awaited<ReturnType<typeof _archetypeScan>>;
+  expiresAt: number;
+} | null = null;
+let archetypeScanInflight: Promise<
+  Awaited<ReturnType<typeof _archetypeScan>>
+> | null = null;
+
+async function archetypeScan() {
+  if (archetypeScanCache && Date.now() < archetypeScanCache.expiresAt) {
+    return archetypeScanCache.value;
+  }
+  if (archetypeScanInflight) return archetypeScanInflight;
+  archetypeScanInflight = _archetypeScan()
+    .then((value) => {
+      archetypeScanCache = {
+        value,
+        expiresAt: Date.now() + CACHE_TTL.TAXONOMY_LONG * 1000,
+      };
+      return value;
+    })
+    .finally(() => {
+      archetypeScanInflight = null;
+    });
+  return archetypeScanInflight;
+}
+
+async function _getYugiohArchetypeBySlug(
   slug: string,
-  supabase: SupabaseClient = getYugiohClient(),
 ): Promise<ArchetypePageData | null> {
-  const entries = await listAllArchetypeEntries(supabase, YGO_GAME_ID);
+  const supabase = getYugiohClient();
+  const entries = await archetypeScan();
   const matchingCardIds: string[] = [];
   let canonicalName = '';
   let canonicalCount = 0;
@@ -418,11 +522,16 @@ export async function getYugiohArchetypeBySlug(
   }
 
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
-  const sets = await getSetsByIds(supabase, setIds);
+  const cardIds = cards.map((c) => c.id);
+
+  // Sets + printings are independent — fetch in parallel to halve the
+  // wall-clock spent on this section.
+  const [sets, printings] = await Promise.all([
+    getSetsByIds(supabase, setIds),
+    getPrintingsForCards(supabase, cardIds),
+  ]);
   const setsById = new Map(sets.map((s) => [s.id, s]));
 
-  const cardIds = cards.map((c) => c.id);
-  const printings = await getPrintingsForCards(supabase, cardIds);
   const printingsByCardId = new Map<string, TcgPrinting[]>();
   for (const p of printings) {
     const bucket = printingsByCardId.get(p.tcg_card_id) ?? [];
@@ -500,3 +609,14 @@ export async function getYugiohArchetypeBySlug(
     pricingDegraded: !pricingResult.ok,
   };
 }
+
+// Medium-cached: /archetype/[slug] embeds pricing. Combined with the
+// cached scan above, cold hits should now dip well below the current
+// 11s.
+export const getYugiohArchetypeBySlug = withCacheBypass(
+  _getYugiohArchetypeBySlug,
+  unstable_cache(_getYugiohArchetypeBySlug, ['ygo:archetypeBySlug', 'v1'], {
+    revalidate: CACHE_TTL.ENTITY_MEDIUM,
+    tags: [CACHE_TAGS.ENTITY],
+  }),
+);

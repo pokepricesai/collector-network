@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 import {
   listAllCardSlugs,
@@ -8,6 +9,7 @@ import {
   listYugiohRaritiesForDirectory,
   listYugiohSetsForDirectory,
 } from '../../../server/browse';
+import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from '../../../server/cache';
 import {
   RARITY_FAMILY_LABELS,
   type RarityFamily,
@@ -23,8 +25,10 @@ import {
 } from '../../../lib/sitemap-shared';
 
 // Per-shard sitemap. Dynamic (server-rendered on first request) then
-// cached for 24 hours. Slice 9 replaces this with an offline sitemap
-// pipeline into blob storage.
+// cached for 24 hours at the route level. Slice 9 also caches the
+// deduped inventories in the Data Cache with a 24-hour TTL so a first-
+// hit-per-region drops from 30-40s to sub-second after any single
+// request warms the inventory.
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 86_400;
@@ -126,50 +130,104 @@ async function buildArchetypes(url: string): Promise<Entry[]> {
   }));
 }
 
-async function buildCards(url: string): Promise<Entry[]> {
+// Cached full-inventory helpers. These do the DB-heavy work — a
+// production scan of all card names or all printing routes. Wrapped in
+// unstable_cache so subsequent shards (and subsequent regions/instances
+// via Vercel Data Cache) reuse the result for 24 hours.
+interface CardInventoryRow {
+  slug: string;
+  updatedAt: string | null;
+}
+
+async function _cardInventoryRaw(): Promise<CardInventoryRow[]> {
   const seen = new Set<string>();
-  const entries: Entry[] = [];
+  const out: CardInventoryRow[] = [];
   let cursor: string | null = null;
-  while (entries.length < SITEMAP_URL_CAP) {
+  while (out.length < SITEMAP_URL_CAP) {
     const { rows, nextCursor } = await listAllCardSlugs(undefined, cursor);
     if (rows.length === 0) break;
     for (const r of rows) {
       if (seen.has(r.slug)) continue;
       seen.add(r.slug);
-      entries.push({
-        loc: `${url}/card/${r.slug}`,
-        lastmod: r.updatedAt,
-        changefreq: 'weekly',
-        priority: 0.7,
-      });
-      if (entries.length >= SITEMAP_URL_CAP) break;
+      out.push({ slug: r.slug, updatedAt: r.updatedAt });
+      if (out.length >= SITEMAP_URL_CAP) break;
     }
     if (!nextCursor) break;
     cursor = nextCursor;
   }
-  return entries;
+  return out;
 }
 
-async function buildPrintings(url: string, shard: 0 | 1 | 2): Promise<Entry[]> {
-  const entries: Entry[] = [];
+const cachedFullCardInventory = withCacheBypass(
+  _cardInventoryRaw,
+  unstable_cache(_cardInventoryRaw, ['ygo:sitemapCardInventory', 'v1'], {
+    revalidate: CACHE_TTL.SITEMAP_DAILY,
+    tags: [CACHE_TAGS.SITEMAP],
+  }),
+);
+
+interface PrintingInventoryRow {
+  cardSlug: string;
+  collectorNumber: string;
+  printingKey: string;
+  updatedAt: string | null;
+}
+
+async function _printingInventoryRaw(): Promise<PrintingInventoryRow[]> {
+  const out: PrintingInventoryRow[] = [];
   let cursor: string | null = null;
-  while (entries.length < SITEMAP_URL_CAP) {
+  // No hard cap on the intermediate list — each shard applies
+  // SITEMAP_URL_CAP after filtering. In practice production has ~86k
+  // printings across three shards.
+  while (true) {
     const { rows, nextCursor } = await listAllPrintingRoutes(undefined, cursor);
     if (rows.length === 0) break;
     for (const r of rows) {
-      if (printingShardForSlug(r.cardSlug) !== shard) continue;
-      entries.push({
-        loc: `${url}/card/${r.cardSlug}/printing/${encodeURIComponent(
-          r.collectorNumber,
-        )}/${encodeURIComponent(r.printingKey)}`,
-        lastmod: r.updatedAt,
-        changefreq: 'weekly',
-        priority: 0.5,
+      out.push({
+        cardSlug: r.cardSlug,
+        collectorNumber: r.collectorNumber,
+        printingKey: r.printingKey,
+        updatedAt: r.updatedAt,
       });
-      if (entries.length >= SITEMAP_URL_CAP) break;
     }
     if (!nextCursor) break;
     cursor = nextCursor;
+  }
+  return out;
+}
+
+const cachedFullPrintingInventory = withCacheBypass(
+  _printingInventoryRaw,
+  unstable_cache(_printingInventoryRaw, ['ygo:sitemapPrintingInventory', 'v1'], {
+    revalidate: CACHE_TTL.SITEMAP_DAILY,
+    tags: [CACHE_TAGS.SITEMAP],
+  }),
+);
+
+async function buildCards(url: string): Promise<Entry[]> {
+  const inventory = await cachedFullCardInventory();
+  return inventory.slice(0, SITEMAP_URL_CAP).map((r) => ({
+    loc: `${url}/card/${r.slug}`,
+    lastmod: r.updatedAt,
+    changefreq: 'weekly',
+    priority: 0.7,
+  }));
+}
+
+async function buildPrintings(url: string, shard: 0 | 1 | 2): Promise<Entry[]> {
+  const inventory = await cachedFullPrintingInventory();
+  const entries: Entry[] = [];
+  for (const r of inventory) {
+    if (printingShardForSlug(r.cardSlug) !== shard) continue;
+    entries.push({
+      loc: `${url}/card/${r.cardSlug}/printing/${encodeURIComponent(
+        r.collectorNumber,
+      )}/${encodeURIComponent(r.printingKey)}`,
+      lastmod: r.updatedAt,
+      changefreq: 'weekly',
+      priority: 0.5,
+    });
+    if (entries.length >= SITEMAP_URL_CAP) break;
   }
   return entries;
 }

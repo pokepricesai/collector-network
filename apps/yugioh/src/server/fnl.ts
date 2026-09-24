@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import type { SupabaseClient, TcgCard, TcgSet } from '@collector-network/database';
 import { getSetsByIds } from '@collector-network/database';
 import {
@@ -5,6 +6,7 @@ import {
   selectPreferredRetailQuote,
   type RetailQuote,
 } from '@collector-network/market-data';
+import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from './cache';
 import { getYugiohClient } from './read';
 import { safe } from './safe';
 
@@ -107,9 +109,8 @@ async function countByBanlistState(
   return count ?? 0;
 }
 
-export async function getYugiohForbiddenLimited(
-  supabase: SupabaseClient = getYugiohClient(),
-): Promise<FnlPageData> {
+async function _getYugiohForbiddenLimited(): Promise<FnlPageData> {
+  const supabase = getYugiohClient();
   const [
     tcgForbidden,
     tcgLimited,
@@ -245,3 +246,14 @@ export async function getYugiohForbiddenLimited(
     pricingDegraded: !pricingResult.ok,
   };
 }
+
+// F&L: 1-hour cache. Identity (which cards are restricted) changes on
+// Konami's banlist cadence (months). Pricing overlay lives inside the
+// same cached value — acceptable staleness for a browsing surface.
+export const getYugiohForbiddenLimited = withCacheBypass(
+  _getYugiohForbiddenLimited,
+  unstable_cache(_getYugiohForbiddenLimited, ['ygo:forbiddenLimited', 'v1'], {
+    revalidate: CACHE_TTL.FNL_HOURLY,
+    tags: [CACHE_TAGS.FNL],
+  }),
+);

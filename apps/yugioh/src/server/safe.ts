@@ -31,6 +31,7 @@ export async function safe<T>(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const start = performance.now();
   try {
     // Wrap in a race so an unresponsive query can't hang the render.
     const value = await Promise.race([
@@ -43,12 +44,27 @@ export async function safe<T>(
     ]);
     return { ok: true, value, error: null };
   } catch (err) {
+    const durationMs = Math.round(performance.now() - start);
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[yugioh/safe] ${label} failed: ${message}`);
+    // Structured single-line log: easy to grep in Vercel logs and
+    // deliberately free of credentials — the label describes the
+    // operation and the message is whatever the underlying client
+    // returned (Supabase error messages are safe: no keys/URLs).
+    const category = classifyError(message);
+    console.warn(
+      `[yugioh/safe] label=${label} status=fail category=${category} duration_ms=${durationMs} timeout_ms=${timeoutMs} msg=${JSON.stringify(message.slice(0, 240))}`,
+    );
     return { ok: false, value: null, error: message };
   } finally {
     clearTimeout(timer);
   }
+}
+
+function classifyError(message: string): 'timeout' | 'fetch' | 'db' | 'other' {
+  if (/timeout after \d+ms/i.test(message)) return 'timeout';
+  if (/fetch failed|ECONNRESET|ENOTFOUND/i.test(message)) return 'fetch';
+  if (/PGRST|canceling statement|Bad Request/i.test(message)) return 'db';
+  return 'other';
 }
 
 export function unwrapOr<T, F>(result: SafeResult<T>, fallback: F): T | F {

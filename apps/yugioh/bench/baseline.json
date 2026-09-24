@@ -1,0 +1,276 @@
+{
+  "label": "baseline",
+  "origin": "https://yugioh-web.vercel.app",
+  "startedAt": "2026-09-24T10:03:31.684Z",
+  "finishedAt": "2026-09-24T10:11:03.442Z",
+  "summary": {
+    "total": 26,
+    "failed": 0,
+    "coldAvg": 7680,
+    "warmAvg": 1639,
+    "p95Cold": 40044,
+    "p95Warm": 11026
+  },
+  "samples": [
+    {
+      "path": "/",
+      "status": 200,
+      "coldMs": 36,
+      "warmMs": 20,
+      "bytes": 124711,
+      "edgeCacheCold": "HIT",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/search?q=blue-eyes",
+      "status": 200,
+      "coldMs": 953,
+      "warmMs": 970,
+      "bytes": 386440,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/card/blue-eyes-white-dragon",
+      "status": 200,
+      "coldMs": 730,
+      "warmMs": 1123,
+      "bytes": 408402,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/card/blue-eyes-white-dragon/printing/LOB-001/1st-edition",
+      "status": 200,
+      "coldMs": 929,
+      "warmMs": 1140,
+      "bytes": 60479,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/sets",
+      "status": 200,
+      "coldMs": 11738,
+      "warmMs": 13377,
+      "bytes": 1178172,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/set/lob",
+      "status": 200,
+      "coldMs": 1378,
+      "warmMs": 1332,
+      "bytes": 565617,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/rarities",
+      "status": 200,
+      "coldMs": 17,
+      "warmMs": 17,
+      "bytes": 52349,
+      "edgeCacheCold": "HIT",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/rarity/starlight",
+      "status": 200,
+      "coldMs": 6595,
+      "warmMs": 6566,
+      "bytes": 145538,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/archetypes",
+      "status": 200,
+      "coldMs": 52,
+      "warmMs": 14,
+      "bytes": 619968,
+      "edgeCacheCold": "HIT",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/archetype/blue-eyes",
+      "status": 200,
+      "coldMs": 10991,
+      "warmMs": 11026,
+      "bytes": 218432,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/market",
+      "status": 200,
+      "coldMs": 38,
+      "warmMs": 33,
+      "bytes": 140285,
+      "edgeCacheCold": "HIT",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/market/most-valuable",
+      "status": 200,
+      "coldMs": 892,
+      "warmMs": 772,
+      "bytes": 330932,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/market/most-valuable?currency=EUR",
+      "status": 200,
+      "coldMs": 910,
+      "warmMs": 1089,
+      "bytes": 337922,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/market/graded",
+      "status": 200,
+      "coldMs": 967,
+      "warmMs": 879,
+      "bytes": 270291,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/market/graded?grader=bgs",
+      "status": 200,
+      "coldMs": 1014,
+      "warmMs": 961,
+      "bytes": 269850,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/market/vintage",
+      "status": 200,
+      "coldMs": 6297,
+      "warmMs": 2657,
+      "bytes": 330926,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "MISS",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/forbidden-limited",
+      "status": 200,
+      "coldMs": 36,
+      "warmMs": 16,
+      "bytes": 881546,
+      "edgeCacheCold": "HIT",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/sitemap.xml",
+      "status": 200,
+      "coldMs": 51,
+      "warmMs": 19,
+      "bytes": 1234,
+      "edgeCacheCold": "HIT",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600, s-maxage=86400"
+    },
+    {
+      "path": "/sitemap/base.xml",
+      "status": 200,
+      "coldMs": 193,
+      "warmMs": 27,
+      "bytes": 1780,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
+      "path": "/sitemap/cards.xml",
+      "status": 200,
+      "coldMs": 10240,
+      "warmMs": 78,
+      "bytes": 2869399,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
+      "path": "/sitemap/printings-0.xml",
+      "status": 200,
+      "coldMs": 37125,
+      "warmMs": 68,
+      "bytes": 3663637,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
+      "path": "/sitemap/printings-1.xml",
+      "status": 200,
+      "coldMs": 40502,
+      "warmMs": 123,
+      "bytes": 8349244,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
+      "path": "/sitemap/printings-2.xml",
+      "status": 200,
+      "coldMs": 40044,
+      "warmMs": 172,
+      "bytes": 7990948,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
+      "path": "/sitemap/sets.xml",
+      "status": 200,
+      "coldMs": 11687,
+      "warmMs": 54,
+      "bytes": 124836,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
+      "path": "/sitemap/rarities.xml",
+      "status": 200,
+      "coldMs": 6074,
+      "warmMs": 51,
+      "bytes": 2384,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    },
+    {
+      "path": "/sitemap/archetypes.xml",
+      "status": 200,
+      "coldMs": 10181,
+      "warmMs": 39,
+      "bytes": 93237,
+      "edgeCacheCold": "MISS",
+      "edgeCacheWarm": "HIT",
+      "cacheControl": "public, max-age=3600"
+    }
+  ]
+}

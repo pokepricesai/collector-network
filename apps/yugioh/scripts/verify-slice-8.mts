@@ -2,14 +2,16 @@
 // Slice 8 verification. Sanity-checks the market + F&L composition
 // helpers against production data without hitting the HTTP layer.
 
-import {
+process.env['BYPASS_YGO_CACHE'] = '1';
+
+const {
   VINTAGE_CUTOFF,
   getYugiohMarketHomeData,
   getYugiohMostValuableGraded,
   getYugiohMostValuableRetail,
   getYugiohVintageMostValuable,
-} from '../src/server/market.ts';
-import { getYugiohForbiddenLimited } from '../src/server/fnl.ts';
+} = await import('../src/server/market.ts');
+const { getYugiohForbiddenLimited } = await import('../src/server/fnl.ts');
 
 async function main() {
   console.log('=== Slice 8 verification: market + F&L ===\n');

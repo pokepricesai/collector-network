@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import {
   getSetsByIds,
   type SupabaseClient,
@@ -11,6 +12,7 @@ import {
   type GradedQuote,
   type RetailQuote,
 } from '@collector-network/market-data';
+import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from './cache';
 import { getYugiohClient } from './read';
 import { safe } from './safe';
 
@@ -106,11 +108,12 @@ export interface MostValuableOptions {
   minPrice?: number;
 }
 
-export async function getYugiohMostValuableRetail(
-  options: MostValuableOptions,
-  supabase: SupabaseClient = getYugiohClient(),
+async function _getYugiohMostValuableRetail(
+  currency: 'USD' | 'EUR',
+  limit: number,
+  minPrice: number,
 ): Promise<RetailRankingEntry[]> {
-  const { currency, limit = 100, minPrice = 20 } = options;
+  const supabase = getYugiohClient();
   const top = await getMostValuableRetailPrintings(supabase, YGO_GAME_ID, {
     currency,
     limit,
@@ -138,6 +141,25 @@ export async function getYugiohMostValuableRetail(
   return entries;
 }
 
+// Market rankings cache — 15 minutes. Currency and limit are part of
+// the cache key so USD-100 and EUR-100 do not collide, and the market
+// home's 12-row bundle does not evict the /market/most-valuable 100-row
+// bundle.
+const cachedMostValuableRetail = withCacheBypass(
+  _getYugiohMostValuableRetail,
+  unstable_cache(_getYugiohMostValuableRetail, ['ygo:mostValuableRetail', 'v1'], {
+    revalidate: CACHE_TTL.MARKET_SHORT,
+    tags: [CACHE_TAGS.MARKET],
+  }),
+);
+
+export async function getYugiohMostValuableRetail(
+  options: MostValuableOptions,
+): Promise<RetailRankingEntry[]> {
+  const { currency, limit = 100, minPrice = 20 } = options;
+  return cachedMostValuableRetail(currency, limit, minPrice);
+}
+
 // ── Graded rankings (printing-scoped only) ───────────────────────
 
 export interface MostValuableGradedOptions {
@@ -146,11 +168,12 @@ export interface MostValuableGradedOptions {
   onlyGrade10?: boolean;
 }
 
-export async function getYugiohMostValuableGraded(
-  options: MostValuableGradedOptions = {},
-  supabase: SupabaseClient = getYugiohClient(),
+async function _getYugiohMostValuableGraded(
+  limit: number,
+  minPrice: number,
+  onlyGrade10: boolean,
 ): Promise<GradedRankingEntry[]> {
-  const { limit = 100, minPrice = 100, onlyGrade10 = true } = options;
+  const supabase = getYugiohClient();
   const top = await getMostValuableGradedPrintings(supabase, YGO_GAME_ID, {
     limit,
     minPrice,
@@ -178,6 +201,21 @@ export async function getYugiohMostValuableGraded(
   return entries;
 }
 
+const cachedMostValuableGraded = withCacheBypass(
+  _getYugiohMostValuableGraded,
+  unstable_cache(_getYugiohMostValuableGraded, ['ygo:mostValuableGraded', 'v1'], {
+    revalidate: CACHE_TTL.MARKET_SHORT,
+    tags: [CACHE_TAGS.MARKET],
+  }),
+);
+
+export async function getYugiohMostValuableGraded(
+  options: MostValuableGradedOptions = {},
+): Promise<GradedRankingEntry[]> {
+  const { limit = 100, minPrice = 100, onlyGrade10 = true } = options;
+  return cachedMostValuableGraded(limit, minPrice, onlyGrade10);
+}
+
 // ── Vintage rankings ────────────────────────────────────────────
 
 // Approach:
@@ -189,11 +227,11 @@ export async function getYugiohMostValuableGraded(
 // Fetching more than needed at step 2 gives us headroom to filter
 // enough vintage results even when modern chase cards dominate the
 // top of the raw retail table.
-export async function getYugiohVintageMostValuable(
-  options: { currency?: 'USD' | 'EUR'; limit?: number } = {},
-  supabase: SupabaseClient = getYugiohClient(),
+async function _getYugiohVintageMostValuable(
+  currency: 'USD' | 'EUR',
+  limit: number,
 ): Promise<RetailRankingEntry[]> {
-  const { currency = 'USD', limit = 60 } = options;
+  const supabase = getYugiohClient();
 
   // Vintage set IDs
   const { data: setRows, error: sErr } = await supabase
@@ -242,25 +280,38 @@ export async function getYugiohVintageMostValuable(
   return entries;
 }
 
+const cachedVintageMostValuable = withCacheBypass(
+  _getYugiohVintageMostValuable,
+  unstable_cache(_getYugiohVintageMostValuable, ['ygo:vintageMostValuable', 'v1'], {
+    revalidate: CACHE_TTL.MARKET_SHORT,
+    tags: [CACHE_TAGS.MARKET],
+  }),
+);
+
+export async function getYugiohVintageMostValuable(
+  options: { currency?: 'USD' | 'EUR'; limit?: number } = {},
+): Promise<RetailRankingEntry[]> {
+  const { currency = 'USD', limit = 60 } = options;
+  return cachedVintageMostValuable(currency, limit);
+}
+
 // ── Market home ─────────────────────────────────────────────────
 
-export async function getYugiohMarketHomeData(
-  supabase: SupabaseClient = getYugiohClient(),
-): Promise<MarketHomeData> {
+export async function getYugiohMarketHomeData(): Promise<MarketHomeData> {
   const errors: string[] = [];
   const [usdResult, eurResult, gradedResult, vintageResult] = await Promise.all(
     [
       safe('market/topRetailUsd', () =>
-        getYugiohMostValuableRetail({ currency: 'USD', limit: 12 }, supabase),
+        getYugiohMostValuableRetail({ currency: 'USD', limit: 12 }),
       ),
       safe('market/topRetailEur', () =>
-        getYugiohMostValuableRetail({ currency: 'EUR', limit: 8 }, supabase),
+        getYugiohMostValuableRetail({ currency: 'EUR', limit: 8 }),
       ),
       safe('market/topGraded', () =>
-        getYugiohMostValuableGraded({ limit: 12, minPrice: 200 }, supabase),
+        getYugiohMostValuableGraded({ limit: 12, minPrice: 200 }),
       ),
       safe('market/topVintage', () =>
-        getYugiohVintageMostValuable({ currency: 'USD', limit: 12 }, supabase),
+        getYugiohVintageMostValuable({ currency: 'USD', limit: 12 }),
       ),
     ],
   );

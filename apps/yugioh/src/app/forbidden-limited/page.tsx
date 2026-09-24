@@ -9,8 +9,9 @@ import { RarityBadge } from '../../components/RarityBadge';
 import { Surface } from '../../components/Surface';
 import { siteUrl } from '../../lib/site-url';
 import { toCardSlug } from '../../lib/slug';
-import type { FnlSectionData } from '../../server/fnl';
+import type { FnlPageData, FnlSectionData } from '../../server/fnl';
 import { getYugiohForbiddenLimited } from '../../server/fnl';
+import { safe } from '../../server/safe';
 import styles from '../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
@@ -53,8 +54,41 @@ const SECTION_META: Record<'forbidden' | 'limited' | 'semi_limited', {
   },
 };
 
+const EMPTY_SECTION: FnlSectionData = {
+  state: 'forbidden',
+  tcgCount: 0,
+  ocgCount: 0,
+  cards: [],
+};
+
+// F&L identity fetch uses a JSON-path filter that occasionally hits
+// Supabase's statement_timeout under load. Wrap in safe() so the page
+// renders a degraded panel instead of a 500 — the identity is what
+// this page is about, so we surface a clear "temporarily unavailable"
+// message rather than pretending we know nothing is restricted.
+async function loadFnlDataFailSoft(): Promise<FnlPageData & { identityDegraded: boolean }> {
+  const result = await safe('fnl-identity', () => getYugiohForbiddenLimited(), {
+    timeoutMs: 25_000,
+  });
+  if (result.ok) {
+    return { ...result.value, identityDegraded: false };
+  }
+  return {
+    tcg: {
+      forbidden: { ...EMPTY_SECTION, state: 'forbidden' },
+      limited: { ...EMPTY_SECTION, state: 'limited' },
+      semi_limited: { ...EMPTY_SECTION, state: 'semi_limited' },
+    },
+    ocgCounts: { forbidden: 0, limited: 0, semi_limited: 0, unlimited: 0 },
+    fetchedAt: new Date().toISOString(),
+    totalCardsScanned: 0,
+    pricingDegraded: true,
+    identityDegraded: true,
+  };
+}
+
 export default async function ForbiddenLimitedPage() {
-  const data = await getYugiohForbiddenLimited();
+  const data = await loadFnlDataFailSoft();
 
   const totalTcg =
     data.tcg.forbidden.cards.length +
@@ -127,12 +161,18 @@ export default async function ForbiddenLimitedPage() {
             Card counts reflect the catalogue&apos;s current state; multiple
             printings of the same card collapse to a single row.
           </div>
-          {data.pricingDegraded && (
+          {data.identityDegraded ? (
+            <div className={styles.notice}>
+              The Forbidden &amp; Limited list is temporarily unavailable —
+              the identity query timed out against our data source. Refresh in
+              a moment; the page auto-recovers as soon as the source responds.
+            </div>
+          ) : data.pricingDegraded ? (
             <div className={styles.notice}>
               Pricing lookups for this page are temporarily degraded — cards
               still render but USD prices may be missing. Retry in a moment.
             </div>
-          )}
+          ) : null}
         </header>
 
         <FnlSection
