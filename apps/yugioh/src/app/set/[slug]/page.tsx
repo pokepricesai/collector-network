@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const released = data.set.released_at
     ? ` · released ${new Date(data.set.released_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
     : '';
-  const description = `${data.set.name} (${data.set.code.toUpperCase()}) — ${data.cards.length} card variants${released}. Full checklist, rarity breakdown and market values on the Yu-Gi-Oh! collector catalogue.`;
+  const description = `${data.set.name} (${data.set.code.toUpperCase()}) — ${data.uniqueCardCount} unique cards across ${data.variantCount} rarity variants${released}. Full checklist, rarity breakdown and market values on the Yu-Gi-Oh! collector catalogue.`;
   return {
     title: `${data.set.name} (${data.set.code.toUpperCase()}) — set checklist & prices`,
     description,
@@ -86,7 +86,10 @@ export default async function SetPage({ params }: Props) {
               </span>
             )}
             <span className={styles.metaValue}>
-              {data.cards.length.toLocaleString('en-US')} card variants
+              {data.uniqueCardCount.toLocaleString('en-US')} unique cards
+            </span>
+            <span className={styles.metaValue}>
+              {data.variantCount.toLocaleString('en-US')} rarity variants
             </span>
             <span className={styles.metaValue}>
               {data.rarityBreakdown.length} rarities
@@ -177,11 +180,13 @@ export default async function SetPage({ params }: Props) {
         <section className={styles.section}>
           <header className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>
-              Card checklist ({data.cards.length})
+              Card checklist ({data.uniqueCardCount} unique · {data.variantCount} variants)
             </h2>
             <p className={styles.sectionCaption}>
-              Sorted by collector number. Click any row to open the logical card
-              with every printing across every set.
+              Sorted by collector number. Each row is one rarity variant — a
+              card printed at multiple rarities appears once per rarity. Click
+              any row to open the logical card with every printing across every
+              set.
             </p>
           </header>
           <table className={styles.cardsTable}>
@@ -263,7 +268,7 @@ function buildSetJsonLd(data: SetPageData, siteOrigin: string) {
     '@type': 'CollectionPage',
     name: `${data.set.name} (${data.set.code.toUpperCase()})`,
     url,
-    numberOfItems: data.cards.length,
+    numberOfItems: data.uniqueCardCount,
     datePublished: data.set.released_at ?? undefined,
   };
   return {

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { SearchBar } from '../SearchBar';
 import { CardImageFrame } from '../CardImageFrame';
@@ -121,8 +122,13 @@ export function MostValuable({ items }: { items: MostValuablePrinting[] }) {
       title="Most valuable printings today"
       meta={
         <>
-          Highest retail prices (USD). Full 24-hour / 7-day movement
-          returns once daily-snapshot history matures.
+          Highest retail prices (USD).{' '}
+          <Link
+            href="/market/most-valuable"
+            style={{ color: 'inherit', textDecoration: 'underline' }}
+          >
+            See the full ranking →
+          </Link>
         </>
       }
     >
@@ -177,33 +183,46 @@ export function LatestSets({ sets }: { sets: LatestSet[] }) {
   return (
     <Section
       title="Latest sets"
-      meta={<>Detail pages arrive in a later slice.</>}
+      meta={
+        <Link
+          href="/sets"
+          style={{ color: 'inherit', textDecoration: 'underline' }}
+        >
+          Browse every set →
+        </Link>
+      }
     >
       <div className={styles.grid}>
         {sets.map((entry) => (
-          <Surface key={entry.set.id} variant="card" className={styles.setTile}>
-            <h3 className={styles.setName}>{entry.set.name}</h3>
-            <div className={styles.setMetaRow}>
-              <span className={styles.setCode}>
-                {entry.set.code.toUpperCase()}
-              </span>
-              {entry.set.released_at && (
-                <span>
-                  released{' '}
-                  {new Date(entry.set.released_at).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </span>
-              )}
-            </div>
-            {entry.cardCount != null && entry.cardCount > 0 && (
+          <Link
+            key={entry.set.id}
+            href={`/set/${encodeURIComponent(entry.set.code.toLowerCase())}`}
+            style={{ textDecoration: 'none' }}
+          >
+            <Surface variant="card" className={styles.setTile}>
+              <h3 className={styles.setName}>{entry.set.name}</h3>
               <div className={styles.setMetaRow}>
-                <span>{entry.cardCount} cards indexed</span>
+                <span className={styles.setCode}>
+                  {entry.set.code.toUpperCase()}
+                </span>
+                {entry.set.released_at && (
+                  <span>
+                    released{' '}
+                    {new Date(entry.set.released_at).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                )}
               </div>
-            )}
-          </Surface>
+              {entry.cardCount != null && entry.cardCount > 0 && (
+                <div className={styles.setMetaRow}>
+                  <span>{entry.cardCount} cards indexed</span>
+                </div>
+              )}
+            </Surface>
+          </Link>
         ))}
       </div>
     </Section>
@@ -227,7 +246,17 @@ export function GradedHighlights({ items }: { items: GradedHighlight[] }) {
   return (
     <Section
       title="Graded highlights"
-      meta={<>Grade 10 · 1st Edition printings only · never raw · USD.</>}
+      meta={
+        <>
+          Grade 10 · printing-scoped attribution only · never raw · USD.{' '}
+          <Link
+            href="/market/graded"
+            style={{ color: 'inherit', textDecoration: 'underline' }}
+          >
+            Full graded ranking →
+          </Link>
+        </>
+      }
     >
       <div className={styles.wideGrid}>
         {items.map((h) => (
@@ -327,10 +356,35 @@ export function DataNotes({ payload }: { payload: HomepagePayload }) {
         — USD and EUR are shown as-is.
       </p>
       <p className={styles.notice} style={{ marginTop: 8 }}>
-        Forbidden &amp; Limited snapshot, full card pages, and set/
-        archetype browsing are being built in the next slices. The
-        &ldquo;soon&rdquo; navigation labels above light up as each
-        surface ships.
+        Browse the full{' '}
+        <Link href="/market" style={{ color: 'inherit', textDecoration: 'underline' }}>
+          market
+        </Link>
+        ,{' '}
+        <Link
+          href="/forbidden-limited"
+          style={{ color: 'inherit', textDecoration: 'underline' }}
+        >
+          Forbidden &amp; Limited list
+        </Link>
+        ,{' '}
+        <Link href="/sets" style={{ color: 'inherit', textDecoration: 'underline' }}>
+          every set
+        </Link>
+        ,{' '}
+        <Link href="/rarities" style={{ color: 'inherit', textDecoration: 'underline' }}>
+          every rarity
+        </Link>
+        , and{' '}
+        <Link
+          href="/archetypes"
+          style={{ color: 'inherit', textDecoration: 'underline' }}
+        >
+          every archetype
+        </Link>
+        . No trend / momentum / percentage-change data appears anywhere on
+        the site — our snapshot history is not yet deep enough to publish
+        honest movers.
       </p>
       {payload.errors.length > 0 && (
         <details

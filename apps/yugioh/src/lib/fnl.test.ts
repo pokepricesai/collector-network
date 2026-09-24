@@ -15,6 +15,11 @@ test('case-insensitive and space-tolerant', () => {
   assert.equal(normaliseFnl('semilimited'), 'semi-limited');
 });
 
+test('production storage: semi_limited underscore maps to semi-limited', () => {
+  assert.equal(normaliseFnl('semi_limited'), 'semi-limited');
+  assert.equal(normaliseFnl('SEMI_LIMITED'), 'semi-limited');
+});
+
 test('unknown / missing collapses to unknown, never "unlimited"', () => {
   assert.equal(normaliseFnl(null), 'unknown');
   assert.equal(normaliseFnl(undefined), 'unknown');

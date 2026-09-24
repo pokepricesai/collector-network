@@ -1,5 +1,5 @@
 import {
-  countCardsInSets,
+  countCardsAndUniqueInSets,
   getCardsBySet,
   getPrintingsForCards,
   getRarityCounts,
@@ -30,18 +30,31 @@ const YGO_GAME_ID = 'ygo';
 
 export interface SetDirectoryEntry {
   set: TcgSet;
-  cardCount: number;
+  // Total tcg_cards rows in the set. One card printed at multiple
+  // rarities becomes multiple rows, so this is the "variants" count
+  // rather than the collector-facing unique-card count.
+  variantCount: number;
+  // Distinct card names in the set. Matches how collectors describe
+  // set size ("111 cards in LOB" not "126 variants").
+  uniqueCardCount: number;
 }
 
 export async function listYugiohSetsForDirectory(
   supabase: SupabaseClient = getYugiohClient(),
 ): Promise<SetDirectoryEntry[]> {
   const sets = await listAllSets(supabase, YGO_GAME_ID);
-  const counts = await countCardsInSets(
+  const counts = await countCardsAndUniqueInSets(
     supabase,
     sets.map((s) => s.id),
   );
-  return sets.map((set) => ({ set, cardCount: counts.get(set.id) ?? 0 }));
+  return sets.map((set) => {
+    const c = counts.get(set.id);
+    return {
+      set,
+      variantCount: c?.variantCount ?? 0,
+      uniqueCardCount: c?.uniqueCardCount ?? 0,
+    };
+  });
 }
 
 export interface SetPageCardEntry {
@@ -54,7 +67,9 @@ export interface SetPageCardEntry {
 
 export interface SetPageData {
   set: TcgSet;
-  cards: SetPageCardEntry[];
+  cards: SetPageCardEntry[]; // one entry per tcg_cards row (variants)
+  variantCount: number; // total variants (per-rarity rows)
+  uniqueCardCount: number; // distinct card names in the set
   rarityBreakdown: Array<{ rarity: string; count: number }>;
   editionBreakdown: Array<{ edition: string; count: number }>;
   topByUsdPrice: SetPageCardEntry[];
@@ -73,6 +88,8 @@ export async function getYugiohSetBySlug(
     return {
       set,
       cards: [],
+      variantCount: 0,
+      uniqueCardCount: 0,
       rarityBreakdown: [],
       editionBreakdown: [],
       topByUsdPrice: [],
@@ -142,9 +159,13 @@ export async function getYugiohSetBySlug(
     )
     .slice(0, 8);
 
+  const uniqueCardCount = new Set(entries.map((e) => e.card.name)).size;
+
   return {
     set,
     cards: entries,
+    variantCount: entries.length,
+    uniqueCardCount,
     rarityBreakdown,
     editionBreakdown,
     topByUsdPrice,

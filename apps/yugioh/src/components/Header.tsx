@@ -13,8 +13,8 @@ const NAV: NavItem[] = [
   { label: 'Sets', href: '/sets' },
   { label: 'Rarities', href: '/rarities' },
   { label: 'Archetypes', href: '/archetypes' },
-  { label: 'Market', disabled: true },
-  { label: 'F&L', disabled: true },
+  { label: 'Market', href: '/market' },
+  { label: 'F&L', href: '/forbidden-limited' },
 ];
 
 export function Header({ compactSearch = true }: { compactSearch?: boolean }) {

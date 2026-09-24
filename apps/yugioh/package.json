@@ -12,6 +12,7 @@
     "audit:homepage": "node --env-file=.env.local --import tsx scripts/audit-homepage.mts",
     "audit:routes": "node --env-file=.env.local --import tsx scripts/verify-slice-6.mts",
     "audit:browse": "node --env-file=.env.local --import tsx scripts/verify-slice-7.mts",
+    "audit:market": "node --env-file=.env.local --import tsx scripts/verify-slice-8.mts",
     "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts",
     "clean": "rimraf .next .turbo node_modules"
   },

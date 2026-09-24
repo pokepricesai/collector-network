@@ -111,6 +111,54 @@ export async function countCardsInSets(
   return counts;
 }
 
+export interface SetCardCounts {
+  variantCount: number; // total tcg_cards rows in the set (per-rarity)
+  uniqueCardCount: number; // distinct card names
+}
+
+// Same as countCardsInSets but returns both the raw variant count and
+// the distinct-name count per set. A single card printed at multiple
+// rarities within the same set becomes multiple tcg_cards rows;
+// collectors typically want to see both numbers (e.g. "LOB — 126
+// variants across 111 unique cards").
+export async function countCardsAndUniqueInSets(
+  supabase: SupabaseClient,
+  setIds: readonly string[],
+): Promise<Map<string, SetCardCounts>> {
+  const counts = new Map<string, SetCardCounts>();
+  const nameSets = new Map<string, Set<string>>();
+  for (const id of setIds) {
+    counts.set(id, { variantCount: 0, uniqueCardCount: 0 });
+    nameSets.set(id, new Set());
+  }
+  if (setIds.length === 0) return counts;
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('tcg_cards')
+      .select('set_id,name')
+      .in('set_id', [...setIds])
+      .range(from, to);
+    if (error) {
+      throw new Error(
+        `[@collector-network/database] countCardsAndUniqueInSets: ${error.message}`,
+      );
+    }
+    const rows = (data as Array<{ set_id: string; name: string }> | null) ?? [];
+    for (const r of rows) {
+      const c = counts.get(r.set_id);
+      if (c) c.variantCount += 1;
+      nameSets.get(r.set_id)?.add(r.name);
+    }
+    if (rows.length < PAGE_SIZE) break;
+  }
+  for (const [id, names] of nameSets) {
+    const c = counts.get(id);
+    if (c) c.uniqueCardCount = names.size;
+  }
+  return counts;
+}
+
 // Distinct name+gamedata rows across the whole game — used by the
 // archetype directory to enumerate every archetype tag.
 export interface ArchetypeIndexEntry {

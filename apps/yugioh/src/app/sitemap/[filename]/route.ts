@@ -71,6 +71,11 @@ async function buildShard(shard: SitemapShard): Promise<Entry[]> {
     const now = new Date().toISOString();
     return [
       { loc: `${url}/`, lastmod: now, changefreq: 'daily', priority: 1.0 },
+      { loc: `${url}/market`, lastmod: now, changefreq: 'daily', priority: 0.9 },
+      { loc: `${url}/market/most-valuable`, lastmod: now, changefreq: 'daily', priority: 0.8 },
+      { loc: `${url}/market/graded`, lastmod: now, changefreq: 'daily', priority: 0.8 },
+      { loc: `${url}/market/vintage`, lastmod: now, changefreq: 'daily', priority: 0.8 },
+      { loc: `${url}/forbidden-limited`, lastmod: now, changefreq: 'weekly', priority: 0.8 },
       { loc: `${url}/sets`, lastmod: now, changefreq: 'daily', priority: 0.9 },
       { loc: `${url}/rarities`, lastmod: now, changefreq: 'weekly', priority: 0.8 },
       { loc: `${url}/archetypes`, lastmod: now, changefreq: 'weekly', priority: 0.8 },

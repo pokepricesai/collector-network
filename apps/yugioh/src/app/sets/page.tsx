@@ -46,7 +46,7 @@ function applySort(entries: SetDirectoryEntry[], sort: Sort): SetDirectoryEntry[
       case 'alpha':
         return a.set.name.localeCompare(b.set.name);
       case 'count':
-        return b.cardCount - a.cardCount;
+        return b.uniqueCardCount - a.uniqueCardCount;
       case 'newest':
       default:
         return (rb || '0000').localeCompare(ra || '0000');
@@ -60,7 +60,8 @@ export default async function SetsDirectoryPage({ searchParams }: PageProps) {
   const sort: Sort = isSort(rawSort) ? rawSort : 'newest';
   const entries = await listYugiohSetsForDirectory();
   const sorted = applySort(entries, sort);
-  const totalCards = entries.reduce((n, e) => n + e.cardCount, 0);
+  const totalUnique = entries.reduce((n, e) => n + e.uniqueCardCount, 0);
+  const totalVariants = entries.reduce((n, e) => n + e.variantCount, 0);
 
   return (
     <>
@@ -70,10 +71,12 @@ export default async function SetsDirectoryPage({ searchParams }: PageProps) {
           <p className={styles.eyebrow}>Sets · Yu-Gi-Oh!</p>
           <h1 className={styles.title}>Every Yu-Gi-Oh! set in the catalogue</h1>
           <p className={styles.subtitle}>
-            {entries.length.toLocaleString('en-US')} sets · {totalCards.toLocaleString('en-US')} indexed
-            card variants. Boosters, structure decks, tins, duelist packs
-            and promotional releases. Click through for the full set
-            listing, rarity breakdown, and highest-value cards.
+            {entries.length.toLocaleString('en-US')} sets ·{' '}
+            {totalUnique.toLocaleString('en-US')} unique cards across{' '}
+            {totalVariants.toLocaleString('en-US')} rarity variants.
+            Boosters, structure decks, tins, duelist packs and promotional
+            releases. Click through for the full set listing, rarity
+            breakdown, and highest-value cards.
           </p>
           <div className={styles.sortRow}>
             <span className={styles.sortLabel}>Sort</span>
@@ -117,9 +120,15 @@ export default async function SetsDirectoryPage({ searchParams }: PageProps) {
                   </span>
                 </div>
                 <div className={styles.tileMeta}>
-                  <span>Cards indexed</span>
+                  <span>Unique cards</span>
                   <span className={styles.tileMetaValue}>
-                    {entry.cardCount.toLocaleString('en-US')}
+                    {entry.uniqueCardCount.toLocaleString('en-US')}
+                  </span>
+                </div>
+                <div className={styles.tileMeta}>
+                  <span>Rarity variants</span>
+                  <span className={styles.tileMetaValue}>
+                    {entry.variantCount.toLocaleString('en-US')}
                   </span>
                 </div>
               </Surface>

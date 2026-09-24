@@ -9,7 +9,7 @@ import type { FnlState } from '../design/tokens';
 // loading the FnlBadge component (which would require JSX transpilation
 // inside `node --test`).
 export function normaliseFnl(raw: string | null | undefined): FnlState {
-  switch ((raw ?? '').toLowerCase().replace(/\s+/g, '-')) {
+  switch ((raw ?? '').toLowerCase().replace(/[\s_]+/g, '-')) {
     case 'forbidden':
       return 'forbidden';
     case 'limited':
