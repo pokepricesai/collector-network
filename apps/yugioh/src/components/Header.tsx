@@ -9,7 +9,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { label: 'Cards', href: '/search' },
+  { label: 'Finder', href: '/card-finder' },
   { label: 'Sets', href: '/sets' },
   { label: 'Rarities', href: '/rarities' },
   { label: 'Archetypes', href: '/archetypes' },
