@@ -6,6 +6,11 @@
   border: 1px solid var(--ygo-line-hairline);
   border-radius: var(--ygo-radius-md);
   background: var(--ygo-ink-onyx);
+  /* Prevent any inner element (long series labels, overflowing
+     tooltip) from pushing the chart panel wider than its container. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .header {
@@ -41,11 +46,14 @@
 
 .rangeGroup, .seriesGroup {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 2px;
   background: var(--ygo-ink-abyss);
   border: 1px solid var(--ygo-line-hairline);
   border-radius: var(--ygo-radius-sm);
+  /* Never push the parent panel wider than its container. */
+  max-width: 100%;
 }
 
 .chip {
