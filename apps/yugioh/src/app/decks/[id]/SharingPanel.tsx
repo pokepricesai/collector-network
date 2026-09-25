@@ -6,7 +6,7 @@
 //   • Copy public link
 //   • Copy unlisted link + Regenerate
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   regenerateTokenAction,
@@ -31,6 +31,16 @@ export function SharingPanel(props: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<null | 'public' | 'share'>(null);
+
+  // Sync local state whenever the server re-renders with fresh props
+  // (e.g. after a rename triggers syncPublicSlugAfterRename in the
+  // builder's rename effect). Without this the sidebar shows a stale
+  // URL until the user hits refresh.
+  useEffect(() => {
+    setVisibility(props.visibility);
+    setPublicSlug(props.publicSlug);
+    setShareToken(props.shareToken);
+  }, [props.visibility, props.publicSlug, props.shareToken]);
 
   function change(next: Visibility) {
     setError(null);
