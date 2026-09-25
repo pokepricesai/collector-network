@@ -4,7 +4,7 @@
   padding: var(--ygo-size-xl) var(--ygo-size-lg) var(--ygo-size-3xl);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 899px) {
   .page { padding: var(--ygo-size-lg) var(--ygo-size-base); }
 }
 
@@ -104,7 +104,7 @@
   margin-bottom: var(--ygo-size-base);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 899px) {
   .controls { grid-template-columns: 1fr; }
 }
 
@@ -283,7 +283,7 @@
 
 /* ── Mobile row-based layout ─────────────────────────────── */
 
-@media (max-width: 767px) {
+@media (max-width: 899px) {
   .tableWrap { border: 0; background: transparent; }
   .table thead { display: none; }
   .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
