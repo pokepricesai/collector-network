@@ -5,6 +5,13 @@
   margin-bottom: var(--ygo-size-xl);
 }
 
+/* At narrow phone widths the 180px minmax + tile padding + page
+   padding stacks to more than the viewport when only one tile per
+   row fits — shrink the minmax so the grid always fits. */
+@media (max-width: 480px) {
+  .summary { grid-template-columns: 1fr; }
+}
+
 .tile {
   padding: var(--ygo-size-lg);
   border: 1px solid var(--ygo-line-hairline);
@@ -13,6 +20,13 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.value, .valueMuted {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .label {
@@ -68,6 +82,7 @@
   align-items: center;
   padding: 6px 8px;
   border-radius: var(--ygo-radius-sm);
+  min-width: 0;
 }
 
 .recentRow:hover { background: rgba(255, 255, 255, 0.02); }
