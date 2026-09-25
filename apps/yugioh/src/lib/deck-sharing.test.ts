@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  classifyPublicSlugResolution,
   extractSlugSuffix,
   generatePublicSlug,
   generateShareToken,
@@ -94,6 +95,48 @@ test('two tokens generated back-to-back differ', () => {
 test('URL builders encode weird slug/token characters safely', () => {
   assert.equal(publicDeckPath('my deck'), '/deck/my%20deck');
   assert.equal(unlistedDeckPath('abc?token=/x'), '/deck/share/abc%3Ftoken%3D%2Fx');
+});
+
+// ── slug resolution ──────────────────────────────────────
+
+test('classifyPublicSlugResolution: exact match → canonical', () => {
+  const r = classifyPublicSlugResolution('snake-eye-fiendsmith-12345678', {
+    public_slug: 'snake-eye-fiendsmith-12345678',
+    visibility: 'public',
+  });
+  assert.deepEqual(r, { kind: 'canonical' });
+});
+
+test('classifyPublicSlugResolution: stale prefix but same suffix → 308 redirect', () => {
+  const r = classifyPublicSlugResolution('snake-eye-fiendsmith-12345678', {
+    public_slug: 'snake-eye-refined-12345678',
+    visibility: 'public',
+  });
+  assert.deepEqual(r, { kind: 'redirect', toSlug: 'snake-eye-refined-12345678' });
+});
+
+test('classifyPublicSlugResolution: no DB match → not-found', () => {
+  const r = classifyPublicSlugResolution('anything-abcdefgh', null);
+  assert.deepEqual(r, { kind: 'not-found' });
+});
+
+test('classifyPublicSlugResolution: private deck with known suffix → not-found', () => {
+  // Even if a suffix somehow matches, a private deck must never be
+  // reached via the public slug route.
+  const r = classifyPublicSlugResolution('anything-abcdefgh', {
+    public_slug: 'was-public-abcdefgh',
+    visibility: 'private',
+  });
+  assert.deepEqual(r, { kind: 'not-found' });
+});
+
+test('classifyPublicSlugResolution: unlisted deck with known suffix → not-found', () => {
+  // Unlisted decks must never be discoverable by suffix lookup.
+  const r = classifyPublicSlugResolution('anything-abcdefgh', {
+    public_slug: null,
+    visibility: 'unlisted',
+  });
+  assert.deepEqual(r, { kind: 'not-found' });
 });
 
 // Deterministic RNG for reproducible slug/token generation in tests.

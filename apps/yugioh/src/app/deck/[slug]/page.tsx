@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { Footer } from '../../../components/Footer';
 import { Header } from '../../../components/Header';
-import { getPublicDeckBySlug } from '../../../server/deck-publishing';
+import {
+  getPublicDeckBySlug,
+  resolvePublicSlugRequest,
+} from '../../../server/deck-publishing';
 import { absoluteUrl } from '../../../lib/site-url';
 import { SharedDeckRenderer } from '../SharedDeckRenderer';
 import styles from '../SharedDeckRenderer.module.css';
@@ -60,6 +63,15 @@ export const dynamic = 'force-dynamic';
 export default async function PublicDeckPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { copy_error } = await searchParams;
+  // Rename-tolerant lookup: if the URL contains a stale prefix but
+  // its 8-char suffix belongs to a currently-public deck, 308 to
+  // the canonical slug. Unlisted/private decks can never match here
+  // because resolvePublicSlugRequest filters on visibility='public'.
+  const resolution = await resolvePublicSlugRequest(slug);
+  if (resolution.kind === 'not-found') notFound();
+  if (resolution.kind === 'redirect') {
+    permanentRedirect(`/deck/${encodeURIComponent(resolution.toSlug)}`);
+  }
   const r = await getPublicDeckBySlug(slug);
   if (!r.ok) notFound();
   const canonical = absoluteUrl(`/deck/${encodeURIComponent(r.value.publicSlug ?? slug)}`);

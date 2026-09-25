@@ -91,6 +91,38 @@ export function unlistedDeckPath(token: string): string {
   return `/deck/share/${encodeURIComponent(token)}`;
 }
 
+// ── Public-slug resolution (pure) ───────────────────────────────
+//
+// Rename model:
+//   • immutable 8-char suffix is the real public identity;
+//   • the human-readable prefix follows the current deck name;
+//   • an incoming URL is either canonical, a stale-prefix redirect,
+//     or not-found.
+//
+// The DB never reveals unlisted/private decks by suffix — the
+// anonymous SELECT policy already scopes anon to visibility='public',
+// so suffix lookups on stale slugs naturally return nothing for
+// unlisted or private decks. This helper describes what the page
+// should do given the DB result.
+
+export type SlugResolution =
+  | { kind: 'canonical' }
+  | { kind: 'redirect'; toSlug: string }
+  | { kind: 'not-found' };
+
+// Given the URL slug and whatever the DB returned (if anything),
+// classify the response. The caller is expected to have already
+// filtered on visibility='public' when doing the lookup.
+export function classifyPublicSlugResolution(
+  requestedSlug: string,
+  found: { public_slug: string | null; visibility: Visibility } | null,
+): SlugResolution {
+  if (!found) return { kind: 'not-found' };
+  if (found.visibility !== 'public' || !found.public_slug) return { kind: 'not-found' };
+  if (found.public_slug === requestedSlug) return { kind: 'canonical' };
+  return { kind: 'redirect', toSlug: found.public_slug };
+}
+
 // ── Internals ────────────────────────────────────────────────────
 
 function generateRandomString(

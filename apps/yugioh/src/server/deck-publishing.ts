@@ -40,10 +40,13 @@ import {
   type FnlStatus,
 } from '../lib/deck-identity';
 import {
+  classifyPublicSlugResolution,
+  extractSlugSuffix,
   generatePublicSlug,
   generateShareToken,
   isPlausibleShareToken,
   reslugifyKeepingSuffix,
+  type SlugResolution,
   type Visibility,
 } from '../lib/deck-sharing';
 import { getYugiohClient } from './read';
@@ -193,6 +196,43 @@ export async function syncPublicSlugAfterRename(
     .eq('user_id', user.id);
   if (error) return { ok: false, reason: 'failed', error: error.message };
   return { ok: true, value: null };
+}
+
+// ── Slug resolution (rename-tolerant) ───────────────────────────
+//
+// The anon SELECT policy on ygo_decks already scopes queries to
+// visibility='public'. That means an unlisted or private deck can
+// never be found via suffix lookup here — the SUFFIX PATH IS NOT
+// AN ENUMERATION SURFACE for non-public decks by construction.
+
+export async function resolvePublicSlugRequest(
+  requestedSlug: string,
+): Promise<SlugResolution> {
+  const supabase = getYugiohClient();
+  // 1. Try exact-match on the current slug. Cheap; covers the
+  //    common case where the URL is already canonical.
+  const { data: exact } = await supabase
+    .from(DECKS)
+    .select('public_slug, visibility')
+    .eq('public_slug', requestedSlug)
+    .eq('visibility', 'public')
+    .maybeSingle();
+  if (exact) return classifyPublicSlugResolution(requestedSlug, exact as { public_slug: string; visibility: Visibility });
+
+  // 2. If the URL carries a plausible suffix, look up by suffix.
+  //    A public deck whose name changed since the URL was minted
+  //    will match here and we 308 to the canonical slug.
+  const suffix = extractSlugSuffix(requestedSlug);
+  if (!suffix) return { kind: 'not-found' };
+  const { data: bySuffix } = await supabase
+    .from(DECKS)
+    .select('public_slug, visibility')
+    .like('public_slug', `%-${suffix}`)
+    .eq('visibility', 'public')
+    .maybeSingle();
+  return classifyPublicSlugResolution(requestedSlug, bySuffix as
+    | { public_slug: string; visibility: Visibility }
+    | null);
 }
 
 // ── Anonymous reads: public ─────────────────────────────────────
