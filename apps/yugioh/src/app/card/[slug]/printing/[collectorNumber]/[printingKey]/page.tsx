@@ -12,6 +12,7 @@ import { PrintingFingerprint } from '../../../../../../components/PrintingFinger
 import { RarityBadge } from '../../../../../../components/RarityBadge';
 import { Stat, StatRow } from '../../../../../../components/Stat';
 import { Surface } from '../../../../../../components/Surface';
+import { AddToCollectionMount } from '../../../../../../components/collection/AddToCollectionMount';
 import { GradedStrip } from '../../../../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../../../../components/signature/RarityRefractorLine';
@@ -263,6 +264,30 @@ export default async function PrintingPage({ params }: Props) {
                 in a moment. Card metadata is still displayed.
               </div>
             )}
+
+            <div style={{ marginTop: 16 }}>
+              <AddToCollectionMount
+                currentPathname={`/card/${data.logicalSlug}/printing/${encodeURIComponent(data.printing.collector_number ?? '')}/${encodeURIComponent(data.printingKey)}`}
+                cardId={data.card.id}
+                cardName={data.card.name}
+                fixedPrinting={{
+                  id: data.printing.id,
+                  label: [
+                    data.printing.collector_number,
+                    data.card.rarity,
+                    data.edition === '1st_edition'
+                      ? '1st Edition'
+                      : data.edition === 'limited'
+                      ? 'Limited'
+                      : 'Unlimited',
+                    data.printing.language,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                }}
+              />
+            </div>
+
 
             {isMonster && (
               <div className={styles.stats}>

@@ -14,8 +14,9 @@
     "audit:browse": "node --env-file=.env.local --import tsx scripts/verify-slice-7.mts",
     "audit:market": "node --env-file=.env.local --import tsx scripts/verify-slice-8.mts",
     "audit:finder": "node --env-file=.env.local --import tsx scripts/verify-card-finder.mts",
+    "audit:rls-collection": "node --env-file=.env.local --import tsx scripts/rls-collection-pen-test.mts",
     "bench": "node --import tsx scripts/perf-benchmark.mts",
-    "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts src/server/history.test.ts src/lib/finder-filters.test.ts src/lib/return-to.test.ts src/lib/user-profile.test.ts",
+    "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts src/server/history.test.ts src/lib/finder-filters.test.ts src/lib/return-to.test.ts src/lib/user-profile.test.ts src/lib/collection-types.test.ts",
     "clean": "rimraf .next .turbo node_modules"
   },
   "dependencies": {

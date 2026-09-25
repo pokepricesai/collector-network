@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { createBrowserSupabase } from '@collector-network/auth';
+import { deleteAllCollectionAction } from '../collection/actions';
 import styles from '../account/Account.module.css';
 
 const REQUIRED = 'DELETE';
@@ -26,16 +27,24 @@ export function DangerZone() {
     setError(null);
     setPending(true);
     try {
+      // 1. Delete every ygo_collection_items row owned by this user
+      //    via server action (RLS enforces owner scope). A missing
+      //    table is treated as success — the migration may not have
+      //    landed yet.
+      const collectionResult = await deleteAllCollectionAction();
+      if (!collectionResult.ok) {
+        throw new Error(collectionResult.error ?? 'Could not clear collection');
+      }
+
       const supabase = createBrowserSupabase();
-      // Wipe every YGO-owned key in user_metadata. When Slice D/E/F
-      // add their own row-level tables the caller extends this
-      // to also delete those rows before signing out.
+      // 2. Wipe every YGO-owned key in user_metadata. Never touches
+      //    other games' namespaces or auth.users itself.
       const { error: metaError } = await supabase.auth.updateUser({
         data: { ygo: null },
       });
       if (metaError) throw metaError;
-      // Sign the user out — they can create a fresh YGOPrices
-      // profile at will since auth.users is untouched.
+      // 3. Sign the user out — they can create a fresh YGOPrices
+      //    profile at will since auth.users is untouched.
       const { error: outErr } = await supabase.auth.signOut();
       if (outErr) throw outErr;
       setDone(true);
@@ -52,10 +61,11 @@ export function DangerZone() {
     <div className={styles.danger}>
       <h3 className={styles.dangerTitle}>Delete YGOPrices data</h3>
       <p className={styles.sectionCaption}>
-        Removes your YGOPrices display name, avatar and preferences from
-        this account. Your Collector Network sign-in (shared across
-        PokePrices, MTGPrices and any other network site) is not affected;
-        you can create a fresh YGOPrices profile any time.
+        Removes your YGOPrices collection, display name, avatar and
+        preferences from this account. Your Collector Network sign-in
+        (shared across PokePrices, MTGPrices and any other network
+        site) is not affected; you can create a fresh YGOPrices
+        profile any time.
       </p>
       <p className={styles.sectionCaption} style={{ marginBottom: 8 }}>
         Type <strong>{REQUIRED}</strong> to enable the button.

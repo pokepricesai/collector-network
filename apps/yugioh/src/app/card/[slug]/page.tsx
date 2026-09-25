@@ -10,6 +10,8 @@ import { Header } from '../../../components/Header';
 import { RarityBadge } from '../../../components/RarityBadge';
 import { Stat, StatRow } from '../../../components/Stat';
 import { Surface } from '../../../components/Surface';
+import { AddToCollectionMount } from '../../../components/collection/AddToCollectionMount';
+import type { PrintingOption } from '../../../components/collection/AddToCollection';
 import { GradedStrip } from '../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
@@ -72,6 +74,22 @@ export default async function LogicalCardPage({ params }: Props) {
   if (!data) notFound();
 
   const jsonLd = buildCardJsonLd(data, siteUrl());
+
+  const printingOptions: PrintingOption[] = data.variants.map((v) => ({
+    id: v.printing.id,
+    label: [
+      v.printing.collector_number,
+      v.card.rarity,
+      v.edition === '1st_edition'
+        ? '1st Edition'
+        : v.edition === 'limited'
+        ? 'Limited'
+        : 'Unlimited',
+      v.printing.language,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  }));
 
   const banlist = data.gamedata.banlist?.tcg;
   const fnlState = normaliseFnl(banlist);
@@ -220,6 +238,15 @@ export default async function LogicalCardPage({ params }: Props) {
                 retry in a moment. Card metadata is still displayed.
               </div>
             )}
+
+            <div style={{ marginTop: 16 }}>
+              <AddToCollectionMount
+                currentPathname={`/card/${data.slug}`}
+                cardId={data.variants[0]?.card.id ?? data.slug}
+                cardName={data.name}
+                availablePrintings={printingOptions}
+              />
+            </div>
           </div>
         </section>
 
