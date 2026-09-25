@@ -65,7 +65,6 @@ export default async function AccountPage() {
             <p className={styles.tileMeta}>
               Build Main / Extra / Side decks with deterministic F&amp;L legality.
             </p>
-            <span className={styles.tileTag}>Coming in Slice F</span>
           </Link>
           <Link href="/settings" className={styles.tile}>
             <h2 className={styles.tileTitle}>Settings</h2>

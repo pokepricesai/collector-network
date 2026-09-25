@@ -10,14 +10,16 @@ import {
   getWatchlistCountForCurrentUser,
   listWatchlistForCurrentUser,
 } from '../../server/watchlist';
+import { getDeckCountForCurrentUser } from '../../server/decks';
 import { computeAnalytics } from '../../lib/collection-analytics';
 import styles from './AccountDashboard.module.css';
 
 export async function AccountDashboard() {
-  const [collectionResult, watchlistResult, watchlistCountResult] = await Promise.all([
+  const [collectionResult, watchlistResult, watchlistCountResult, deckCountResult] = await Promise.all([
     listCollectionForCurrentUser(),
     listWatchlistForCurrentUser(),
     getWatchlistCountForCurrentUser(),
+    getDeckCountForCurrentUser(),
   ]);
 
   const collectionData =
@@ -27,6 +29,7 @@ export async function AccountDashboard() {
     watchlistResult.ok ? watchlistResult.value : null;
   const watchlistMissing = !watchlistResult.ok && watchlistResult.reason === 'table-missing';
   const watchlistCount = watchlistCountResult.ok ? watchlistCountResult.value : 0;
+  const deckInfo = deckCountResult.ok ? deckCountResult.value : { count: 0, mostRecent: null };
 
   const analytics = collectionData ? computeAnalytics({ items: collectionData.items }) : null;
   const mostValuable = analytics?.topMostValuable[0] ?? null;
@@ -86,6 +89,15 @@ export async function AccountDashboard() {
               <span className={styles.meta}>watched printings</span>
             </>
           )}
+        </div>
+        <div className={styles.tile}>
+          <span className={styles.label}>Decks</span>
+          <span className={styles.value}>{deckInfo.count}</span>
+          <span className={styles.meta}>
+            {deckInfo.mostRecent
+              ? `latest: ${deckInfo.mostRecent.name.slice(0, 40)}`
+              : 'no decks yet'}
+          </span>
         </div>
         <div className={styles.tile}>
           <span className={styles.label}>Most valuable</span>
