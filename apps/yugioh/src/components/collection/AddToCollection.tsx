@@ -24,6 +24,7 @@ import {
   type PurchaseCurrency,
 } from '../../lib/collection-types';
 import { addCollectionAction } from '../../app/collection/actions';
+import { DialogPortal } from './DialogPortal';
 import styles from './AddToCollection.module.css';
 
 export interface PrintingOption {
@@ -162,6 +163,7 @@ function Dialog(props: DialogProps) {
   }
 
   return (
+    <DialogPortal>
     <div
       className={styles.backdrop}
       role="dialog"
@@ -362,5 +364,6 @@ function Dialog(props: DialogProps) {
         </form>
       </div>
     </div>
+    </DialogPortal>
   );
 }

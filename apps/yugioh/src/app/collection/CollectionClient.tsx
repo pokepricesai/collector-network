@@ -21,6 +21,7 @@ import {
   type PurchaseCurrency,
 } from '../../lib/collection-types';
 import { deleteCollectionAction, updateCollectionAction } from './actions';
+import { DialogPortal } from '../../components/collection/DialogPortal';
 import editStyles from '../../components/collection/AddToCollection.module.css';
 import styles from './Collection.module.css';
 
@@ -378,6 +379,7 @@ function EditDialog({
   }
 
   return (
+    <DialogPortal>
     <div
       className={editStyles.backdrop}
       role="dialog"
@@ -522,6 +524,7 @@ function EditDialog({
         </form>
       </div>
     </div>
+    </DialogPortal>
   );
 }
 
@@ -550,6 +553,7 @@ function DeleteDialog({
     });
   }
   return (
+    <DialogPortal>
     <div
       className={editStyles.backdrop}
       role="dialog"
@@ -582,5 +586,6 @@ function DeleteDialog({
         </div>
       </div>
     </div>
+    </DialogPortal>
   );
 }
