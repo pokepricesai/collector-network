@@ -21,10 +21,15 @@ create table if not exists ygo_collection_items (
   id                uuid primary key default gen_random_uuid(),
   user_id           uuid not null references auth.users(id) on delete cascade,
   tcg_card_id       text not null references tcg_cards(id) on delete cascade,
-  tcg_printing_id   text references tcg_printings(id) on delete set null,
+  -- Every holding is pinned to an exact printing. `restrict` prevents
+  -- silently orphaning a holding if catalogue data churns; a printing
+  -- referenced by any collection row cannot be deleted upstream.
+  tcg_printing_id   text not null references tcg_printings(id) on delete restrict,
   quantity          integer not null default 1 check (quantity > 0),
   is_graded         boolean not null default false,
-  grader            text check (grader in ('psa','bgs','cgc','sgc','any')),
+  -- `any` is a market-data rollup value only; it is NOT a real
+  -- grader for an owned slab and is not permitted here.
+  grader            text check (grader in ('psa','bgs','cgc','sgc')),
   grade             text,
   condition         text check (condition in (
                       'mint',
@@ -51,6 +56,17 @@ alter table ygo_collection_items add constraint ygo_collection_items_graded_shap
     (is_graded = true  and grader is not null and grade is not null)
     or
     (is_graded = false and grader is null and grade is null)
+  );
+
+-- Purchase-price shape: a numeric price is meaningless without a
+-- currency (we never FX-convert). Currency may be null when no
+-- price has been supplied.
+alter table ygo_collection_items
+  drop constraint if exists ygo_collection_items_purchase_shape;
+alter table ygo_collection_items add constraint ygo_collection_items_purchase_shape
+  check (
+    purchase_price is null
+    or (purchase_price is not null and purchase_currency is not null)
   );
 
 -- Owner-first indexes for the two hot query patterns:

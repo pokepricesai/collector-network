@@ -357,7 +357,7 @@ function EditDialog({
     startTransition(async () => {
       const r = await updateCollectionAction(row.id, {
         tcg_card_id: row.tcg_card_id,
-        tcg_printing_id: row.tcg_printing_id ?? '',
+        tcg_printing_id: row.tcg_printing_id,
         quantity,
         is_graded: tab === 'graded',
         grader: tab === 'graded' ? grader : null,

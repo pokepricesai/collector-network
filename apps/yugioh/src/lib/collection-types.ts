@@ -25,8 +25,10 @@ export const CONDITION_LABELS: Record<Condition, string> = {
   'damaged': 'Damaged',
 };
 
-// Graders. Matches the values already used by tcg_graded_price_daily.
-export const GRADER_VALUES = ['psa', 'bgs', 'cgc', 'sgc', 'any'] as const;
+// Graders that a real slab can carry. `any` exists in the market-
+// price data (as a filter / rollup value) but is NOT a real grader
+// for an owned card — never allow it on a stored holding.
+export const GRADER_VALUES = ['psa', 'bgs', 'cgc', 'sgc'] as const;
 export type Grader = (typeof GRADER_VALUES)[number];
 
 // Currencies allowed on purchase records. Never converted — display
@@ -36,11 +38,14 @@ export const PURCHASE_CURRENCIES = ['USD', 'EUR'] as const;
 export type PurchaseCurrency = (typeof PURCHASE_CURRENCIES)[number];
 
 // Row shape as it comes back from Postgres (snake_case).
+// `tcg_printing_id` is NOT NULL at the DB layer — every holding is
+// pinned to an exact printing. The DB blocks deletion of a printing
+// referenced by any collection row (`on delete restrict`).
 export interface CollectionItemRow {
   id: string;
   user_id: string;
   tcg_card_id: string;
-  tcg_printing_id: string | null;
+  tcg_printing_id: string;
   quantity: number;
   is_graded: boolean;
   grader: Grader | null;
@@ -138,6 +143,12 @@ export function validateAddCollectionInput(
   const purchase_currency = isPurchaseCurrency(raw.purchase_currency)
     ? raw.purchase_currency
     : null;
+  // Shape rule mirrored in the DB: a recorded purchase price must
+  // always name its currency (we never FX-convert, so a numeric
+  // value alone is meaningless).
+  if (purchase_price != null && purchase_currency == null) {
+    errors.push('Choose a purchase currency');
+  }
   const purchase_date = validateDate(raw.purchase_date ?? null);
   if (raw.purchase_date && !purchase_date)
     errors.push('Purchase date must be YYYY-MM-DD');

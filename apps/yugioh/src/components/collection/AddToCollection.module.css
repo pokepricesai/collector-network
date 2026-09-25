@@ -42,7 +42,10 @@
   align-items: center;
   justify-content: center;
   padding: var(--ygo-size-base);
-  z-index: 40;
+  /* Sits above every non-modal chrome (sticky header, footer,
+     price banners). Header uses z-index: 10 so 1000 gives headroom. */
+  z-index: 1000;
+  isolation: isolate;
 }
 
 .dialog {

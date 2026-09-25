@@ -113,18 +113,12 @@ export async function listCollectionForCurrentUser(): Promise<
     };
   }
 
-  // Batch fetch cards + printings + sets.
+  // Batch fetch cards + printings + sets. tcg_printing_id is NOT NULL
+  // on ygo_collection_items so every row contributes an id here.
   const cardIds = Array.from(new Set(rows.map((r) => r.tcg_card_id)));
-  const printingIds = Array.from(
-    new Set(
-      rows.map((r) => r.tcg_printing_id).filter((x): x is string => !!x),
-    ),
-  );
   const [cardsById, printings] = await Promise.all([
     fetchCardsById(supabase, cardIds),
-    printingIds.length > 0
-      ? getPrintingsForCards(supabase, cardIds)
-      : Promise.resolve<TcgPrinting[]>([]),
+    getPrintingsForCards(supabase, cardIds),
   ]);
   const printingsById = new Map<string, TcgPrinting>();
   for (const p of printings) printingsById.set(p.id, p);
@@ -137,9 +131,7 @@ export async function listCollectionForCurrentUser(): Promise<
 
   const items: CollectionListItem[] = rows.map((row, i) => {
     const card = cardsById.get(row.tcg_card_id) ?? null;
-    const printing = row.tcg_printing_id
-      ? printingsById.get(row.tcg_printing_id) ?? null
-      : null;
+    const printing = printingsById.get(row.tcg_printing_id) ?? null;
     const set = card ? setsById.get(card.set_id) ?? null : null;
     return { row, card, printing, set, priced: priced[i]! };
   });
@@ -183,7 +175,6 @@ async function priceHoldings(
   const gradedPrintingIds = new Set<string>();
   const gradedCardIds = new Set<string>();
   for (const r of rows) {
-    if (!r.tcg_printing_id) continue;
     if (r.is_graded) {
       gradedPrintingIds.add(r.tcg_printing_id);
       gradedCardIds.add(r.tcg_card_id);
@@ -256,16 +247,6 @@ async function priceHoldings(
   }
 
   return rows.map((row) => {
-    if (row.tcg_printing_id == null) {
-      // Should not happen — the write path requires a printing —
-      // but if we ever hit an orphaned row, treat as unpriced.
-      return {
-        row,
-        unitValueUsd: null,
-        valueUsdSource: 'none',
-        currency: 'USD' as const,
-      };
-    }
     if (row.is_graded) {
       const printingKey = `${row.tcg_printing_id}|${row.grader}|${row.grade}`;
       const p = printingGraded.get(printingKey);
