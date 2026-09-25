@@ -1,13 +1,34 @@
-# apps/onepiece — placeholder
+# apps/onepiece — One Piece Card Game specialist site
 
-**Do not scaffold yet.**
+Next.js 15 App Router site that serves the One Piece Card Game community.
+Structured as an adaptation of the proven MTGPrices product — same route
+shape, same data-first collector focus, same SEO scaffolding — but
+overhauled for One Piece semantics:
 
-This directory reserves the workspace slot for the future One Piece Card Game
-specialist site. It will be a separate Next.js application, deployed as its
-own Vercel project on its own production domain.
+- Six-colour palette (Red / Green / Blue / Purple / Black / Yellow).
+- Card types: Leader, Character, Event, Stage, DON!!.
+- Fields: colour, cost, power, counter, life, attribute, trigger,
+  type/crew, language.
+- Treatments as first-class collectibles: standard, parallel, alternate
+  art, manga rare, special rare, promo.
+- English and Japanese versions treated as distinct printings.
 
-The One Piece site must have its own branding, UX, information architecture,
-terminology and product identity. It is not a reskin of the Yu-Gi-Oh site or
-any other Collector Network site.
+## Data
 
-Build order: see `docs/build-order.md`.
+Reads through the shared `@collector-network/database` +
+`@collector-network/market-data` packages against the generic `tcg_*`
+tables, scoped by `game_id`. No OP-specific tables are introduced in
+this app.
+
+## Local dev
+
+```
+pnpm --filter @collector-network/onepiece dev
+```
+
+Serves on port 3002 (Yu-Gi-Oh runs on 3001).
+
+## Deployment
+
+Independent Vercel project with root directory `apps/onepiece`. Its own
+production domain, environment variables and analytics scope.

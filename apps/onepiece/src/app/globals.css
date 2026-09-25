@@ -1,0 +1,568 @@
+/* OnePiecePrices — collector design system.
+   Sunlit sea-map palette: cream page, deep-navy ink, "straw hat" gold
+   as the primary brand accent, sky blue as the interactive secondary,
+   coral as a restrained hot accent. The six One Piece card colours
+   (Red / Green / Blue / Purple / Black / Yellow) live under --hue-* and
+   are used sparingly on chips, filters and treatment badges. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ── Foundation ─────────────────────────────────────────────── */
+  --bg:               #FBF5E6;   /* pale parchment / sun-bleached paper */
+  --bg-light:         #F3E9CE;   /* mild inset behind surfaces */
+  --bg-strong:        #EADFB7;
+  --surface:          #FFFFFF;
+  --surface-raised:   #FFFCF3;
+  --card:             #FFFFFF;
+
+  --text:             #0F2140;   /* deep navy ink */
+  --text-strong:      #071431;
+  --text-muted:       #5A6683;
+  --text-subtle:      #8892AB;
+
+  /* ── Brand — straw-hat gold (primary interactive) ───────────── */
+  --gold-50:          #FDF3D9;
+  --gold-100:         #FBE5A9;
+  --gold-200:         #F6D073;
+  --gold-300:         #E9B23A;
+  --gold-400:         #C88C1A;
+  --gold-500:         #96660F;
+  --gold-600:         #66450A;
+
+  --accent:           var(--gold-400);
+  --accent-hover:     var(--gold-500);
+  --accent-soft:      rgba(233,178,58,0.16);
+  --accent-border:    rgba(200,140,26,0.35);
+
+  /* Primary CTA = ocean blue (deep, saturated, legible) */
+  --ocean-50:         #E4F0FA;
+  --ocean-100:        #B7D5EE;
+  --ocean-200:        #79AEDA;
+  --ocean-300:        #3F86C3;
+  --ocean-400:        #1F65A6;
+  --ocean-500:        #124E85;
+  --ocean-600:        #0A2F5A;
+  --ocean-700:        #061E3D;
+
+  --primary:          var(--ocean-400);
+  --primary-hover:    var(--ocean-500);
+  --primary-strong:   var(--ocean-600);
+  --primary-soft:     rgba(31,101,166,0.12);
+  --primary-border:   rgba(10,47,90,0.28);
+
+  /* Ember — coral hot accent (limited use) */
+  --coral-300:        #F27A4E;
+  --coral-400:        #E85A2C;
+  --coral-500:        #C4441B;
+  --coral-soft:       rgba(232,90,44,0.14);
+
+  /* Deep midnight — dark surfaces (dark treatment panels, footers) */
+  --midnight:         #071431;
+  --midnight-2:       #0B1D42;
+  --midnight-3:       #142C56;
+
+  /* ── Status ────────────────────────────────────────────────── */
+  --green:            #2A8459;
+  --green-soft:       rgba(42,132,89,0.14);
+  --red:              #B43A3E;
+  --red-soft:         rgba(180,58,62,0.14);
+  --amber:            #A8781A;
+  --amber-soft:       rgba(168,120,26,0.15);
+
+  /* ── Structural ────────────────────────────────────────────── */
+  --border:           #E4DAC1;
+  --border-light:     #D6C8A6;
+  --border-strong:    #B9A87C;
+  --shadow-sm:        0 1px 2px rgba(7,20,49,0.06);
+  --shadow-md:        0 6px 18px rgba(7,20,49,0.10), 0 2px 4px rgba(7,20,49,0.04);
+  --shadow-lg:        0 18px 44px rgba(7,20,49,0.14), 0 4px 10px rgba(7,20,49,0.06);
+  --shadow-gold:      0 8px 24px rgba(200,140,26,0.20);
+
+  --radius-sm:        8px;
+  --radius:           12px;
+  --radius-lg:        16px;
+  --radius-xl:        22px;
+
+  /* ── Six-colour One Piece accent tokens ─────────────────────── */
+  /* Design accents used on colour chips, filter facets, treatment
+     stripes. These are our own palette values, not replicas of the
+     official card-face swatches. */
+  --hue-red:          #D63A3A;   /* Red */
+  --hue-red-ink:      #4A0F0F;
+  --hue-green:        #329C5F;   /* Green */
+  --hue-green-ink:    #0E2D19;
+  --hue-blue:         #2A6FD0;   /* Blue */
+  --hue-blue-ink:     #0A2246;
+  --hue-purple:       #7A45C0;   /* Purple */
+  --hue-purple-ink:   #2A1042;
+  --hue-black:        #2A2E38;   /* Black */
+  --hue-black-ink:    #E7EAF3;
+  --hue-yellow:       #E7B62B;   /* Yellow */
+  --hue-yellow-ink:   #4A360A;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.015em;
+}
+
+/* Page-hero band used by index pages (Sets, Movers, Card Finder, etc.). */
+.op-page-hero {
+  position: relative;
+  padding: 24px 24px 22px;
+  margin: -32px -24px 24px;
+  background:
+    radial-gradient(70% 90% at 0% 0%, rgba(233,178,58,0.10) 0%, transparent 60%),
+    radial-gradient(60% 80% at 100% 100%, rgba(31,101,166,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #FEF8E4 0%, var(--bg) 100%);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  isolation: isolate;
+}
+.op-page-hero::after {
+  content: '';
+  position: absolute;
+  left: 24px; right: 24px; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(to right, transparent 0%, rgba(233,178,58,0.55) 50%, transparent 100%);
+  opacity: 0.6;
+}
+@media (min-width: 640px) {
+  .op-page-hero { padding: 28px 24px 24px; }
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary-hover); }
+
+::placeholder { color: var(--text-muted); opacity: 0.7; }
+
+/* ── Motion ──────────────────────────────────────────────────── */
+@keyframes fadeIn   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer  { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes twinkle  { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+.animate-fade-in    { animation: fadeIn 0.28s ease-out; }
+.animate-fade-in-up { animation: fadeInUp 0.4s ease-out both; }
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.10s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.20s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in, .animate-fade-in-up { animation: none; }
+}
+
+/* ── Cards & hover ───────────────────────────────────────────── */
+.card-hover {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(7,20,49,0.09), 0 3px 6px rgba(7,20,49,0.04);
+  border-color: var(--border-light);
+}
+.card-hover-gold:hover {
+  border-color: var(--accent-border);
+  box-shadow: 0 12px 30px rgba(200,140,26,0.14), 0 3px 6px rgba(7,20,49,0.04);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: inherit; font-weight: 700; font-size: 14px; line-height: 1;
+  border-radius: 10px; padding: 11px 18px; cursor: pointer;
+  border: 1px solid transparent; text-decoration: none;
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--ocean-400) 0%, var(--ocean-500) 100%);
+  color: #FFFFFF;
+  box-shadow: 0 2px 4px rgba(10,47,90,0.15), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.btn-primary:hover { color: #FFFFFF; box-shadow: 0 6px 18px rgba(10,47,90,0.25), inset 0 1px 0 rgba(255,255,255,0.2); transform: translateY(-1px); }
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold-300) 0%, var(--gold-400) 100%);
+  color: #2A1A05;
+  box-shadow: 0 2px 4px rgba(200,140,26,0.20), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.btn-gold:hover { color: #2A1A05; box-shadow: var(--shadow-gold), inset 0 1px 0 rgba(255,255,255,0.4); transform: translateY(-1px); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.btn-ghost:hover { background: var(--surface); border-color: var(--primary-border); color: var(--primary); }
+.btn-dark {
+  background: linear-gradient(180deg, var(--midnight-2) 0%, var(--midnight) 100%);
+  color: #F6EED9;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 2px 4px rgba(7,20,49,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.btn-dark:hover { color: #FFFFFF; }
+.btn-sm { padding: 8px 12px; font-size: 12.5px; border-radius: 8px; }
+.btn-lg { padding: 14px 22px; font-size: 15px; border-radius: 12px; }
+
+/* ── Chips ───────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+  background: var(--bg-light); color: var(--text);
+  border: 1px solid var(--border);
+}
+.chip-gold   { background: var(--accent-soft); color: var(--gold-600); border-color: var(--accent-border); }
+.chip-ocean  { background: var(--primary-soft); color: var(--primary-strong); border-color: var(--primary-border); }
+.chip-coral  { background: var(--coral-soft); color: var(--coral-500); border-color: rgba(196,68,27,0.30); }
+.chip-ivy    { background: var(--green-soft); color: var(--green); border-color: rgba(42,132,89,0.30); }
+
+/* One Piece six-colour chips. Use on colour filters and card colour
+   badges — not on generic UI. */
+.chip-red    { background: rgba(214,58,58,0.14);  color: var(--hue-red-ink);    border-color: rgba(214,58,58,0.32); }
+.chip-green  { background: rgba(50,156,95,0.14);  color: var(--hue-green-ink);  border-color: rgba(50,156,95,0.32); }
+.chip-blue   { background: rgba(42,111,208,0.14); color: var(--hue-blue-ink);   border-color: rgba(42,111,208,0.32); }
+.chip-purple { background: rgba(122,69,192,0.14); color: var(--hue-purple-ink); border-color: rgba(122,69,192,0.32); }
+.chip-black  { background: rgba(42,46,56,0.10);   color: var(--hue-black);      border-color: rgba(42,46,56,0.28); }
+.chip-yellow { background: rgba(231,182,43,0.16); color: var(--hue-yellow-ink); border-color: rgba(231,182,43,0.36); }
+
+/* ── Skeleton ────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, #F1E7C7 25%, #F9EFCA 50%, #F1E7C7 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 10px;
+}
+
+.price-up   { color: var(--green); }
+.price-down { color: var(--red);   }
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+details summary::-webkit-details-marker { display: none; }
+details summary::marker { display: none; }
+
+/* ── Sort buttons ────────────────────────────────────────────── */
+.sort-btn {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  padding: 6px 16px; font-size: 13px; font-weight: 600; color: var(--text-muted);
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.sort-btn:hover { background: var(--accent-soft); color: var(--gold-600); border-color: var(--accent-border); }
+.sort-btn.active { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
+
+/* ── Prestige badge ──────────────────────────────────────────── */
+.badge-prestige {
+  display: inline-block; background: var(--accent-soft); color: var(--gold-600);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent-border);
+}
+
+.label-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em;
+  color: var(--text-muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold-300);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Decorative accents — sun-drenched sea band.
+   Used sparingly. Product content always dominates.
+   ═══════════════════════════════════════════════════════════════ */
+
+.hero-shell {
+  position: relative;
+  background:
+    radial-gradient(90% 80% at 10% -10%, rgba(233,178,58,0.16) 0%, rgba(233,178,58,0) 60%),
+    radial-gradient(70% 90% at 100% 110%, rgba(31,101,166,0.10) 0%, rgba(31,101,166,0) 60%),
+    linear-gradient(180deg, #FEF8E4 0%, var(--bg) 100%);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.feature-shell {
+  position: relative;
+  background:
+    radial-gradient(70% 70% at 8% 0%, rgba(233,178,58,0.10) 0%, rgba(233,178,58,0) 60%),
+    radial-gradient(60% 80% at 100% 100%, rgba(31,101,166,0.08) 0%, rgba(31,101,166,0) 60%),
+    linear-gradient(180deg, #FCF6DF 0%, #F5ECD1 100%);
+  overflow: hidden;
+  isolation: isolate;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ivory-band {
+  position: relative;
+  background:
+    radial-gradient(60% 80% at 10% 0%, rgba(233,178,58,0.08) 0%, rgba(233,178,58,0) 60%),
+    radial-gradient(50% 70% at 100% 100%, rgba(31,101,166,0.06) 0%, rgba(31,101,166,0) 60%),
+    var(--bg);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Six-colour crest — a horizontal ribbon of the OP colour palette,
+   very low opacity, used behind hero shells. */
+.op-colour-crest {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(920px, 96%);
+  height: 200px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 10% 60%, rgba(214,58,58,0.45)  0%, transparent 22%),
+    radial-gradient(circle at 26% 55%, rgba(231,182,43,0.55) 0%, transparent 22%),
+    radial-gradient(circle at 42% 60%, rgba(50,156,95,0.50)  0%, transparent 22%),
+    radial-gradient(circle at 58% 55%, rgba(42,111,208,0.50) 0%, transparent 22%),
+    radial-gradient(circle at 74% 60%, rgba(122,69,192,0.45) 0%, transparent 22%),
+    radial-gradient(circle at 90% 55%, rgba(42,46,56,0.35)   0%, transparent 22%);
+  opacity: 0.30;
+  z-index: 0;
+  filter: blur(2px);
+}
+.op-colour-crest.right {
+  left: auto; right: -80px; transform: none;
+  width: 620px; height: 240px; top: -60px;
+  opacity: 0.24;
+}
+@media (prefers-reduced-motion: reduce) { .op-colour-crest { filter: none; } }
+
+.spark-field {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 22%, rgba(200,140,26,0.28), transparent 60%),
+    radial-gradient(1.2px 1.2px at 78% 18%, rgba(31,101,166,0.22), transparent 60%),
+    radial-gradient(1.1px 1.1px at 40% 65%, rgba(200,140,26,0.20), transparent 60%),
+    radial-gradient(1.4px 1.4px at 88% 60%, rgba(31,101,166,0.20), transparent 60%),
+    radial-gradient(1.1px 1.1px at 25% 82%, rgba(200,140,26,0.18), transparent 60%),
+    radial-gradient(1.3px 1.3px at 62% 88%, rgba(200,140,26,0.20), transparent 60%);
+  animation: twinkle 8s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+.gilt-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--gold-300) 20%, var(--gold-300) 80%, transparent 100%);
+  opacity: 0.5;
+}
+
+.gold-text {
+  background: linear-gradient(135deg, var(--gold-300) 0%, var(--gold-500) 60%, var(--gold-300) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.coral-text {
+  background: linear-gradient(135deg, var(--coral-300), var(--coral-500));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-logo {
+  width: 100%;
+  max-width: 220px;
+}
+@media (min-width: 640px)  { .hero-logo { max-width: 260px; } }
+@media (min-width: 1024px) { .hero-logo { max-width: 300px; } }
+@media (min-width: 1400px) { .hero-logo { max-width: 320px; } }
+
+/* Nav link styling with gold underline for active. */
+.nav-link {
+  position: relative;
+  color: var(--text);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+  transition: color 150ms ease, background 150ms ease;
+}
+[role="menu"] {
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+[role="menu"] [role="menuitem"] {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+button.nav-link, button.btn, button.chip {
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.nav-link:hover { color: var(--gold-600); background: transparent; }
+.nav-link.active {
+  color: var(--gold-600);
+  background: transparent;
+}
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  left: 12px; right: 12px; bottom: 4px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--gold-300), var(--gold-500));
+  border-radius: 2px;
+}
+
+/* ── One Piece signature elements ─────────────────────────────
+   Site-specific design language. Cousin classes exist under `mtg-`
+   on MTGPrices and `ygo-` on YGOPrices; each site owns its own set. */
+
+/* Colour rail — a six-segment strip of the OP colour palette used at
+   the top of card tiles. Only present colours light up. */
+.op-colour-rail {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  height: 3px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.op-colour-rail > span {
+  display: block;
+  height: 100%;
+  background: #c8bea6;
+  opacity: 0.35;
+}
+.op-colour-rail > span[data-present='true'][data-hue='red']    { background: var(--hue-red);    opacity: 1; }
+.op-colour-rail > span[data-present='true'][data-hue='green']  { background: var(--hue-green);  opacity: 1; }
+.op-colour-rail > span[data-present='true'][data-hue='blue']   { background: var(--hue-blue);   opacity: 1; }
+.op-colour-rail > span[data-present='true'][data-hue='purple'] { background: var(--hue-purple); opacity: 1; }
+.op-colour-rail > span[data-present='true'][data-hue='black']  { background: var(--hue-black);  opacity: 1; }
+.op-colour-rail > span[data-present='true'][data-hue='yellow'] { background: var(--hue-yellow); opacity: 1; }
+
+/* Treatment badge — parallel / alt art / manga rare / special rare are
+   the single most important collectible distinction on this site.
+   Fixed shape so a row of badges lines up. */
+.treatment-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 3px 10px;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-weight: 700; font-size: 11px; letter-spacing: 0.06em;
+  border-radius: 6px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.treatment-badge--standard    { background: rgba(94,107,133,0.10); color: #4A5470; border-color: rgba(94,107,133,0.28); }
+.treatment-badge--parallel    { background: rgba(31,101,166,0.14); color: #124E85; border-color: rgba(31,101,166,0.35); }
+.treatment-badge--alt-art     { background: rgba(200,140,26,0.16); color: #66450A; border-color: rgba(200,140,26,0.38); }
+.treatment-badge--manga-rare  { background: rgba(122,69,192,0.14); color: #4C2088; border-color: rgba(122,69,192,0.34); }
+.treatment-badge--special-rare{ background: rgba(232,90,44,0.14);  color: #7A2410; border-color: rgba(232,90,44,0.34); }
+.treatment-badge--promo       { background: rgba(50,156,95,0.14);  color: #185234; border-color: rgba(50,156,95,0.32); }
+.treatment-badge--sec         { background: rgba(200,140,26,0.20); color: #4A360A; border-color: rgba(200,140,26,0.44); }
+
+/* Printing fingerprint — compact monospace pill listing set + card no.
+   + edition. Makes a specific physical printing legible at a glance. */
+.op-fingerprint {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 3px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(15,33,64,0.04);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.op-fingerprint > .sep { opacity: 0.4; }
+
+/* Engraved hairline. Used to divide treatment sections inside a card
+   panel. */
+.op-engraved {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(233, 178, 58, 0.35) 10%,
+    rgba(233, 178, 58, 0.55) 50%,
+    rgba(233, 178, 58, 0.35) 90%,
+    transparent 100%
+  );
+  box-shadow: 0 1px 0 rgba(7, 20, 49, 0.35);
+}
+
+/* Card image halo. Used behind the featured card art on a card page. */
+.op-card-halo {
+  position: relative;
+}
+.op-card-halo::before {
+  content: '';
+  position: absolute; inset: -20px;
+  background: var(--op-halo, radial-gradient(60% 60% at 50% 30%, rgba(233,178,58,0.14), transparent 70%));
+  filter: blur(24px);
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 40px;
+}
+.op-card-halo > * { position: relative; z-index: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .op-card-halo::before { filter: none; opacity: 0.6; }
+}
+
+/* Dark treatment panel — a navy-slate island used for the Chase / most
+   valuable treatments module. The ONE dark surface on the site, kept
+   for a materially different collector context. */
+.op-chase-panel {
+  --panel-bg-1: #0B1D42;
+  --panel-bg-2: #071431;
+  --panel-fg: #ECE3C7;
+  --panel-fg-muted: #A6ADBE;
+  --panel-border: rgba(233, 178, 58, 0.20);
+  position: relative;
+  color: var(--panel-fg);
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(233, 178, 58, 0.10), transparent 60%),
+    linear-gradient(180deg, var(--panel-bg-1) 0%, var(--panel-bg-2) 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px 22px;
+  box-shadow: 0 12px 40px rgba(7, 20, 49, 0.14);
+  overflow: hidden;
+}
+.op-chase-panel h2, .op-chase-panel h3 { color: var(--panel-fg); }
+.op-chase-panel .label-mono { color: var(--gold-300); }
+
+.op-chase-cell {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  display: grid; gap: 4px;
+}
+.op-chase-cell .price {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-weight: 700; font-size: 20px; letter-spacing: -0.01em;
+  color: #F6EED9;
+  line-height: 1.1;
+}
