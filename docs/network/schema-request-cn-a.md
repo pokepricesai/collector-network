@@ -1,7 +1,20 @@
 # Collector Network schema request — Slice CN-A (v2, hardened)
 
-Status: **paste into the Supabase SQL editor for the shared
-Collector Network project (preflightluke)**.
+Status: **APPLIED** — CN-A migration + backfill both in production.
+
+- Backfill result (via docs/network/backfill-cn-a-ygo.md): **4
+  rows** — the four existing shared users with prior YGO
+  activity (collection / watchlist / deck rows) now carry a
+  `collector_user_sites` row with `site_code='ygo'`,
+  `originated_here=false`, and honest `first_seen_at /
+  last_seen_at` derived from `min/max(created_at)` across the
+  ygo_* evidence tables. None of the four had origin
+  attributed (correct — pre-CN-A signups have no snapshot).
+- CN-A hardening (v3, snapshot model) superseded parts of this
+  spec; see docs/network/schema-request-cn-b.md for the final
+  state.
+
+## Original v2 spec (retained for history)
 
 Supersedes the v1 draft. Three integrity issues fixed:
 

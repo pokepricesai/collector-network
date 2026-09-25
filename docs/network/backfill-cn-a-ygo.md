@@ -1,7 +1,17 @@
 # CN-A backfill: existing YGO users → membership rows
 
-Status: **paste into the Supabase SQL editor for preflightluke's
-project after the CN-A migration is applied.**
+Status: **APPLIED** against preflightluke's project after CN-B
+was closed.
+
+## Result
+
+- `backfilled_rows = 4`
+- Applied by: preflightluke (SQL Editor)
+- Recorded in the CN-B closure commit.
+
+Re-running this idempotent SQL returns `0` further rows.
+Documented here so future audits have a source of truth for the
+one-time backfill count.
 
 ## What this does
 

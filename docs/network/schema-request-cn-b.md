@@ -1,7 +1,21 @@
 # Collector Network schema request — Slice CN-B (v3, final)
 
-Status: **paste into the Supabase SQL editor for preflightluke's
-project.**
+Status: **APPLIED — CN-B closed.**
+
+- Migration in production on preflightluke's project.
+- App layer (packages/auth customer API, shared consent copy,
+  network-ui EmailPreferences, YGO signup checkboxes + auth
+  callback, /settings + /email-preferences) deployed to
+  https://ygoprices.io.
+- Live pen test `pnpm audit:cn-b` — 47/47 PASS (includes the
+  full updateUser attack scenario, tri-state A–E, active-site
+  enforcement, immutable snapshot proofs).
+- CN-A backfill: **4 rows** — see
+  docs/network/backfill-cn-a-ygo.md.
+- Not started (deliberately): Brevo custom SMTP, branded auth
+  emails, newsletter sync.
+
+## Original v3 spec (retained for history)
 
 Supersedes v1 + v2. Same tables + trigger as v2. Three
 corrections applied:
