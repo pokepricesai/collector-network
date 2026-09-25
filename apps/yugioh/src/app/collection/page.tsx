@@ -16,7 +16,7 @@ import styles from './Collection.module.css';
 // Owner-only. `noindex, follow` — a personal ledger; we never want
 // crawlers indexing it, but internal links out remain usable.
 export const metadata: Metadata = {
-  title: 'Your collection — YGOPrices',
+  title: 'Your collection - YGOPrices',
   robots: { index: false, follow: true },
 };
 
@@ -34,7 +34,7 @@ export default async function CollectionPage() {
       <Shell>
         <div className={styles.errorNotice}>
           Could not load your collection right now: {result.error}. Retry in a
-          moment — no data was affected.
+          moment - no data was affected.
         </div>
       </Shell>
     );
@@ -50,7 +50,7 @@ export default async function CollectionPage() {
           <h1 className={styles.title}>Your collection</h1>
           <p className={styles.subtitle}>
             Every card you own. Currency is never converted; valuation
-            uses the same attribution rules as the rest of YGOPrices —
+            uses the same attribution rules as the rest of YGOPrices -
             raw uses printing-scoped retail, graded uses printing-scoped
             grader/grade first, then card-scoped with an explicit label.
           </p>
@@ -83,7 +83,7 @@ export default async function CollectionPage() {
             <>
               <span className={styles.summaryValueMuted}>mixed currencies</span>
               <span className={styles.summaryMeta}>
-                Non-USD purchases exist — we never FX-convert.
+                Non-USD purchases exist - we never FX-convert.
               </span>
             </>
           )}
@@ -129,7 +129,7 @@ export default async function CollectionPage() {
           <Link href="/card-finder" className={styles.emptyLink}>
             card page
           </Link>{' '}
-          — pick an exact printing on family pages, or use the button on
+          - pick an exact printing on family pages, or use the button on
           a printing page for one-click add.
         </div>
       )}
@@ -163,7 +163,7 @@ function PendingSchemaScreen() {
       </header>
       <div className={styles.pendingNotice}>
         Collections storage is being provisioned in the shared database.
-        The UI here is ready — as soon as the migration lands, refresh
+        The UI here is ready - as soon as the migration lands, refresh
         this page and start adding cards.
         <br />
         <br />

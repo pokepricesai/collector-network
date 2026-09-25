@@ -15,9 +15,9 @@ export const revalidate = 3600;
 const SITE_URL = siteUrl();
 
 export const metadata: Metadata = {
-  title: 'Yu-Gi-Oh! rarities — every foil, Ghost, Starlight, Prismatic',
+  title: 'Yu-Gi-Oh! rarities - every foil, Ghost, Starlight, Prismatic',
   description:
-    'Every Yu-Gi-Oh! rarity family in the catalogue — Common through Ghost Rare, Starlight Rare, Quarter Century Secret Rare, Prismatic Collector’s Rare and more. Card counts and examples per family.',
+    'Every Yu-Gi-Oh! rarity family in the catalogue - Common through Ghost Rare, Starlight Rare, Quarter Century Secret Rare, Prismatic Collector’s Rare and more. Card counts and examples per family.',
   alternates: { canonical: `${SITE_URL}/rarities` },
 };
 

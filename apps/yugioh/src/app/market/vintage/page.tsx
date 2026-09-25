@@ -30,8 +30,8 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
       ? `${SITE_URL}/market/vintage`
       : `${SITE_URL}/market/vintage?currency=EUR`;
   return {
-    title: `Vintage Yu-Gi-Oh! — most valuable pre-Xyz printings (${currency})`,
-    description: `The highest-value printings from Yu-Gi-Oh!'s pre-Xyz era (sets released before ${VINTAGE_CUTOFF}). LOB, MRD, PSV, MFC, IOC — the classic collector market ranked by live ${currency} retail.`,
+    title: `Vintage Yu-Gi-Oh! - most valuable pre-Xyz printings (${currency})`,
+    description: `The highest-value printings from Yu-Gi-Oh!'s pre-Xyz era (sets released before ${VINTAGE_CUTOFF}). LOB, MRD, PSV, MFC, IOC - the classic collector market ranked by live ${currency} retail.`,
     alternates: { canonical },
   };
 }
@@ -53,7 +53,7 @@ export default async function MarketVintagePage({ searchParams }: PageProps) {
             <span className={styles.crumbSep}>·</span>
             <span>Vintage</span>
           </p>
-          <h1 className={styles.title}>Vintage Yu-Gi-Oh! — most valuable</h1>
+          <h1 className={styles.title}>Vintage Yu-Gi-Oh! - most valuable</h1>
           <p className={styles.subtitle}>
             The highest-value printings from the pre-Xyz era: every set
             released before {VINTAGE_CUTOFF}. LOB · MRD · PSV · MFC · IOC and

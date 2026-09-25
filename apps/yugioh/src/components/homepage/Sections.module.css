@@ -337,3 +337,45 @@
   line-height: 1.5;
   max-width: 780px;
 }
+
+.toolsGrid {
+  display: grid;
+  gap: var(--ygo-size-base);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.toolTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--ygo-size-lg);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  background: var(--ygo-ink-onyx);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--ygo-motion-base) var(--ygo-motion-ease),
+              border-color var(--ygo-motion-base) var(--ygo-motion-ease),
+              box-shadow var(--ygo-motion-base) var(--ygo-motion-ease);
+}
+
+.toolTile:hover {
+  transform: translateY(-1px);
+  border-color: rgba(201, 162, 74, 0.35);
+  box-shadow: var(--ygo-shadow-card-hover);
+}
+
+.toolName {
+  font-family: var(--ygo-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  letter-spacing: -0.005em;
+}
+
+.toolMeta {
+  font-family: var(--ygo-font-body);
+  font-size: 12.5px;
+  color: var(--ygo-text-muted);
+  line-height: 1.4;
+}

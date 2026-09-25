@@ -229,11 +229,11 @@ function Row({
             </span>
             {targetReached && <span className={styles.targetPill}>Target reached</span>}
             {!targetReached && currentPrice != null && currentCurrency !== row.target_currency && (
-              <span className={styles.priceSource}>currency mismatch — no compare</span>
+              <span className={styles.priceSource}>currency mismatch - no compare</span>
             )}
           </>
         ) : (
-          <span className={styles.priceMuted}>—</span>
+          <span className={styles.priceMuted}>-</span>
         )}
       </td>
       <td data-label="Actions" className={styles.actionsCell}>
@@ -448,7 +448,7 @@ function RemoveDialog({
           <p
             style={{ fontSize: 13, color: 'var(--ygo-text-muted)', margin: '0 0 12px 0' }}
           >
-            {item.card?.name ?? 'This card'} — {item.printing?.collector_number}. Your
+            {item.card?.name ?? 'This card'} - {item.printing?.collector_number}. Your
             target price and note will be discarded.
           </p>
           {error && <p className={dialogStyles.error}>{error}</p>}

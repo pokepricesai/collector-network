@@ -8,7 +8,7 @@ import { DangerZone } from './DangerZone';
 import { SettingsForm } from './SettingsForm';
 
 export const metadata: Metadata = {
-  title: 'Settings — YGOPrices',
+  title: 'Settings - YGOPrices',
   robots: { index: false, follow: true },
 };
 

@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getYugiohSetBySlug(slug);
   if (!data) {
     return {
-      title: 'Set not found — YGOPrices',
+      title: 'Set not found - YGOPrices',
       robots: { index: false, follow: true },
     };
   }
@@ -35,13 +35,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const released = data.set.released_at
     ? ` · released ${new Date(data.set.released_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
     : '';
-  const description = `${data.set.name} (${data.set.code.toUpperCase()}) — ${data.uniqueCardCount} unique cards across ${data.variantCount} rarity variants${released}. Full checklist, rarity breakdown and market values on the Yu-Gi-Oh! collector catalogue.`;
+  const description = `${data.set.name} (${data.set.code.toUpperCase()}) - ${data.uniqueCardCount} unique cards across ${data.variantCount} rarity variants${released}. Full checklist, rarity breakdown and market values on the Yu-Gi-Oh! collector catalogue.`;
   return {
-    title: `${data.set.name} (${data.set.code.toUpperCase()}) — set checklist & prices`,
+    title: `${data.set.name} (${data.set.code.toUpperCase()}) - set checklist & prices`,
     description,
     alternates: { canonical },
     openGraph: {
-      title: `${data.set.name} — ${data.set.code.toUpperCase()}`,
+      title: `${data.set.name} - ${data.set.code.toUpperCase()}`,
       description,
       url: canonical,
       type: 'article',
@@ -98,7 +98,7 @@ export default async function SetPage({ params }: Props) {
           </div>
           {data.pricingDegraded && (
             <div className={styles.notice}>
-              Pricing is temporarily unavailable for parts of this set — retry
+              Pricing is temporarily unavailable for parts of this set - retry
               in a moment. Card metadata is still displayed below.
             </div>
           )}
@@ -132,7 +132,7 @@ export default async function SetPage({ params }: Props) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p className={styles.topName}>{entry.card.name}</p>
                       <p className={styles.topMeta}>
-                        {entry.card.collector_number} · {entry.card.rarity ?? '—'}
+                        {entry.card.collector_number} · {entry.card.rarity ?? '-'}
                       </p>
                       <p className={styles.topPrice}>
                         ${entry.bestUsdRetail!.price!.toLocaleString('en-US', {
@@ -193,7 +193,7 @@ export default async function SetPage({ params }: Props) {
               Card checklist ({data.uniqueCardCount} unique · {data.variantCount} variants)
             </h2>
             <p className={styles.sectionCaption}>
-              Sorted by collector number. Each tile is one rarity variant —
+              Sorted by collector number. Each tile is one rarity variant -
               a card printed at multiple rarities appears once per rarity.
               Click any tile for the full print history and market values.
             </p>

@@ -41,7 +41,7 @@ export function Stat({
   size = 'md',
   suffix,
 }: StatProps) {
-  const display = value == null || value === '' ? '—' : value;
+  const display = value == null || value === '' ? '-' : value;
   return (
     <span
       className={[styles.stat, KIND_CLASS[kind], SIZE_CLASS[size]].filter(Boolean).join(' ')}

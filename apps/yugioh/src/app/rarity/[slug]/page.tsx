@@ -34,26 +34,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   if (!isValidFamily(slug)) {
     return {
-      title: 'Rarity family not found — YGOPrices',
+      title: 'Rarity family not found - YGOPrices',
       robots: { index: false, follow: true },
     };
   }
   const data = await getYugiohRarityBySlug(slug);
   if (!data) {
     return {
-      title: 'Rarity family not found — YGOPrices',
+      title: 'Rarity family not found - YGOPrices',
       robots: { index: false, follow: true },
     };
   }
   const canonical = `${siteUrl()}/rarity/${slug}`;
   const label = RARITY_FAMILY_LABELS[slug];
-  const description = `${label} — ${data.totalCards.toLocaleString('en-US')} Yu-Gi-Oh! card variants across ${data.rarities.length} distinct rarity names. Cards, sets and representative market values on the collector catalogue.`;
+  const description = `${label} - ${data.totalCards.toLocaleString('en-US')} Yu-Gi-Oh! card variants across ${data.rarities.length} distinct rarity names. Cards, sets and representative market values on the collector catalogue.`;
   return {
-    title: `${label} Yu-Gi-Oh! rarity — cards, sets, prices`,
+    title: `${label} Yu-Gi-Oh! rarity - cards, sets, prices`,
     description,
     alternates: { canonical },
     openGraph: {
-      title: `${label} — Yu-Gi-Oh! rarity`,
+      title: `${label} - Yu-Gi-Oh! rarity`,
       description,
       url: canonical,
       type: 'article',
@@ -103,13 +103,13 @@ export default async function RarityPage({ params }: Props) {
           )}
           {data.pricingDegraded && (
             <div className={styles.notice}>
-              Pricing is temporarily unavailable for parts of this rarity — retry in a moment.
+              Pricing is temporarily unavailable for parts of this rarity - retry in a moment.
             </div>
           )}
           {data.truncated && (
             <div className={styles.notice}>
               Showing the first {data.cards.length.toLocaleString('en-US')} cards
-              — this rarity has {data.totalCards.toLocaleString('en-US')} total.
+              - this rarity has {data.totalCards.toLocaleString('en-US')} total.
               Browse full lists via individual set pages.
             </div>
           )}
@@ -185,7 +185,7 @@ export default async function RarityPage({ params }: Props) {
                               year: 'numeric',
                               month: 'short',
                             })
-                          : '—'}
+                          : '-'}
                       </span>
                     </div>
                     <div className={styles.tileMeta}>
@@ -251,7 +251,7 @@ function buildJsonLd(data: RarityPageData, siteOrigin: string) {
       },
       {
         '@type': 'CollectionPage',
-        name: `${label} — Yu-Gi-Oh! rarity`,
+        name: `${label} - Yu-Gi-Oh! rarity`,
         url,
         numberOfItems: data.totalCards,
       },

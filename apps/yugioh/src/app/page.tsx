@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Footer } from '../components/Footer';
 import { Header } from '../components/Header';
 import {
+  CollectorTools,
   DataNotes,
   GradedHighlights,
   Hero,
@@ -23,7 +24,7 @@ const SITE_URL = siteUrl();
 
 export const metadata: Metadata = {
   title:
-    'YGOPrices — Yu-Gi-Oh! collector catalogue · printings, editions, graded values',
+    'YGOPrices - Yu-Gi-Oh! collector catalogue · printings, editions, graded values',
   description:
     'Find the exact Yu-Gi-Oh! card you own. Compare every printing, edition, and rarity. Raw prices and graded values side by side.',
   alternates: { canonical: `${SITE_URL}/` },
@@ -42,7 +43,7 @@ export default async function HomePage() {
     name: 'YGOPrices',
     url: SITE_URL,
     description:
-      'Yu-Gi-Oh! collector catalogue — printings, editions, rarities and graded values.',
+      'Yu-Gi-Oh! collector catalogue - printings, editions, rarities and graded values.',
     potentialAction: {
       '@type': 'SearchAction',
       target: {
@@ -68,6 +69,7 @@ export default async function HomePage() {
         <LatestSets sets={payload.latestSets} />
         <GradedHighlights items={payload.gradedHighlights} />
         <RarityDiscovery entries={payload.rarityDiscovery} />
+        <CollectorTools />
         <DataNotes payload={payload} />
       </HomepageShell>
       <Footer />

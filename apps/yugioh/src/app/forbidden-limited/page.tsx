@@ -21,12 +21,12 @@ export const revalidate = 3600;
 const SITE_URL = siteUrl();
 
 export const metadata: Metadata = {
-  title: 'Yu-Gi-Oh! Forbidden & Limited list — TCG + OCG restricted cards',
+  title: 'Yu-Gi-Oh! Forbidden & Limited list - TCG + OCG restricted cards',
   description:
     'Every Yu-Gi-Oh! card currently marked Forbidden, Limited, or Semi-Limited in production catalogue metadata. TCG list rendered in full; OCG counts shown alongside. Cards link to full print histories and market values.',
   alternates: { canonical: `${SITE_URL}/forbidden-limited` },
   openGraph: {
-    title: 'Yu-Gi-Oh! Forbidden & Limited — TCG + OCG',
+    title: 'Yu-Gi-Oh! Forbidden & Limited - TCG + OCG',
     description:
       'Restricted Yu-Gi-Oh! cards per current catalogue metadata. TCG and OCG lists.',
     url: `${SITE_URL}/forbidden-limited`,
@@ -156,7 +156,7 @@ export default async function ForbiddenLimitedPage() {
           </div>
           <div className={styles.notice} style={{ marginTop: 16 }}>
             <strong>Data freshness caveat.</strong> Banlist state is
-            snapshotted whenever the underlying data source is refreshed — this
+            snapshotted whenever the underlying data source is refreshed - this
             is not a live ingest of Konami&apos;s announcements. Use this page
             for browsing collector-relevant restricted cards, not for
             tournament-legality on the day of a new banlist announcement.
@@ -165,13 +165,13 @@ export default async function ForbiddenLimitedPage() {
           </div>
           {data.identityDegraded ? (
             <div className={styles.notice}>
-              The Forbidden &amp; Limited list is temporarily unavailable —
+              The Forbidden &amp; Limited list is temporarily unavailable -
               the identity query timed out against our data source. Refresh in
               a moment; the page auto-recovers as soon as the source responds.
             </div>
           ) : data.pricingDegraded ? (
             <div className={styles.notice}>
-              Pricing lookups for this page are temporarily degraded — cards
+              Pricing lookups for this page are temporarily degraded - cards
               still render but USD prices may be missing. Retry in a moment.
             </div>
           ) : null}
@@ -197,7 +197,7 @@ export default async function ForbiddenLimitedPage() {
           <header className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>OCG snapshot</h2>
             <p className={styles.sectionCaption}>
-              Counts only — OCG full listing lives on the OCG-specific browse
+              Counts only - OCG full listing lives on the OCG-specific browse
               once we split game-scoped views. TCG differs from OCG in every
               cycle; the numbers below are for quick comparison.
             </p>
@@ -329,14 +329,14 @@ function FnlSection({
                   {entry.frameType ? (
                     <CardClassBadge cardClass={entry.frameType} />
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
                 <td>
                   {entry.attribute ? (
                     <AttributeChip attribute={entry.attribute} />
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
                 <td>
@@ -354,7 +354,7 @@ function FnlSection({
                       </span>
                     </Link>
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
                 <td>
@@ -369,7 +369,7 @@ function FnlSection({
                       })}
                     </span>
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
               </tr>
@@ -378,7 +378,7 @@ function FnlSection({
         </table>
         </div>
 
-        {/* Mobile stacked list — reuses the market-ranking row layout
+        {/* Mobile stacked list - reuses the market-ranking row layout
             (thumb + name + meta + price). Restriction status carried
             by the section badge above (Forbidden / Limited / Semi-
             Limited); no need to repeat it per-row. */}
@@ -387,7 +387,7 @@ function FnlSection({
             const href = `/card/${toCardSlug(entry.card.name)}`;
             return (
               <li key={entry.card.id} className={mobile.item}>
-                {/* Rank slot omitted — F&L rows are alphabetical, not
+                {/* Rank slot omitted - F&L rows are alphabetical, not
                     ranked. Empty span preserves grid columns. */}
                 <span />
                 <Link href={href} className={mobile.thumb} aria-label={entry.card.name}>
@@ -442,7 +442,7 @@ function FnlSection({
                       })}
                     </span>
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </div>
               </li>

@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const r = await getPublicDeckBySlug(slug);
   if (!r.ok) {
     return {
-      title: 'Deck not found — YGOPrices',
+      title: 'Deck not found - YGOPrices',
       robots: { index: false, follow: true },
     };
   }
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: { canonical },
     robots: { index: true, follow: true },
     openGraph: {
-      title: `${d.name} — Yu-Gi-Oh Deck List`,
+      title: `${d.name} - Yu-Gi-Oh Deck List`,
       description,
       url: canonical,
       type: 'article',

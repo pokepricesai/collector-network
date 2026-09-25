@@ -32,7 +32,7 @@ export function CollectionAnalytics({ analytics, depth }: Props) {
         />
         <BreakdownSection
           title="Value by rarity"
-          caption="Grouped by card rarity. Same currency assumptions as everywhere else — USD only, never FX-converted."
+          caption="Grouped by card rarity. Same currency assumptions as everywhere else - USD only, never FX-converted."
           buckets={breakdowns.byRarity}
         />
       </div>
@@ -45,7 +45,7 @@ export function CollectionAnalytics({ analytics, depth }: Props) {
         />
         <BreakdownSection
           title="By grader"
-          caption="Only graded holdings contribute. Grader values are literal — PSA, BGS, CGC, SGC."
+          caption="Only graded holdings contribute. Grader values are literal - PSA, BGS, CGC, SGC."
           buckets={breakdowns.byGrader}
           emptyLabel="No graded holdings yet."
         />
@@ -163,7 +163,7 @@ function GainLossSection({
       <p className={styles.sectionCaption}>
         Only shown for USD-priced holdings where both current market price and
         acquisition cost are known.
-        {hasNonUsdAcquisition && ' Non-USD purchases exist but are not compared — YGOPrices never FX-converts.'}
+        {hasNonUsdAcquisition && ' Non-USD purchases exist but are not compared - YGOPrices never FX-converts.'}
       </p>
       <div style={{ display: 'grid', gap: 12 }}>
         <div>
@@ -228,7 +228,7 @@ function MissingPriceSection({ items }: { items: CollectionListItem[] }) {
       ) : (
         <div className={styles.topList}>
           {items.slice(0, 20).map((it) => (
-            <TopHoldingRow key={it.row.id} item={it} amount={<span className={styles.topAmount}>—</span>} />
+            <TopHoldingRow key={it.row.id} item={it} amount={<span className={styles.topAmount}>-</span>} />
           ))}
           {items.length > 20 && (
             <p className={styles.barMeta}>
@@ -300,7 +300,7 @@ function PortfolioHistoryDecision({ depth }: { depth: PortfolioDepthCheck }) {
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Collection value over time</h3>
         <p className={styles.sectionCaption}>
-          Detected {depth.distinctDaysMax} days of usable per-printing history —
+          Detected {depth.distinctDaysMax} days of usable per-printing history -
           enough to plot the portfolio trend. This section will render the chart
           in the next iteration; the analytics scaffolding is deliberately
           shipped first so we never fabricate a curve before the data supports

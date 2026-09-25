@@ -35,7 +35,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const enriched = enrichWithSmartQuery(rawFilters);
   const structured = hasStructuredFilters(enriched);
   return {
-    title: 'Card Finder — YGOPrices',
+    title: 'Card Finder - YGOPrices',
     description:
       'Search every Yu-Gi-Oh! card by name, effect, attribute, monster type, level, ATK/DEF, rarity, set, Forbidden & Limited status and live USD price.',
     alternates: { canonical: `${SITE_URL}/card-finder` },
@@ -169,7 +169,7 @@ function FinderResults({
       {result.priceCapability === 'refused-large' && (
         <div className={styles.truncatedNote}>
           Price filter and price sort are disabled while the candidate set
-          holds more than 3,000 cards — narrow with another filter (attribute,
+          holds more than 3,000 cards - narrow with another filter (attribute,
           type, rarity, archetype …) and price ordering will re-enable.
         </div>
       )}
@@ -183,7 +183,7 @@ function FinderResults({
 
       {result.items.length === 0 ? (
         <div className={styles.empty}>
-          No cards match these filters. Try loosening a criterion — or
+          No cards match these filters. Try loosening a criterion - or
           <Link href="/card-finder"> clear all filters</Link>.
         </div>
       ) : (

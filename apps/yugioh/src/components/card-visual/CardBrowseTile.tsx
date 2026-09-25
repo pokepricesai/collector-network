@@ -35,7 +35,7 @@ export function CardBrowseTile(props: CardBrowseTileProps) {
     <Link
       href={href}
       className={styles.setCardTile}
-      aria-label={`${name} — ${rarity ?? 'card'}${
+      aria-label={`${name} - ${rarity ?? 'card'}${
         collectorNumber ? ` · ${collectorNumber}` : ''
       }`}
     >
@@ -60,7 +60,7 @@ export function CardBrowseTile(props: CardBrowseTileProps) {
               {bestUsdRetail.toLocaleString('en-US', { maximumFractionDigits: 2 })}
             </span>
           ) : (
-            <span className={styles.setCardPriceDim}>—</span>
+            <span className={styles.setCardPriceDim}>-</span>
           )}
           {bestEurRetail != null && (
             <span className={styles.setCardPriceAlt}>

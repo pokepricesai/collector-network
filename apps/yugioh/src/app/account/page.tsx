@@ -9,7 +9,7 @@ import { AccountDashboard } from './AccountDashboard';
 import styles from './Account.module.css';
 
 export const metadata: Metadata = {
-  title: 'Your account — YGOPrices',
+  title: 'Your account - YGOPrices',
   robots: { index: false, follow: true },
 };
 

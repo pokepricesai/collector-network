@@ -294,10 +294,10 @@ function Row({
         )}
       </td>
       <td data-label="Total value" className={styles.priceCell}>
-        {totalValueLabel ?? <span className={styles.priceNone}>—</span>}
+        {totalValueLabel ?? <span className={styles.priceNone}>-</span>}
       </td>
       <td data-label="Cost" className={styles.priceCell}>
-        {costLabel ?? <span className={styles.priceNone}>—</span>}
+        {costLabel ?? <span className={styles.priceNone}>-</span>}
       </td>
       <td data-label="Actions" className={styles.actionsCell}>
         <button type="button" className={styles.actionBtn} onClick={onEdit}>
@@ -565,7 +565,7 @@ function DeleteDialog({
       <div className={editStyles.dialog} style={{ maxWidth: 380 }}>
         <h2 className={editStyles.title}>Delete this holding?</h2>
         <p style={{ fontSize: 13, color: 'var(--ygo-text-muted)', margin: '0 0 12px 0' }}>
-          {item.card?.name ?? 'This holding'} — {item.row.quantity}×{' '}
+          {item.card?.name ?? 'This holding'} - {item.row.quantity}×{' '}
           {item.row.is_graded ? `${item.row.grader?.toUpperCase()} ${item.row.grade}` : 'raw'}.
           This cannot be undone.
         </p>

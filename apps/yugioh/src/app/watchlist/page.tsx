@@ -9,7 +9,7 @@ import styles from './Watchlist.module.css';
 
 // Owner-only view. noindex, follow — same policy as /collection.
 export const metadata: Metadata = {
-  title: 'Your watchlist — YGOPrices',
+  title: 'Your watchlist - YGOPrices',
   robots: { index: false, follow: true },
 };
 
@@ -40,7 +40,7 @@ export default async function WatchlistPage() {
           <h1 className={styles.title}>Your watchlist</h1>
           <p className={styles.subtitle}>
             Track cards you don&apos;t yet own. Every row pins to an exact
-            printing so 7D / 30D / 90D deltas are honest — never a raw price
+            printing so 7D / 30D / 90D deltas are honest - never a raw price
             compared against a graded price, never USD vs EUR, never one rarity
             vs another. Where a lookback boundary has no observation we show
             &ldquo;Not enough history&rdquo; rather than fabricate a number.

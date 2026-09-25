@@ -15,6 +15,7 @@ import {
   addWatchAction,
   removeWatchByPrintingAction,
 } from '../../app/watchlist/actions';
+import { analytics } from '../../lib/analytics';
 import { DialogPortal } from '../collection/DialogPortal';
 import btnStyles from './WatchButton.module.css';
 import dialogStyles from '../collection/AddToCollection.module.css';
@@ -72,6 +73,7 @@ export function WatchButton(props: Props) {
             if (isWatching) {
               const r = await removeWatchByPrintingAction(currentPid);
               if (r.ok) {
+                analytics.removeFromWatchlist();
                 setWatching(null);
                 router.refresh();
               }
@@ -81,6 +83,7 @@ export function WatchButton(props: Props) {
                 tcg_printing_id: currentPid,
               });
               if (r.ok) {
+                analytics.addToWatchlist();
                 setWatching(currentPid);
                 router.refresh();
               }
@@ -159,7 +162,7 @@ function PickPrintingDialog(props: DialogProps) {
         props.onClose();
         router.refresh();
       } else if (r.tableMissing) {
-        setError('Watchlists are almost ready — try again shortly.');
+        setError('Watchlists are almost ready - try again shortly.');
       } else {
         setError(r.error ?? 'Could not add to watchlist');
       }

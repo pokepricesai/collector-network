@@ -31,7 +31,7 @@ import styles from './page.module.css';
 // serves a 404, no leakage.
 
 export const metadata: Metadata = {
-  title: 'YGO design system — dev only',
+  title: 'YGO design system - dev only',
   robots: { index: false, follow: false, nocache: true },
 };
 
@@ -122,7 +122,7 @@ export default function DesignSystemPage() {
 
       {/* Attributes ─────────────────────────────────────────────── */}
       <section className={styles.section}>
-        <h2>Attributes — original iconography</h2>
+        <h2>Attributes - original iconography</h2>
         <p>Seven original glyphs. Not Konami&rsquo;s icons; distinct silhouettes so accessibility does not rely on colour.</p>
         <div className={styles.stripRow}>
           {ATTRIBUTES.map((a) => (
@@ -138,7 +138,7 @@ export default function DesignSystemPage() {
 
       {/* Rarity system ─────────────────────────────────────────── */}
       <section className={styles.section}>
-        <h2>Rarity — 17 families, {RARITY_SAMPLES.length} raw values mapped</h2>
+        <h2>Rarity - 17 families, {RARITY_SAMPLES.length} raw values mapped</h2>
         <p>
           Every production rarity string normalises to one of {RARITY_FAMILIES.length}{' '}
           semantic families. Unknown values fall through to <code className={styles.mono}>other</code>.
@@ -163,11 +163,11 @@ export default function DesignSystemPage() {
 
       {/* Editions ─────────────────────────────────────────────── */}
       <section className={styles.section}>
-        <h2>Edition — three-state (honest about NULL)</h2>
+        <h2>Edition - three-state (honest about NULL)</h2>
         <p>
           Production only stores <code className={styles.mono}>1st_edition</code>{' '}
           and <code className={styles.mono}>limited</code>. Everything else is NULL and is labelled
-          &ldquo;Unlimited / Unspecified&rdquo; — never a bare &ldquo;Unlimited&rdquo;.
+          &ldquo;Unlimited / Unspecified&rdquo; - never a bare &ldquo;Unlimited&rdquo;.
         </p>
         <div className={styles.stripRow}>
           {EDITION_SAMPLES.map((e, i) => (

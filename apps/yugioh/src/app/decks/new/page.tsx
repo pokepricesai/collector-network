@@ -7,7 +7,7 @@ import { createDeckFormAction } from '../actions';
 import styles from '../Decks.module.css';
 
 export const metadata: Metadata = {
-  title: 'New deck — YGOPrices',
+  title: 'New deck - YGOPrices',
   robots: { index: false, follow: true },
 };
 
@@ -30,7 +30,7 @@ export default async function NewDeckPage({ searchParams }: Props) {
             <h1 className={styles.title}>New deck</h1>
             <p className={styles.subtitle}>
               Give your deck a name and optional description. Format is TCG
-              for now — additional formats will be added as YGOPrices ingests
+              for now - additional formats will be added as YGOPrices ingests
               their F&amp;L data.
             </p>
           </div>

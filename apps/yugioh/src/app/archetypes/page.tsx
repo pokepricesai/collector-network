@@ -14,9 +14,9 @@ export const revalidate = 3600;
 const SITE_URL = siteUrl();
 
 export const metadata: Metadata = {
-  title: 'Yu-Gi-Oh! archetypes — every named strategy in the catalogue',
+  title: 'Yu-Gi-Oh! archetypes - every named strategy in the catalogue',
   description:
-    'Every Yu-Gi-Oh! archetype represented in the catalogue — from Blue-Eyes and Sky Striker to Snake-Eye, Purrely, Kashtira, Branded and beyond. Cards, sets, and market values per archetype.',
+    'Every Yu-Gi-Oh! archetype represented in the catalogue - from Blue-Eyes and Sky Striker to Snake-Eye, Purrely, Kashtira, Branded and beyond. Cards, sets, and market values per archetype.',
   alternates: { canonical: `${SITE_URL}/archetypes` },
 };
 

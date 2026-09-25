@@ -24,7 +24,7 @@ function isGraderFilter(v: string | undefined): v is GraderFilter {
 }
 
 export const metadata: Metadata = {
-  title: 'Most valuable graded Yu-Gi-Oh! slabs — printing-scoped attribution only',
+  title: 'Most valuable graded Yu-Gi-Oh! slabs - printing-scoped attribution only',
   description:
     'Highest-value graded Yu-Gi-Oh! slabs from the catalogue. PSA / BGS / CGC / SGC grade 10, printing-scoped attribution only. Card-family graded observations are shown separately on card pages.',
   alternates: { canonical: `${SITE_URL}/market/graded` },
@@ -59,7 +59,7 @@ export default async function MarketGradedPage({ searchParams }: PageProps) {
           <h1 className={styles.title}>Highest-value graded slabs</h1>
           <p className={styles.subtitle}>
             Grade 10 slabs across every graded printing in the catalogue. Only
-            attribution=&quot;printing&quot; quotes appear here — the ambiguous
+            attribution=&quot;printing&quot; quotes appear here - the ambiguous
             card-scoped graded market is shown on individual card pages in a
             clearly labelled separate panel.
           </p>

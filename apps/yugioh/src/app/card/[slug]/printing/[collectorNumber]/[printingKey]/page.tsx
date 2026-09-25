@@ -14,6 +14,7 @@ import { Stat, StatRow } from '../../../../../../components/Stat';
 import { Surface } from '../../../../../../components/Surface';
 import { AddToCollectionMount } from '../../../../../../components/collection/AddToCollectionMount';
 import { WatchButtonMount } from '../../../../../../components/watchlist/WatchButtonMount';
+import { AddToDeckMount } from '../../../../../../components/decks/AddToDeckMount';
 import { GradedStrip } from '../../../../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../../../../components/signature/RarityRefractorLine';
@@ -59,7 +60,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   );
   if (!data) {
     return {
-      title: 'Printing not found — YGOPrices',
+      title: 'Printing not found - YGOPrices',
       robots: { index: false, follow: true },
     };
   }
@@ -72,13 +73,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       : data.edition === 'limited'
       ? 'Limited Edition'
       : 'Unlimited / Unspecified';
-  const description = `${data.card.name} — ${data.set?.name ?? data.card.set_id} ${data.printing.collector_number ?? ''} ${data.card.rarity ?? ''} ${editionLabel}. Live retail and graded market values.`;
+  const description = `${data.card.name} - ${data.set?.name ?? data.card.set_id} ${data.printing.collector_number ?? ''} ${data.card.rarity ?? ''} ${editionLabel}. Live retail and graded market values.`;
   return {
     title: `${data.card.name} · ${data.printing.collector_number ?? ''} ${editionLabel}`,
     description,
     alternates: { canonical },
     openGraph: {
-      title: `${data.card.name} — ${data.printing.collector_number ?? ''}`,
+      title: `${data.card.name} - ${data.printing.collector_number ?? ''}`,
       description,
       url: canonical,
       type: 'article',
@@ -261,7 +262,7 @@ export default async function PrintingPage({ params }: Props) {
 
             {data.pricingDegraded && (
               <div className={styles.cardScopedNote}>
-                Pricing is temporarily unavailable for this printing — retry
+                Pricing is temporarily unavailable for this printing - retry
                 in a moment. Card metadata is still displayed.
               </div>
             )}
@@ -307,14 +308,22 @@ export default async function PrintingPage({ params }: Props) {
                     .join(' · '),
                 }}
               />
+              <AddToDeckMount
+                currentPathname={`/card/${data.logicalSlug}/printing/${encodeURIComponent(data.printing.collector_number ?? '')}/${encodeURIComponent(data.printingKey)}`}
+                cardName={data.card.name}
+                tcgPrintingId={data.printing.id}
+                extraOnly={['fusion', 'synchro', 'xyz', 'link'].includes(
+                  ((data.card.gamedata as { frameType?: string })?.frameType ?? '').toLowerCase(),
+                )}
+              />
             </div>
 
 
             {isMonster && (
               <div className={styles.stats}>
                 <StatRow>
-                  <Stat label="ATK" value={gd.atk ?? '—'} kind="atk" size="lg" />
-                  <Stat label="DEF" value={gd.def ?? '—'} kind="def" size="lg" />
+                  <Stat label="ATK" value={gd.atk ?? '-'} kind="atk" size="lg" />
+                  <Stat label="DEF" value={gd.def ?? '-'} kind="def" size="lg" />
                   {gd.linkRating != null ? (
                     <Stat label="Link" value={gd.linkRating} kind="link" />
                   ) : gd.level != null ? (
@@ -333,11 +342,11 @@ export default async function PrintingPage({ params }: Props) {
           </div>
         </section>
 
-        {/* Retail — exact printing */}
+        {/* Retail - exact printing */}
         <section className={styles.section}>
           <header className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>
-              Retail — this exact printing
+              Retail - this exact printing
             </h2>
             <p className={styles.sectionCaption}>
               Live marketplace listings tied to <code>{data.printing.id}</code>. Currency shown as-is.
@@ -416,11 +425,11 @@ export default async function PrintingPage({ params }: Props) {
           </section>
         )}
 
-        {/* Graded — exact printing (attribution='printing' only) */}
+        {/* Graded - exact printing (attribution='printing' only) */}
         <section className={styles.section}>
           <header className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>
-              Graded — this exact printing
+              Graded - this exact printing
             </h2>
             <p className={styles.sectionCaption}>
               PSA / BGS / CGC / SGC / market-aggregate quotes provided
@@ -448,7 +457,7 @@ export default async function PrintingPage({ params }: Props) {
                   <div key={i} className={styles.marketRow}>
                     <span className={styles.marketSource}>raw · {q.grade}</span>
                     <span className={styles.dim} style={{ fontSize: 11 }}>
-                      vol {q.cardSalesVolume ?? '—'}
+                      vol {q.cardSalesVolume ?? '-'}
                     </span>
                     <span className={styles.marketPrice}>
                       {q.currency === 'USD' ? '$' : ''}
@@ -462,7 +471,7 @@ export default async function PrintingPage({ params }: Props) {
           )}
         </section>
 
-        {/* Card-scoped graded panel — labelled and separated */}
+        {/* Card-scoped graded panel - labelled and separated */}
         {hasCardScopedGraded && (
           <section className={styles.section}>
             <header className={styles.sectionHeader}>
@@ -472,7 +481,7 @@ export default async function PrintingPage({ params }: Props) {
             </header>
             <div className={styles.cardScopedNote}>
               These graded observations apply to the wider{' '}
-              <strong>{data.card.name}</strong> — {data.printing.collector_number}{' '}
+              <strong>{data.card.name}</strong> - {data.printing.collector_number}{' '}
               {data.card.rarity ?? ''} card family. The source data does
               not identify which physical edition, finish or language
               the graded slabs came from, so we do NOT attribute them
@@ -487,7 +496,7 @@ export default async function PrintingPage({ params }: Props) {
               <div style={{ marginTop: 20 }}>
                 <PriceHistoryChart
                   title="Graded history · card family"
-                  subtitle="Card-scoped attribution — not tied to this exact printing."
+                  subtitle="Card-scoped attribution - not tied to this exact printing."
                   series={cardScopedHistory.gradedCard.map((s) => ({
                     key: `card:${s.key}`,
                     label: s.label,
@@ -587,7 +596,7 @@ function buildPrintingJsonLd(data: PhysicalPrintingData, siteUrl: string) {
     }));
   const product = {
     '@type': 'Product',
-    name: `${data.card.name} — ${data.printing.collector_number ?? ''}`,
+    name: `${data.card.name} - ${data.printing.collector_number ?? ''}`,
     description: data.card.rules_text ?? undefined,
     image:
       data.card.images?.large ??

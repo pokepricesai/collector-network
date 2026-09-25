@@ -27,9 +27,9 @@ export function PrintingFingerprint({
   language,
 }: PrintingFingerprintProps) {
   const editionMarker = normaliseEdition(edition);
-  const rarityLabel = rarity?.trim() || '—';
+  const rarityLabel = rarity?.trim() || '-';
   const langLabel = (language || '?').toUpperCase();
-  const codeLabel = collectorNumber?.trim() || '—';
+  const codeLabel = collectorNumber?.trim() || '-';
   const aria = `Printing ${codeLabel}, ${rarityLabel}, ${EDITION_ARIA[editionMarker]}, language ${langLabel}`;
   return (
     <div className={styles.pill} role="group" aria-label={aria}>

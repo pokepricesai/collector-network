@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@collector-network/auth';
 import { safeReturnTo } from '../../lib/return-to';
+import { analytics } from '../../lib/analytics';
 import styles from './Auth.module.css';
 
 interface Props {
@@ -44,6 +45,7 @@ export function AuthForm({ mode }: Props) {
           },
         });
         if (error) throw error;
+        analytics.signup();
         if (data.user && !data.session) {
           setInfo(
             'Check your email to confirm your account. You can close this tab and click the link from your inbox.',
@@ -99,7 +101,7 @@ export function AuthForm({ mode }: Props) {
       <p className={styles.subtitle}>
         {mode === 'sign-in'
           ? 'One YGOPrices account across collections, watchlists and decks. Browse without signing in whenever you want.'
-          : 'One YGOPrices account across collections, watchlists and decks. Free — no card required.'}
+          : 'One YGOPrices account across collections, watchlists and decks. Free - no card required.'}
       </p>
 
       <button

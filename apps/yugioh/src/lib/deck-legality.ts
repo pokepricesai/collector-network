@@ -99,7 +99,7 @@ export function evaluateDeckLegality(rows: readonly DeckCardInput[]): LegalityRe
         severity: 'error',
         code: 'over-copy-cap',
         message:
-          `${info.name} is ${capLabel} — max ${info.cap} across the whole deck; ` +
+          `${info.name} is ${capLabel} - max ${info.cap} across the whole deck; ` +
           `you have ${info.total}.`,
         card_key,
         card_name: info.name,

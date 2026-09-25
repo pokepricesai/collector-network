@@ -14,7 +14,7 @@ interface Props {
 
 // Unlisted route. NEVER indexable. Not in sitemaps.
 export const metadata: Metadata = {
-  title: 'Shared deck — YGOPrices',
+  title: 'Shared deck - YGOPrices',
   robots: { index: false, follow: true },
 };
 

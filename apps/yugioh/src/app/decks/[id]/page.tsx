@@ -16,7 +16,7 @@ interface Props {
 // Private deck route. noindex, follow — public deck sharing is a
 // later slice. Not in sitemaps.
 export const metadata: Metadata = {
-  title: 'Deck builder — YGOPrices',
+  title: 'Deck builder - YGOPrices',
   robots: { index: false, follow: true },
 };
 

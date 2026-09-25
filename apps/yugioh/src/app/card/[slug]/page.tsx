@@ -13,6 +13,7 @@ import { Surface } from '../../../components/Surface';
 import { AddToCollectionMount } from '../../../components/collection/AddToCollectionMount';
 import type { PrintingOption } from '../../../components/collection/AddToCollection';
 import { WatchButtonMount } from '../../../components/watchlist/WatchButtonMount';
+import { AddToDeckMount } from '../../../components/decks/AddToDeckMount';
 import { GradedStrip } from '../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
@@ -43,20 +44,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getYugiohLogicalCardBySlug(slug);
   if (!data) {
     return {
-      title: 'Card not found — YGOPrices',
+      title: 'Card not found - YGOPrices',
       robots: { index: false, follow: true },
     };
   }
   const canonical = `${siteUrl()}/card/${data.slug}`;
   const rarityBits =
     data.rarityRange.length > 0 ? ` · ${data.rarityRange.slice(0, 3).join(', ')}` : '';
-  const description = `${data.name} — every printing, rarity and edition. Raw retail plus graded market values on the Yu-Gi-Oh! collector catalogue.${rarityBits}`;
+  const description = `${data.name} - every printing, rarity and edition. Raw retail plus graded market values on the Yu-Gi-Oh! collector catalogue.${rarityBits}`;
   return {
-    title: `${data.name} — printings, prices, graded values`,
+    title: `${data.name} - printings, prices, graded values`,
     description,
     alternates: { canonical },
     openGraph: {
-      title: `${data.name} — YGOPrices`,
+      title: `${data.name} - YGOPrices`,
       description,
       url: canonical,
       type: 'article',
@@ -175,8 +176,8 @@ export default async function LogicalCardPage({ params }: Props) {
             {isMonster && (
               <div className={styles.stats}>
                 <StatRow>
-                  <Stat label="ATK" value={gd.atk ?? '—'} kind="atk" size="lg" />
-                  <Stat label="DEF" value={gd.def ?? '—'} kind="def" size="lg" />
+                  <Stat label="ATK" value={gd.atk ?? '-'} kind="atk" size="lg" />
+                  <Stat label="DEF" value={gd.def ?? '-'} kind="def" size="lg" />
                   {gd.linkRating != null ? (
                     <Stat label="Link" value={gd.linkRating} kind="link" />
                   ) : gd.level != null ? (
@@ -235,7 +236,7 @@ export default async function LogicalCardPage({ params }: Props) {
 
             {data.pricingDegraded && (
               <div className={styles.cardScopedNote}>
-                Pricing is temporarily unavailable for parts of this card —
+                Pricing is temporarily unavailable for parts of this card -
                 retry in a moment. Card metadata is still displayed.
               </div>
             )}
@@ -253,11 +254,19 @@ export default async function LogicalCardPage({ params }: Props) {
                 cardName={data.name}
                 availablePrintings={printingOptions}
               />
+              <AddToDeckMount
+                currentPathname={`/card/${data.slug}`}
+                cardName={data.name}
+                extraOnly={['fusion', 'synchro', 'xyz', 'link'].includes(
+                  ((data.variants[0]?.card.gamedata as { frameType?: string } | undefined)
+                    ?.frameType ?? '').toLowerCase(),
+                )}
+              />
             </div>
           </div>
         </section>
 
-        {/* Pricing summary — card level */}
+        {/* Pricing summary - card level */}
         <section className={styles.section}>
           <header className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Retail market · this card family</h2>
@@ -312,7 +321,7 @@ export default async function LogicalCardPage({ params }: Props) {
           </div>
         </section>
 
-        {/* Card-scoped graded market — ALWAYS in its own labelled panel */}
+        {/* Card-scoped graded market - ALWAYS in its own labelled panel */}
         <CardScopedGradedSection data={data} />
 
         {/* All printings */}
@@ -398,7 +407,7 @@ async function CardScopedGradedSection({ data }: { data: LogicalCardData }) {
         <p className={styles.sectionCaption}>
           These graded observations apply to the wider {data.name} card
           family. The source data does not identify which physical
-          edition / finish / language the slabs came from — they are shown
+          edition / finish / language the slabs came from - they are shown
           here for context and never attributed to a specific printing.
         </p>
       </header>
@@ -410,7 +419,7 @@ async function CardScopedGradedSection({ data }: { data: LogicalCardData }) {
         <div style={{ marginTop: 20 }}>
           <PriceHistoryChart
             title="Graded price history · card family"
-            subtitle="Card-scoped attribution — not tied to any specific printing."
+            subtitle="Card-scoped attribution - not tied to any specific printing."
             series={chartSeries}
             daysCovered={daysCovered}
             footerNote={

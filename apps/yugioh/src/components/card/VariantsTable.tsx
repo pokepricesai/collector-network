@@ -71,7 +71,7 @@ export function VariantsTable({
                 </td>
                 <td>
                   <span className={styles.setCode}>
-                    {v.printing.collector_number ?? '—'}
+                    {v.printing.collector_number ?? '-'}
                   </span>
                 </td>
                 <td>
@@ -95,7 +95,7 @@ export function VariantsTable({
                       })}
                     </span>
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
                 <td style={{ textAlign: 'right' }}>
@@ -106,7 +106,7 @@ export function VariantsTable({
                       })}
                     </span>
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
               </tr>
@@ -116,7 +116,7 @@ export function VariantsTable({
       </table>
       </div>
 
-      {/* Mobile stacked list — hidden ≥ 768px via CSS. Preserves
+      {/* Mobile stacked list - hidden ≥ 768px via CSS. Preserves
           every column from the desktop table but stacks them so no
           column can push the document horizontally. Thumbnail is
           included when the underlying card image is available. */}
@@ -143,7 +143,7 @@ export function VariantsTable({
                   : undefined
               }
             >
-              {/* Rank slot omitted — variants have no rank; empty span
+              {/* Rank slot omitted - variants have no rank; empty span
                   keeps the shared grid columns aligned. */}
               <span />
               {isActive ? (
@@ -179,7 +179,7 @@ export function VariantsTable({
                 )}
                 <span className={mobile.metaLine}>
                   <span className={mobile.setCode}>
-                    {v.printing.collector_number ?? '—'}
+                    {v.printing.collector_number ?? '-'}
                   </span>
                   {releaseYear && (
                     <>
@@ -208,7 +208,7 @@ export function VariantsTable({
                     })}
                   </span>
                 ) : (
-                  <span className={styles.dim}>—</span>
+                  <span className={styles.dim}>-</span>
                 )}
                 {v.bestEurRetail?.price != null && (
                   <span className={mobile.priceSuffix}>

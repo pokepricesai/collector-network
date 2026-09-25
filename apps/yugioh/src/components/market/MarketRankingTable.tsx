@@ -106,7 +106,7 @@ export function RetailRankingTable({ entries, showRank = true, currency }: Retai
                       </span>
                     </Link>
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
                 <td>
@@ -136,7 +136,7 @@ export function RetailRankingTable({ entries, showRank = true, currency }: Retai
       </table>
       </div>
 
-      {/* Mobile stacked list — hidden ≥ 768px via CSS. */}
+      {/* Mobile stacked list - hidden ≥ 768px via CSS. */}
       <ol className={mobile.list} aria-label={`Top ${entries.length} by ${currency} retail`}>
         {entries.map((entry, i) => {
           const printingHref = printingHrefFor(entry);
@@ -284,7 +284,7 @@ export function GradedRankingTable({ entries }: GradedTableProps) {
                       {entry.set.name}
                     </Link>
                   ) : (
-                    <span className={styles.dim}>—</span>
+                    <span className={styles.dim}>-</span>
                   )}
                 </td>
                 <td>
@@ -318,7 +318,7 @@ export function GradedRankingTable({ entries }: GradedTableProps) {
       </table>
       </div>
 
-      {/* Mobile stacked list — hidden ≥ 768px via CSS. */}
+      {/* Mobile stacked list - hidden ≥ 768px via CSS. */}
       <ol className={mobile.list} aria-label={`Top ${entries.length} graded`}>
         {entries.map((entry, i) => {
           const printingHref = printingHrefFor(entry);

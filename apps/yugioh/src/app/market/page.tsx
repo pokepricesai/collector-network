@@ -13,9 +13,9 @@ export const revalidate = 900;
 const SITE_URL = siteUrl();
 
 export const metadata: Metadata = {
-  title: 'Yu-Gi-Oh! market — most valuable printings, graded slabs, vintage highlights',
+  title: 'Yu-Gi-Oh! market - most valuable printings, graded slabs, vintage highlights',
   description:
-    'The current Yu-Gi-Oh! collector market at a glance. Most valuable printings, top graded slabs (exact-printing attribution only), vintage highlights. No fake trend data — only live prices from the shared catalogue.',
+    'The current Yu-Gi-Oh! collector market at a glance. Most valuable printings, top graded slabs (exact-printing attribution only), vintage highlights. No fake trend data - only live prices from the shared catalogue.',
   alternates: { canonical: `${SITE_URL}/market` },
 };
 
@@ -32,13 +32,13 @@ export default async function MarketHomePage() {
           <p className={styles.subtitle}>
             A collector-first view of live pricing. Rankings are recomputed
             from the shared catalogue every 15 minutes. Graded prices are
-            restricted to exact-printing attribution — no ambiguous
+            restricted to exact-printing attribution - no ambiguous
             card-scoped quotes leak into these rankings.
           </p>
           <div className={styles.notice} style={{ marginTop: 16 }}>
             No trend / momentum / percentage-change data appears anywhere on
             this page. Our forward-accumulating snapshot history is not yet
-            deep enough to publish honest movers — a static &ldquo;most
+            deep enough to publish honest movers - a static &ldquo;most
             valuable right now&rdquo; view is more useful than fabricated
             gainers.
           </div>
@@ -70,7 +70,7 @@ export default async function MarketHomePage() {
             <p className={styles.sectionCaption} style={{ marginBottom: 12 }}>
               Grade 10 slabs, printing-scoped attribution only. Card-family
               graded observations are shown on individual card pages in a
-              separate panel — never mixed into these rankings.
+              separate panel - never mixed into these rankings.
             </p>
             <GradedRankingTable entries={data.topGraded.slice(0, 10)} />
           </section>
@@ -118,7 +118,7 @@ export default async function MarketHomePage() {
             <Link href="/sets" style={{ textDecoration: 'none' }}>
               <Surface variant="card" className={styles.directoryTile}>
                 <h3 className={styles.tileTitle}>Every set</h3>
-                <p className={styles.subtitle}>661 sets — boosters, structure decks, tins, promos.</p>
+                <p className={styles.subtitle}>661 sets - boosters, structure decks, tins, promos.</p>
               </Surface>
             </Link>
             <Link href="/rarities" style={{ textDecoration: 'none' }}>

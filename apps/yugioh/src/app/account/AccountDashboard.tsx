@@ -73,7 +73,7 @@ export async function AccountDashboard() {
               </span>
             </>
           ) : (
-            <span className={styles.valueMuted}>—</span>
+            <span className={styles.valueMuted}>-</span>
           )}
         </div>
         <div className={styles.tile}>
@@ -107,7 +107,7 @@ export async function AccountDashboard() {
                 ${mostValuable.totalValueUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </span>
               <span className={styles.meta}>
-                {mostValuable.item.card?.name ?? '—'} · ×{mostValuable.item.row.quantity}
+                {mostValuable.item.card?.name ?? '-'} · ×{mostValuable.item.row.quantity}
               </span>
             </>
           ) : (
@@ -166,7 +166,7 @@ export async function AccountDashboard() {
                   <span className={styles.recentAmount}>
                     {w.currentPrice != null && w.currentCurrency
                       ? `${w.currentCurrency === 'USD' ? '$' : '€'}${w.currentPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-                      : '—'}
+                      : '-'}
                   </span>
                 </div>
               );

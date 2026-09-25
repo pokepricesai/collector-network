@@ -171,7 +171,7 @@ function SaveIndicator({ state, pending }: { state: SaveState; pending: boolean 
       : state === 'saved'
       ? 'Saved'
       : state === 'error'
-      ? 'Save failed — retry'
+      ? 'Save failed - retry'
       : 'Saved';
   const cls =
     pending || state === 'saving'
@@ -421,7 +421,7 @@ function SectionColumn({
         </span>
       </header>
       {cards.length === 0 ? (
-        <div className={styles.emptySection}>Empty — add cards from search.</div>
+        <div className={styles.emptySection}>Empty - add cards from search.</div>
       ) : (
         <div className={styles.deckList}>
           {cards.map((c) => (
@@ -466,7 +466,7 @@ function DeckRow({
   const priceLabel =
     card.unitPriceUsd != null
       ? `$${card.unitPriceUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-      : '—';
+      : '-';
   return (
     <div className={styles.deckRow}>
       {thumbSrc ? (
@@ -669,13 +669,13 @@ function ValueCard({ detail }: { detail: DeckDetail }) {
           </div>
           {detail.missingPriceCount > 0 && (
             <div className={styles.valueMuted}>
-              {detail.missingPriceCount} card{detail.missingPriceCount === 1 ? '' : 's'} without a current market price — excluded from totals.
+              {detail.missingPriceCount} card{detail.missingPriceCount === 1 ? '' : 's'} without a current market price - excluded from totals.
             </div>
           )}
         </>
       ) : (
         <div className={styles.valueMuted}>
-          No priced cards yet. Values use printing-scoped USD retail —
+          No priced cards yet. Values use printing-scoped USD retail -
           preferred printing first, then a deterministic representative.
         </div>
       )}

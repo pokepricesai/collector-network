@@ -7,10 +7,13 @@ import styles from './Header.module.css';
 
 interface NavItem {
   label: string;
-  href?: string;
-  disabled?: boolean;
+  href: string;
 }
 
+// Primary catalogue / product routes. Owner-only surfaces
+// (Collection, Watchlist, Account, Settings) live in AccountMenu.
+// Decks belongs in the top nav because signed-out users can also
+// browse public decks by URL and land in the library on sign-in.
 const NAV: NavItem[] = [
   { label: 'Finder', href: '/card-finder' },
   { label: 'Sets', href: '/sets' },
@@ -18,6 +21,7 @@ const NAV: NavItem[] = [
   { label: 'Archetypes', href: '/archetypes' },
   { label: 'Market', href: '/market' },
   { label: 'F&L', href: '/forbidden-limited' },
+  { label: 'Decks', href: '/decks' },
 ];
 
 export async function Header({ compactSearch = true }: { compactSearch?: boolean }) {
@@ -31,7 +35,7 @@ export async function Header({ compactSearch = true }: { compactSearch?: boolean
   return (
     <header className={styles.header}>
       <div className={styles.row}>
-        <Link href="/" className={styles.brand} aria-label="YGOPrices — home">
+        <Link href="/" className={styles.brand} aria-label="YGOPrices - home">
           {/* Native <img> so we do not need to configure the Next
               image loader for a local static asset. Intrinsic size is
               2172×724; width/height reserve aspect ratio and prevent
@@ -54,22 +58,11 @@ export async function Header({ compactSearch = true }: { compactSearch?: boolean
           )}
         </div>
         <nav className={styles.nav} aria-label="Primary">
-          {NAV.map((item) =>
-            item.disabled || !item.href ? (
-              <span
-                key={item.label}
-                className={styles.navItem}
-                aria-disabled="true"
-                title="Coming in a later slice"
-              >
-                {item.label}
-              </span>
-            ) : (
-              <Link key={item.label} href={item.href} className={styles.navItem}>
-                {item.label}
-              </Link>
-            ),
-          )}
+          {NAV.map((item) => (
+            <Link key={item.label} href={item.href} className={styles.navItem}>
+              {item.label}
+            </Link>
+          ))}
         </nav>
         <div className={styles.accountSlot}>
           <AccountMenu

@@ -24,6 +24,7 @@ import {
   type PurchaseCurrency,
 } from '../../lib/collection-types';
 import { addCollectionAction } from '../../app/collection/actions';
+import { analytics } from '../../lib/analytics';
 import { DialogPortal } from './DialogPortal';
 import styles from './AddToCollection.module.css';
 
@@ -152,6 +153,7 @@ function Dialog(props: DialogProps) {
         notes: notes.trim() || null,
       });
       if (result.ok) {
+        analytics.addToCollection({ section: tab });
         props.onClose();
         router.refresh();
       } else if (result.tableMissing) {
@@ -343,7 +345,7 @@ function Dialog(props: DialogProps) {
           {error && <p className={styles.error}>{error}</p>}
           {tableMissing && (
             <p className={styles.notice}>
-              Collections are almost ready — the shared database is being
+              Collections are almost ready - the shared database is being
               provisioned. Try again shortly.
             </p>
           )}

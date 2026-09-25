@@ -225,7 +225,7 @@ function LegalityCard({ deck }: { deck: PublicDeckView }) {
       <h3 className={styles.cardTitle}>Legality · {label}</h3>
       {deck.legality.issues.length === 0 ? (
         <div className={styles.legalityAllGood}>
-          Every rule checks out — evaluated against the current TCG F&amp;L data.
+          Every rule checks out - evaluated against the current TCG F&amp;L data.
         </div>
       ) : (
         <div className={styles.legalityIssues}>
@@ -318,7 +318,7 @@ function ValueCard({ deck }: { deck: PublicDeckView }) {
           </div>
           {deck.missingPriceCount > 0 && (
             <div className={styles.valueMuted}>
-              {deck.missingPriceCount} card{deck.missingPriceCount === 1 ? '' : 's'} without a current market price — excluded from totals.
+              {deck.missingPriceCount} card{deck.missingPriceCount === 1 ? '' : 's'} without a current market price - excluded from totals.
             </div>
           )}
         </>

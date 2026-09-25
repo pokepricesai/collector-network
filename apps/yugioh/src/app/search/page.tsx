@@ -17,7 +17,7 @@ import styles from './page.module.css';
 // set-code match goes to /card/[slug]/printing/[collector]/[key].
 
 export const metadata: Metadata = {
-  title: 'Search — YGOPrices',
+  title: 'Search - YGOPrices',
   robots: { index: false, follow: true }, // don't index search-result URLs
 };
 
@@ -262,7 +262,7 @@ function VariantsTable({ variants, cardSlug }: { variants: CardVariant[]; cardSl
               <td>{setCell}</td>
               <td>
                 <span className={styles.setCode}>
-                  {v.card.collector_number ?? '—'}
+                  {v.card.collector_number ?? '-'}
                 </span>
               </td>
               <td>
@@ -281,7 +281,7 @@ function VariantsTable({ variants, cardSlug }: { variants: CardVariant[]; cardSl
                     ${v.bestUsdQuote.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </span>
                 ) : (
-                  <span className={styles.dim}>—</span>
+                  <span className={styles.dim}>-</span>
                 )}
               </td>
               <td style={{ textAlign: 'right' }}>
@@ -290,7 +290,7 @@ function VariantsTable({ variants, cardSlug }: { variants: CardVariant[]; cardSl
                     €{v.bestEurQuote.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </span>
                 ) : (
-                  <span className={styles.dim}>—</span>
+                  <span className={styles.dim}>-</span>
                 )}
               </td>
             </tr>
@@ -299,7 +299,7 @@ function VariantsTable({ variants, cardSlug }: { variants: CardVariant[]; cardSl
         {variants.length > 10 && (
           <tr>
             <td colSpan={6} className={styles.dim}>
-              +{variants.length - 10} more variants — open the card page
+              +{variants.length - 10} more variants - open the card page
               to browse everything.
             </td>
           </tr>

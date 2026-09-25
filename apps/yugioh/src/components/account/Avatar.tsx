@@ -120,7 +120,7 @@ function AvatarSvg({ avatarKey }: { avatarKey: AvatarKey }) {
     case 'eye':
       return (
         <svg viewBox="0 0 40 40" className={styles.svg} aria-hidden focusable="false">
-          {/* Millennium-inspired eye glyph — deliberately abstract */}
+          {/* Millennium-inspired eye glyph - deliberately abstract */}
           <path
             d="M6 20 Q20 8 34 20 Q20 32 6 20 Z"
             fill="none"

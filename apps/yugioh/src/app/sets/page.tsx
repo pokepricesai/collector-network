@@ -14,9 +14,9 @@ const SITE_URL = siteUrl();
 type Sort = 'newest' | 'oldest' | 'alpha' | 'count';
 
 export const metadata: Metadata = {
-  title: 'Yu-Gi-Oh! sets — every booster, tin and structure deck',
+  title: 'Yu-Gi-Oh! sets - every booster, tin and structure deck',
   description:
-    'Browse every Yu-Gi-Oh! set indexed in our catalogue. Newest boosters, structure decks, tins, promo packs — sortable by release date, name, or card count.',
+    'Browse every Yu-Gi-Oh! set indexed in our catalogue. Newest boosters, structure decks, tins, promo packs - sortable by release date, name, or card count.',
   alternates: { canonical: `${SITE_URL}/sets` },
 };
 
@@ -116,7 +116,7 @@ export default async function SetsDirectoryPage({ searchParams }: PageProps) {
                           year: 'numeric',
                           month: 'short',
                         })
-                      : '—'}
+                      : '-'}
                   </span>
                 </div>
                 <div className={styles.tileMeta}>

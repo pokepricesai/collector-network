@@ -29,18 +29,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getYugiohArchetypeBySlug(slug);
   if (!data) {
     return {
-      title: 'Archetype not found — YGOPrices',
+      title: 'Archetype not found - YGOPrices',
       robots: { index: false, follow: true },
     };
   }
   const canonical = `${siteUrl()}/archetype/${slug}`;
-  const description = `${data.name} — ${data.cards.length.toLocaleString('en-US')} member card variants across ${data.setsRepresented.length} recently-indexed sets. Full member list, breakdown by monster type, and market values on the Yu-Gi-Oh! collector catalogue.`;
+  const description = `${data.name} - ${data.cards.length.toLocaleString('en-US')} member card variants across ${data.setsRepresented.length} recently-indexed sets. Full member list, breakdown by monster type, and market values on the Yu-Gi-Oh! collector catalogue.`;
   return {
-    title: `${data.name} archetype — Yu-Gi-Oh! cards, sets, prices`,
+    title: `${data.name} archetype - Yu-Gi-Oh! cards, sets, prices`,
     description,
     alternates: { canonical },
     openGraph: {
-      title: `${data.name} — Yu-Gi-Oh! archetype`,
+      title: `${data.name} - Yu-Gi-Oh! archetype`,
       description,
       url: canonical,
       type: 'article',
@@ -84,7 +84,7 @@ export default async function ArchetypePage({ params }: Props) {
           </div>
           {data.pricingDegraded && (
             <div className={styles.notice}>
-              Pricing is temporarily unavailable for parts of this archetype — retry in a moment.
+              Pricing is temporarily unavailable for parts of this archetype - retry in a moment.
             </div>
           )}
         </header>
@@ -204,7 +204,7 @@ export default async function ArchetypePage({ params }: Props) {
                               year: 'numeric',
                               month: 'short',
                             })
-                          : '—'}
+                          : '-'}
                       </span>
                     </div>
                     <div className={styles.tileMeta}>
@@ -281,7 +281,7 @@ function buildJsonLd(data: ArchetypePageData, siteOrigin: string) {
       },
       {
         '@type': 'CollectionPage',
-        name: `${data.name} — Yu-Gi-Oh! archetype`,
+        name: `${data.name} - Yu-Gi-Oh! archetype`,
         url,
         numberOfItems: data.cards.length,
       },

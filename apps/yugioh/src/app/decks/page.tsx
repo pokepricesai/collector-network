@@ -10,7 +10,7 @@ import styles from './Decks.module.css';
 // Private page. noindex, follow — same policy as /collection and
 // /watchlist. Private routes are not in sitemaps.
 export const metadata: Metadata = {
-  title: 'Your decks — YGOPrices',
+  title: 'Your decks - YGOPrices',
   robots: { index: false, follow: true },
 };
 
@@ -41,7 +41,7 @@ export default async function DecksPage() {
           <p className={styles.subtitle}>
             Build Main / Extra / Side decks with deterministic
             Forbidden &amp; Limited legality. Gameplay identity is kept
-            separate from collectible printing — pick a preferred
+            separate from collectible printing - pick a preferred
             printing per card for display and value without affecting
             legality.
           </p>

@@ -12,6 +12,7 @@ import {
   regenerateTokenAction,
   setVisibilityAction,
 } from '../share-actions';
+import { analytics } from '../../../lib/analytics';
 import type { Visibility } from '../../../lib/deck-sharing';
 import styles from './SharingPanel.module.css';
 
@@ -49,6 +50,13 @@ export function SharingPanel(props: Props) {
       if (!r.ok) {
         setError(r.error ?? 'Could not change visibility');
         return;
+      }
+      if (r.visibility === 'public' || r.visibility === 'unlisted') {
+        // Fire only on transitions INTO a shared state so we don't
+        // count every private->private no-op or private-clean-up.
+        if (props.visibility !== r.visibility) {
+          analytics.deckPublished({ visibility: r.visibility });
+        }
       }
       setVisibility(r.visibility ?? next);
       setPublicSlug(r.public_slug ?? null);
@@ -101,7 +109,7 @@ export function SharingPanel(props: Props) {
       <p className={styles.caption}>
         Private stays owner-only. Unlisted works only with the correct
         share URL and is never indexed. Public is discoverable and
-        indexable — the URL stays stable when you rename.
+        indexable - the URL stays stable when you rename.
       </p>
 
       <div className={styles.pills} role="tablist" aria-label="Visibility">

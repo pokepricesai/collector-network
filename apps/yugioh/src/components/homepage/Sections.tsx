@@ -40,15 +40,15 @@ export function Section({ title, meta, children }: SectionProps) {
 export function Hero() {
   return (
     <section className={styles.hero}>
-      <p className={styles.eyebrow}>Yu-Gi-Oh! · collector catalogue + market</p>
+      <p className={styles.eyebrow}>Yu-Gi-Oh! · collector catalogue + market + tools</p>
       <h1 className={styles.heroTitle}>
-        Every Yu-Gi-Oh!&nbsp;card, printing and rarity — with live prices.
+        Every Yu-Gi-Oh!&nbsp;card, printing and rarity. Live prices. Real tools.
       </h1>
       <p className={styles.heroSub}>
-        The collector-first Yu-Gi-Oh! reference. Full print history and
-        rarity ladder for every card, raw retail alongside graded slab
-        values, per-set checklists, Forbidden &amp; Limited, and a market
-        overview that never fabricates trend data.
+        Full print history and rarity ladder for every card, raw retail
+        alongside graded slab values, per-set checklists, Forbidden &amp;
+        Limited, personal collection and watchlist, and a deterministic
+        deck builder you can share as a public URL.
       </p>
       <div className={styles.heroSearch}>
         <SearchBar size="lg" autoFocus placeholder="e.g. Blue-Eyes White Dragon, LOB-001, Sky Striker" />
@@ -240,7 +240,7 @@ export function GradedHighlights({ items }: { items: GradedHighlight[] }) {
         <p className={styles.notice}>
           Graded 1st-Edition slabs load into this section as they
           refresh. Vintage graded pricing is held back pending an ingest
-          correction — see the site data notes for the reason.
+          correction - see the site data notes for the reason.
         </p>
       </Section>
     );
@@ -344,6 +344,50 @@ export function RarityDiscovery({ entries }: { entries: RarityDiscoveryEntry[] }
   );
 }
 
+// ── Collector tools ────────────────────────────────────────────────
+//
+// Compact discovery of the account-scoped surfaces that live behind
+// sign-in (Collection, Watchlist, Decks). Anon users see the same
+// tiles; the linked routes send them through sign-in with a safe
+// returnTo. Deliberately restrained - four tiles, no marketing copy.
+
+export function CollectorTools() {
+  return (
+    <Section title="Collector tools">
+      <div className={styles.toolsGrid}>
+        <Link href="/collection" className={styles.toolTile}>
+          <span className={styles.toolName}>My Collection</span>
+          <span className={styles.toolMeta}>
+            Track raw + graded holdings by exact printing. Value, gain/loss,
+            breakdowns.
+          </span>
+        </Link>
+        <Link href="/watchlist" className={styles.toolTile}>
+          <span className={styles.toolName}>Watchlist</span>
+          <span className={styles.toolMeta}>
+            Follow printings you don&apos;t yet own. 7D / 30D / 90D movement.
+            Target prices.
+          </span>
+        </Link>
+        <Link href="/decks" className={styles.toolTile}>
+          <span className={styles.toolName}>Deck Builder</span>
+          <span className={styles.toolMeta}>
+            Main / Extra / Side with deterministic Forbidden &amp; Limited
+            legality and deck value.
+          </span>
+        </Link>
+        <Link href="/decks/new" className={styles.toolTile}>
+          <span className={styles.toolName}>Share a deck</span>
+          <span className={styles.toolMeta}>
+            Publish public decks or share unlisted URLs. Copy any deck into
+            your own with one click.
+          </span>
+        </Link>
+      </div>
+    </Section>
+  );
+}
+
 // ── Data notes ─────────────────────────────────────────────────────
 
 export function DataNotes({ payload }: { payload: HomepagePayload }) {
@@ -355,7 +399,7 @@ export function DataNotes({ payload }: { payload: HomepagePayload }) {
         images are cached by TCGGraph. Retail prices refresh through
         TCGplayer and Cardmarket ingest. Graded values come from public
         grader and marketplace observations. Currency is never converted
-        — USD and EUR are shown as-is.
+        - USD and EUR are shown as-is.
       </p>
       <p className={styles.notice} style={{ marginTop: 8 }}>
         Browse the full{' '}
@@ -385,7 +429,7 @@ export function DataNotes({ payload }: { payload: HomepagePayload }) {
           every archetype
         </Link>
         . No trend / momentum / percentage-change data appears anywhere on
-        the site — our snapshot history is not yet deep enough to publish
+        the site - our snapshot history is not yet deep enough to publish
         honest movers.
       </p>
       {payload.errors.length > 0 && (

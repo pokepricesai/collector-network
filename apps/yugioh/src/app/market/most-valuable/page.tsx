@@ -30,7 +30,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
       ? `${SITE_URL}/market/most-valuable`
       : `${SITE_URL}/market/most-valuable?currency=EUR`;
   return {
-    title: `Most valuable Yu-Gi-Oh! printings — ${currency} retail ranking`,
+    title: `Most valuable Yu-Gi-Oh! printings - ${currency} retail ranking`,
     description: `Top ${RANKING_LIMIT} highest-priced Yu-Gi-Oh! printings by current ${currency} retail. Every row links to the exact printing and card page.`,
     alternates: { canonical },
   };

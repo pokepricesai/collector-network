@@ -6,7 +6,7 @@ import { AuthForm } from '../AuthForm';
 import styles from '../Auth.module.css';
 
 export const metadata: Metadata = {
-  title: 'Create account — YGOPrices',
+  title: 'Create account - YGOPrices',
   robots: { index: false, follow: true },
 };
 
