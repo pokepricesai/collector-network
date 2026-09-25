@@ -35,3 +35,29 @@ export {
 export { readMiddlewareSession } from './middleware';
 
 export type { CollectorNetworkUser } from './types';
+
+// Slice CN-A — shared customer / membership / consent API.
+// Every site (YGOPrices, PokePrices, MTGPrices, One Piece,
+// Lorcana) uses the same wrappers so the DB contract stays
+// enforced in one place. See docs/network/schema-request-cn-a.md.
+export {
+  COLLECTOR_ORIGIN_SITE_KEY,
+  getMarketingConsentEvents,
+  getMarketingPreferences,
+  getUserSiteMemberships,
+  recordOriginFromSignup,
+  recordSiteAuthentication,
+  recordSiteVisit,
+  setNetworkMarketingPreference,
+  setSiteMarketingPreference,
+} from './customer';
+export type {
+  ConsentAction,
+  ConsentEvent,
+  ConsentScope,
+  CustomerResult,
+  MarketingPreference,
+  SiteCode,
+  SiteMembership,
+  UserConsentSource,
+} from './customer';

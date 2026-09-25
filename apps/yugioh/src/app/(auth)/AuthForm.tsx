@@ -7,10 +7,31 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { createBrowserSupabase } from '@collector-network/auth';
+import {
+  COLLECTOR_ORIGIN_SITE_KEY,
+  createBrowserSupabase,
+  recordOriginFromSignup,
+  recordSiteAuthentication,
+} from '@collector-network/auth';
 import { safeReturnTo } from '../../lib/return-to';
 import { analytics } from '../../lib/analytics';
 import styles from './Auth.module.css';
+
+// This site's Collector Network code, per collector_sites.code.
+// Baked into signup metadata so record_origin_from_signup() can
+// attribute the account once confirmation completes.
+const YGO_SITE_CODE = 'ygo';
+
+// Fire an auxiliary Supabase RPC but never let its failure block
+// the auth flow. CN-A membership writes are important but
+// idempotent; the next auth event will retry.
+async function bestEffort<T>(p: Promise<T>): Promise<void> {
+  try {
+    await p;
+  } catch {
+    // swallowed on purpose
+  }
+}
 
 interface Props {
   mode: 'sign-in' | 'sign-up';
@@ -42,6 +63,11 @@ export function AuthForm({ mode }: Props) {
             // Email link → /auth/callback picks up the session and
             // forwards to returnTo.
             emailRedirectTo: `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(returnTo)}`,
+            // CN-A: bake the origin site code into signup metadata
+            // so record_origin_from_signup() can attribute the
+            // account after email confirmation. The DB refuses
+            // unknown site codes silently — no attack surface.
+            data: { [COLLECTOR_ORIGIN_SITE_KEY]: YGO_SITE_CODE },
           },
         });
         if (error) throw error;
@@ -51,6 +77,11 @@ export function AuthForm({ mode }: Props) {
             'Check your email to confirm your account. You can close this tab and click the link from your inbox.',
           );
         } else {
+          // Rare path (email confirmation disabled): session is
+          // established immediately at signup. Fire the CN-A RPCs
+          // client-side; failure never blocks the redirect.
+          await bestEffort(recordOriginFromSignup(supabase));
+          await bestEffort(recordSiteAuthentication(supabase, YGO_SITE_CODE));
           router.push(returnTo);
           router.refresh();
         }
@@ -60,6 +91,15 @@ export function AuthForm({ mode }: Props) {
           password,
         });
         if (error) throw error;
+        // Password sign-in never visits /auth/callback, so we fire
+        // the CN-A membership RPCs here. record_origin_from_signup
+        // is idempotent - if the user has no origin yet AND their
+        // signup metadata carries collector_origin_site='ygo' (i.e.
+        // they originally signed up on YGO before CN-A shipped and
+        // we backfill metadata some other way, or they signed up
+        // post-CN-A), origin gets attributed. Otherwise no-op.
+        await bestEffort(recordOriginFromSignup(supabase));
+        await bestEffort(recordSiteAuthentication(supabase, YGO_SITE_CODE));
         router.push(returnTo);
         router.refresh();
       }
