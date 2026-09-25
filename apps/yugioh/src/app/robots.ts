@@ -10,13 +10,16 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/card/'],
+        // Public catalogue + public decks are indexable. /card/
+        // covers card + printing pages. /deck/ covers public deck
+        // pages (unlisted /deck/share/ is disallowed below).
+        allow: ['/', '/card/', '/deck/'],
         disallow: [
           '/api/',
           '/dev/',
           '/search',
-          // Slice C: personal / auth surfaces. All page-level metadata
-          // is already noindex, follow — these belt-and-braces
+          // Personal / auth surfaces. All page-level metadata is
+          // already noindex, follow - these belt-and-braces
           // disallow lines keep well-behaved crawlers out entirely.
           '/account',
           '/settings',
@@ -26,6 +29,8 @@ export default function robots(): MetadataRoute.Robots {
           '/sign-in',
           '/sign-up',
           '/auth/',
+          // Unlisted decks: never indexable, never enumerable.
+          '/deck/share/',
         ],
       },
     ],
