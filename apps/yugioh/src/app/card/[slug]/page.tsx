@@ -12,6 +12,7 @@ import { Stat, StatRow } from '../../../components/Stat';
 import { Surface } from '../../../components/Surface';
 import { AddToCollectionMount } from '../../../components/collection/AddToCollectionMount';
 import type { PrintingOption } from '../../../components/collection/AddToCollection';
+import { WatchButtonMount } from '../../../components/watchlist/WatchButtonMount';
 import { GradedStrip } from '../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
@@ -239,8 +240,14 @@ export default async function LogicalCardPage({ params }: Props) {
               </div>
             )}
 
-            <div style={{ marginTop: 16 }}>
+            <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <AddToCollectionMount
+                currentPathname={`/card/${data.slug}`}
+                cardId={data.variants[0]?.card.id ?? data.slug}
+                cardName={data.name}
+                availablePrintings={printingOptions}
+              />
+              <WatchButtonMount
                 currentPathname={`/card/${data.slug}`}
                 cardId={data.variants[0]?.card.id ?? data.slug}
                 cardName={data.name}

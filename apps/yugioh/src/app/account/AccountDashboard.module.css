@@ -1,0 +1,119 @@
+.summary {
+  display: grid;
+  gap: var(--ygo-size-base);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: var(--ygo-size-xl);
+}
+
+.tile {
+  padding: var(--ygo-size-lg);
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  background: var(--ygo-ink-onyx);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  color: var(--ygo-text-quiet);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.value {
+  font-family: var(--ygo-font-display);
+  font-size: 22px;
+  color: var(--ygo-text-primary);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.valueMuted {
+  color: var(--ygo-text-muted);
+  font-style: italic;
+  font-size: 15px;
+}
+
+.meta {
+  font-family: var(--ygo-font-body);
+  font-size: 11.5px;
+  color: var(--ygo-text-muted);
+}
+
+.recent {
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-md);
+  background: var(--ygo-ink-onyx);
+  padding: var(--ygo-size-lg);
+  margin-bottom: var(--ygo-size-xl);
+}
+
+.recentTitle {
+  font-family: var(--ygo-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  margin: 0 0 var(--ygo-size-sm) 0;
+}
+
+.recentList { display: grid; gap: 8px; }
+
+.recentRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: var(--ygo-radius-sm);
+}
+
+.recentRow:hover { background: rgba(255, 255, 255, 0.02); }
+
+.recentThumb {
+  width: 44px;
+  height: 62px;
+  object-fit: cover;
+  border-radius: var(--ygo-radius-xs);
+  background: var(--ygo-ink-abyss);
+  border: 1px solid var(--ygo-line-hairline);
+}
+
+.recentBody { min-width: 0; }
+
+.recentName {
+  font-family: var(--ygo-font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ygo-text-primary);
+  text-decoration: none;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recentName:hover { color: var(--ygo-accent-gold-strong); }
+
+.recentMeta {
+  font-family: var(--ygo-font-mono);
+  font-size: 10.5px;
+  color: var(--ygo-text-quiet);
+  margin-top: 2px;
+}
+
+.recentAmount {
+  font-family: var(--ygo-font-mono);
+  font-size: 11.5px;
+  color: var(--ygo-text-quiet);
+  white-space: nowrap;
+}
+
+.emptyList {
+  padding: 12px;
+  color: var(--ygo-text-quiet);
+  font-family: var(--ygo-font-body);
+  font-size: 12.5px;
+  font-style: italic;
+}

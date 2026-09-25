@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { createBrowserSupabase } from '@collector-network/auth';
 import { deleteAllCollectionAction } from '../collection/actions';
+import { deleteAllWatchlistAction } from '../watchlist/actions';
 import styles from '../account/Account.module.css';
 
 const REQUIRED = 'DELETE';
@@ -27,23 +28,29 @@ export function DangerZone() {
     setError(null);
     setPending(true);
     try {
-      // 1. Delete every ygo_collection_items row owned by this user
-      //    via server action (RLS enforces owner scope). A missing
-      //    table is treated as success — the migration may not have
-      //    landed yet.
+      // 1. Delete every ygo_collection_items row owned by this user.
+      //    Missing table is treated as success — the migration may
+      //    not have landed yet.
       const collectionResult = await deleteAllCollectionAction();
-      if (!collectionResult.ok) {
+      if (!collectionResult.ok && !collectionResult.tableMissing) {
         throw new Error(collectionResult.error ?? 'Could not clear collection');
       }
 
+      // 2. Delete every ygo_watchlist_items row owned by this user.
+      //    Same missing-table tolerance.
+      const watchlistResult = await deleteAllWatchlistAction();
+      if (!watchlistResult.ok && !watchlistResult.tableMissing) {
+        throw new Error(watchlistResult.error ?? 'Could not clear watchlist');
+      }
+
       const supabase = createBrowserSupabase();
-      // 2. Wipe every YGO-owned key in user_metadata. Never touches
+      // 3. Wipe every YGO-owned key in user_metadata. Never touches
       //    other games' namespaces or auth.users itself.
       const { error: metaError } = await supabase.auth.updateUser({
         data: { ygo: null },
       });
       if (metaError) throw metaError;
-      // 3. Sign the user out — they can create a fresh YGOPrices
+      // 4. Sign the user out — they can create a fresh YGOPrices
       //    profile at will since auth.users is untouched.
       const { error: outErr } = await supabase.auth.signOut();
       if (outErr) throw outErr;
@@ -61,11 +68,11 @@ export function DangerZone() {
     <div className={styles.danger}>
       <h3 className={styles.dangerTitle}>Delete YGOPrices data</h3>
       <p className={styles.sectionCaption}>
-        Removes your YGOPrices collection, display name, avatar and
-        preferences from this account. Your Collector Network sign-in
-        (shared across PokePrices, MTGPrices and any other network
-        site) is not affected; you can create a fresh YGOPrices
-        profile any time.
+        Removes your YGOPrices collection, watchlist, display name,
+        avatar and preferences from this account. Your Collector
+        Network sign-in (shared across PokePrices, MTGPrices and any
+        other network site) is not affected; you can create a fresh
+        YGOPrices profile any time.
       </p>
       <p className={styles.sectionCaption} style={{ marginBottom: 8 }}>
         Type <strong>{REQUIRED}</strong> to enable the button.

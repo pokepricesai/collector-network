@@ -3,8 +3,14 @@ import Link from 'next/link';
 import { requireUser } from '@collector-network/auth';
 import { Footer } from '../../components/Footer';
 import { Header } from '../../components/Header';
-import { listCollectionForCurrentUser } from '../../server/collection';
+import {
+  countDistinctHistoryDaysPerPrinting,
+  listCollectionForCurrentUser,
+  type CollectionListItem,
+} from '../../server/collection';
+import { assessPortfolioDepth, computeAnalytics } from '../../lib/collection-analytics';
 import { CollectionClient } from './CollectionClient';
+import { CollectionAnalytics } from './CollectionAnalytics';
 import styles from './Collection.module.css';
 
 // Owner-only. `noindex, follow` — a personal ledger; we never want
@@ -113,7 +119,10 @@ export default async function CollectionPage() {
       </div>
 
       {hasItems ? (
-        <CollectionClient items={items} />
+        <>
+          <CollectionClient items={items} />
+          <AnalyticsSection items={items} />
+        </>
       ) : (
         <div className={styles.empty}>
           Your collection is empty. Add a card from any{' '}
@@ -126,6 +135,14 @@ export default async function CollectionPage() {
       )}
     </Shell>
   );
+}
+
+async function AnalyticsSection({ items }: { items: CollectionListItem[] }) {
+  const analytics = computeAnalytics({ items });
+  const printingIds = Array.from(new Set(items.map((it) => it.row.tcg_printing_id)));
+  const historyDays = await countDistinctHistoryDaysPerPrinting(printingIds);
+  const depth = assessPortfolioDepth([...historyDays.values()]);
+  return <CollectionAnalytics analytics={analytics} depth={depth} />;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

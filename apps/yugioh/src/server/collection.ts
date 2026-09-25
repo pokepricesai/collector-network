@@ -31,6 +31,7 @@ import {
   getRetailQuotesForPrintings,
   selectPreferredRetailQuote,
 } from '@collector-network/market-data';
+import { getYugiohClient } from './read';
 import {
   summarise,
   validateAddCollectionInput,
@@ -399,4 +400,55 @@ export async function deleteAllForCurrentUser(): Promise<CollectionResult<number
     return { ok: false, reason: 'failed', error: error.message };
   }
   return { ok: true, value: (count ?? data?.length ?? 0) };
+}
+
+// Slice E — count distinct observation days per printing across a
+// set of collection printing ids. Used by the analytics decision
+// whether to render a portfolio-value-over-time chart. Reads via
+// the anon/cached client (no user data touched — this is catalogue
+// history), so no RLS boundary concern.
+export async function countDistinctHistoryDaysPerPrinting(
+  printingIds: readonly string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (printingIds.length === 0) return out;
+  const supabase = getYugiohClient();
+  const IN_BATCH = 100;
+  for (let i = 0; i < printingIds.length; i += IN_BATCH) {
+    const batch = printingIds.slice(i, i + IN_BATCH);
+    const { data, error } = await supabase
+      .from('tcg_market_price_daily')
+      .select('tcg_printing_id, observed_on')
+      .in('tcg_printing_id', batch as string[])
+      .not('price', 'is', null);
+    if (error) throw new Error(`[yugioh/collection] history days: ${error.message}`);
+    const perPrintingDays = new Map<string, Set<string>>();
+    for (const row of (data as { tcg_printing_id: string; observed_on: string }[] | null) ?? []) {
+      let set = perPrintingDays.get(row.tcg_printing_id);
+      if (!set) {
+        set = new Set<string>();
+        perPrintingDays.set(row.tcg_printing_id, set);
+      }
+      set.add(row.observed_on);
+    }
+    for (const [pid, set] of perPrintingDays) out.set(pid, set.size);
+  }
+  return out;
+}
+
+// Lightweight counters for the /account dashboard.
+export async function getCollectionCountForCurrentUser(): Promise<
+  CollectionResult<{ holdings: number; copies: number }>
+> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('quantity');
+  if (error) {
+    if (isMissingTable(error)) return { ok: true, value: { holdings: 0, copies: 0 } };
+    return { ok: false, reason: 'failed', error: error.message };
+  }
+  const rows = (data as { quantity: number }[] | null) ?? [];
+  const copies = rows.reduce((n, r) => n + (r.quantity ?? 0), 0);
+  return { ok: true, value: { holdings: rows.length, copies } };
 }
