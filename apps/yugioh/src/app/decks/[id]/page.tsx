@@ -4,6 +4,8 @@ import { requireUser } from '@collector-network/auth';
 import { Footer } from '../../../components/Footer';
 import { Header } from '../../../components/Header';
 import { getDeckDetail } from '../../../server/decks';
+import { getOwnedDeckSharing } from '../../../server/deck-publishing';
+import { siteUrl } from '../../../lib/site-url';
 import { DeckBuilder } from './DeckBuilder';
 import styles from '../Decks.module.css';
 
@@ -54,11 +56,25 @@ export default async function DeckDetailPage({ params }: Props) {
       </>
     );
   }
+  const sharingRes = await getOwnedDeckSharing(id);
+  const sharing = sharingRes.ok ? sharingRes.value : null;
   return (
     <>
       <Header compactSearch />
       <main className={styles.page}>
-        <DeckBuilder detail={result.value} />
+        <DeckBuilder
+          detail={result.value}
+          sharing={
+            sharing
+              ? {
+                  visibility: sharing.visibility,
+                  public_slug: sharing.public_slug,
+                  share_token: sharing.share_token,
+                  siteOrigin: siteUrl(),
+                }
+              : null
+          }
+        />
       </main>
       <Footer />
     </>

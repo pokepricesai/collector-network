@@ -17,8 +17,9 @@
     "audit:rls-collection": "node --env-file=.env.local --import tsx scripts/rls-collection-pen-test.mts",
     "audit:rls-watchlist": "node --env-file=.env.local --import tsx scripts/rls-watchlist-pen-test.mts",
     "audit:rls-decks": "node --env-file=.env.local --import tsx scripts/rls-decks-pen-test.mts",
+    "audit:sec-share": "node --env-file=.env.local --import tsx scripts/sec-share-probe.mts",
     "bench": "node --import tsx scripts/perf-benchmark.mts",
-    "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts src/server/history.test.ts src/lib/finder-filters.test.ts src/lib/return-to.test.ts src/lib/user-profile.test.ts src/lib/collection-types.test.ts src/lib/watchlist-types.test.ts src/lib/collection-analytics.test.ts src/lib/deck-legality.test.ts",
+    "test": "node --import tsx --test src/lib/rarity.test.ts src/lib/edition-badge.test.ts src/lib/fnl.test.ts src/lib/search-parsing.test.ts src/lib/slug.test.ts src/server/history.test.ts src/lib/finder-filters.test.ts src/lib/return-to.test.ts src/lib/user-profile.test.ts src/lib/collection-types.test.ts src/lib/watchlist-types.test.ts src/lib/collection-analytics.test.ts src/lib/deck-legality.test.ts src/lib/deck-sharing.test.ts",
     "clean": "rimraf .next .turbo node_modules"
   },
   "dependencies": {

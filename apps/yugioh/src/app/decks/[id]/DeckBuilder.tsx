@@ -33,20 +33,33 @@ import {
   upsertDeckCardAction,
 } from '../actions';
 import { searchDeckCardsAction } from './search-action';
+import { SharingPanel } from './SharingPanel';
+import { syncPublicSlugAction } from '../share-actions';
+import type { Visibility } from '../../../lib/deck-sharing';
 import styles from './DeckBuilder.module.css';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-interface Props { detail: DeckDetail; }
+interface Props {
+  detail: DeckDetail;
+  sharing: {
+    visibility: Visibility;
+    public_slug: string | null;
+    share_token: string | null;
+    siteOrigin: string;
+  } | null;
+}
 
-export function DeckBuilder({ detail }: Props) {
+export function DeckBuilder({ detail, sharing }: Props) {
   const router = useRouter();
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [nameDraft, setNameDraft] = useState(detail.deck.name);
   const [pending, startTransition] = useTransition();
 
   // Rename with a 600ms debounce so the user doesn't get a save
-  // round-trip on every keystroke.
+  // round-trip on every keystroke. When the deck is public we also
+  // sync the human-readable slug prefix (the 8-char suffix stays
+  // frozen so existing links keep working).
   useEffect(() => {
     if (nameDraft === detail.deck.name) return;
     setSaveState('saving');
@@ -55,6 +68,9 @@ export function DeckBuilder({ detail }: Props) {
         const r = await renameDeckAction(detail.deck.id, { name: nameDraft });
         if (r.ok) {
           setSaveState('saved');
+          if (sharing?.visibility === 'public') {
+            await syncPublicSlugAction(detail.deck.id);
+          }
           router.refresh();
         } else {
           setSaveState('error');
@@ -62,7 +78,7 @@ export function DeckBuilder({ detail }: Props) {
       });
     }, 600);
     return () => clearTimeout(handle);
-  }, [nameDraft, detail.deck.name, detail.deck.id, router]);
+  }, [nameDraft, detail.deck.name, detail.deck.id, router, sharing?.visibility]);
 
   async function mutate(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setSaveState('saving');
@@ -142,7 +158,7 @@ export function DeckBuilder({ detail }: Props) {
             })
           }
         />
-        <SidePanel detail={detail} />
+        <SidePanel detail={detail} sharing={sharing} />
       </div>
     </>
   );
@@ -507,10 +523,25 @@ function DeckRow({
 
 // ── Right sidebar ─────────────────────────────────────────
 
-function SidePanel({ detail }: { detail: DeckDetail }) {
+function SidePanel({
+  detail,
+  sharing,
+}: {
+  detail: DeckDetail;
+  sharing: Props['sharing'];
+}) {
   return (
     <aside className={styles.sidePanel}>
       <LegalityCard legality={detail.legality} />
+      {sharing && (
+        <SharingPanel
+          deckId={detail.deck.id}
+          visibility={sharing.visibility}
+          publicSlug={sharing.public_slug}
+          shareToken={sharing.share_token}
+          siteOrigin={sharing.siteOrigin}
+        />
+      )}
       <StatsCard detail={detail} />
       <ValueCard detail={detail} />
     </aside>

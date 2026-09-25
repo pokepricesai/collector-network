@@ -8,6 +8,7 @@ import {
   listYugiohRaritiesForDirectory,
   listYugiohSetsForDirectory,
 } from '../../../server/browse';
+import { listPublicDecksForSitemap } from '../../../server/deck-publishing';
 import { CACHE_TTL } from '../../../server/cache';
 import {
   RARITY_FAMILY_LABELS,
@@ -60,6 +61,7 @@ export async function GET(
     'sets',
     'rarities',
     'archetypes',
+    'public-decks',
   ];
   if (!validShards.includes(shard as SitemapShard)) {
     return new NextResponse(`unknown sitemap shard: ${shard}`, { status: 404 });
@@ -88,6 +90,7 @@ async function buildShard(shard: SitemapShard): Promise<Entry[]> {
   if (shard === 'sets') return buildSets(url);
   if (shard === 'rarities') return buildRarities(url);
   if (shard === 'archetypes') return buildArchetypes(url);
+  if (shard === 'public-decks') return buildPublicDecks(url);
   const printingShard: 0 | 1 | 2 =
     shard === 'printings-0' ? 0 : shard === 'printings-1' ? 1 : 2;
   return buildPrintings(url, printingShard);
@@ -126,6 +129,19 @@ async function buildArchetypes(url: string): Promise<Entry[]> {
     lastmod: null,
     changefreq: 'weekly',
     priority: 0.6,
+  }));
+}
+
+// Only public decks. Unlisted decks are never enumerable — the
+// underlying RLS/RPC layer would refuse them anyway, but we don't
+// even ask the DB for them.
+async function buildPublicDecks(url: string): Promise<Entry[]> {
+  const decks = await listPublicDecksForSitemap(SITEMAP_URL_CAP);
+  return decks.map((d) => ({
+    loc: `${url}/deck/${encodeURIComponent(d.slug)}`,
+    lastmod: d.updatedAt ?? d.publishedAt,
+    changefreq: 'weekly',
+    priority: 0.5,
   }));
 }
 

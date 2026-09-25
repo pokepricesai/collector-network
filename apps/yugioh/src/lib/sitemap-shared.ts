@@ -10,6 +10,7 @@ export const SITEMAP_SHARDS = [
   'sets',
   'rarities',
   'archetypes',
+  'public-decks',
 ] as const;
 
 export type SitemapShard = (typeof SITEMAP_SHARDS)[number];
