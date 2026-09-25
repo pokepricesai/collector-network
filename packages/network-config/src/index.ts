@@ -26,3 +26,20 @@ export const NETWORK_SITES: readonly NetworkSite[] = [
   { gameId: "onepiece", displayName: "One Piece Card Game", inMonorepo: true },
   { gameId: "lorcana", displayName: "Disney Lorcana", inMonorepo: true },
 ] as const;
+
+// Slice CN-B: shared consent copy (labels, descriptions, shared
+// account explanation). Version constant lives in the DB
+// (collector_consent_versions). Sites import these strings so
+// wording stays in one place.
+export {
+  copyForSite,
+  NETWORK_CONSENT_COPY,
+  NETWORK_GAME_TO_SITE_CODE,
+  SHARED_ACCOUNT_EXPLANATION,
+  SITE_CONSENT_COPY,
+} from './consent-copy';
+export type {
+  NetworkConsentCopy,
+  SiteConsentCode,
+  SiteConsentCopy,
+} from './consent-copy';

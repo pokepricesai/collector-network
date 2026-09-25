@@ -41,9 +41,15 @@ export type { CollectorNetworkUser } from './types';
 // Lorcana) uses the same wrappers so the DB contract stays
 // enforced in one place. See docs/network/schema-request-cn-a.md.
 export {
+  applySignupMarketingConsent,
+  buildSignupMetadata,
+  COLLECTOR_NETWORK_MARKETING_OPT_IN_KEY,
   COLLECTOR_ORIGIN_SITE_KEY,
+  COLLECTOR_SITE_MARKETING_OPT_IN_KEY,
+  getCurrentConsentVersion,
   getMarketingConsentEvents,
   getMarketingPreferences,
+  getSignupContext,
   getUserSiteMemberships,
   recordOriginFromSignup,
   recordSiteAuthentication,
@@ -57,6 +63,7 @@ export type {
   ConsentScope,
   CustomerResult,
   MarketingPreference,
+  SignupContext,
   SiteCode,
   SiteMembership,
   UserConsentSource,

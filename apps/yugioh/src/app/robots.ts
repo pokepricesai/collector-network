@@ -26,6 +26,7 @@ export default function robots(): MetadataRoute.Robots {
           '/collection',
           '/watchlist',
           '/decks',
+          '/email-preferences',
           '/sign-in',
           '/sign-up',
           '/auth/',

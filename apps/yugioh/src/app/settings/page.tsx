@@ -5,6 +5,7 @@ import { Header } from '../../components/Header';
 import { readYgoProfile } from '../../lib/user-profile';
 import styles from '../account/Account.module.css';
 import { DangerZone } from './DangerZone';
+import { EmailPreferencesMount } from './EmailPreferencesMount';
 import { SettingsForm } from './SettingsForm';
 
 export const metadata: Metadata = {
@@ -30,6 +31,10 @@ export default async function SettingsPage() {
             graded / currency labels on individual price rows.
           </p>
           <SettingsForm initial={profile} />
+        </section>
+
+        <section className={styles.section}>
+          <EmailPreferencesMount siteCode="ygo" source="settings" />
         </section>
 
         <section className={styles.section}>

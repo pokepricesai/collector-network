@@ -157,3 +157,56 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+.consentGroup {
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: var(--ygo-radius-sm);
+  padding: var(--ygo-size-sm) var(--ygo-size-base);
+  background: rgba(255, 255, 255, 0.015);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ygo-size-xs);
+}
+
+.consentLegend {
+  font-family: var(--ygo-font-body);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ygo-text-quiet);
+  padding: 0 4px;
+}
+
+.consentRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.consentCheckbox {
+  margin-top: 3px;
+  accent-color: var(--ygo-accent-gold);
+  width: 16px;
+  height: 16px;
+}
+
+.consentLabel {
+  display: block;
+  font-family: var(--ygo-font-body);
+  font-size: 13px;
+  color: var(--ygo-text-primary);
+  font-weight: 600;
+}
+
+.consentDesc {
+  display: block;
+  font-family: var(--ygo-font-body);
+  font-size: 12px;
+  color: var(--ygo-text-muted);
+  line-height: 1.4;
+  margin-top: 2px;
+}
