@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -115,59 +116,23 @@ export default function Navbar() {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
           textDecoration: 'none',
           flexShrink: 0,
           height: 48,
         }}
       >
-        <div
-          aria-hidden
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background:
-              'linear-gradient(135deg, var(--gold-300) 0%, var(--gold-400) 60%, var(--coral-400) 100%)',
-            boxShadow:
-              '0 2px 6px rgba(200,140,26,0.35), inset 0 1px 0 rgba(255,255,255,0.5)',
-            display: 'grid',
-            placeItems: 'center',
-            fontFamily: "'Outfit', sans-serif",
-            fontWeight: 800,
-            color: '#3B1E00',
-            fontSize: 16,
-            letterSpacing: '-0.02em',
-          }}
-        >
-          OP
-        </div>
-        <span
-          className="op-wordmark"
-          style={{
-            fontFamily: "'Outfit', sans-serif",
-            fontWeight: 800,
-            fontSize: 18,
-            color: 'var(--text-strong)',
-            letterSpacing: '-0.02em',
-            lineHeight: 1,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          OnePiecePrices
-          <span
-            className="op-wordmark-tld"
-            style={{
-              color: 'var(--gold-500)',
-              fontSize: 11,
-              marginLeft: 4,
-              fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-              letterSpacing: '0.15em',
-            }}
-          >
-            .io
-          </span>
-        </span>
+        {/* Horizontal wordmark. Original asset ships at 720x240 (3:1);
+            we render at ~50px tall in the 68px header — the wordmark
+            includes the compass emblem so no separate icon is needed. */}
+        <Image
+          src="/logo.png"
+          alt="OnePiecePrices"
+          width={720}
+          height={240}
+          priority
+          className="op-nav-logo"
+          style={{ height: 44, width: 'auto' }}
+        />
       </Link>
 
       <div
@@ -357,13 +322,10 @@ export default function Navbar() {
           .nav-search { display: none !important; }
           .mobile-menu-btn { display: inline-flex !important; }
         }
-        /* Below 480px, the wordmark is the biggest thing on the top bar
-           and can shove the hamburger off-screen. Shrink the wordmark
-           and hide the .io monospace tag so the primary lockup stays
-           within the viewport. */
+        /* Shrink the header logo below 480px so the hamburger button
+           and search input have room to breathe. */
         @media (max-width: 480px) {
-          :global(.op-wordmark) { font-size: 15.5px !important; }
-          :global(.op-wordmark-tld) { display: none !important; }
+          :global(.op-nav-logo) { height: 36px !important; }
         }
       `}</style>
     </nav>

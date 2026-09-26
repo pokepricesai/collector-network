@@ -67,8 +67,15 @@
 
 The stub Supabase client is a Proxy over the PostgREST chain (`.from().select().eq().in().ilike().range().maybeSingle()`) that resolves every query against the fixture. **This branch only runs when `SUPABASE_URL` is absent** — production has real env vars, so it never fires there. It gives us an end-to-end designed-state preview without wiring live credentials.
 
+## Brand assets landed
+
+Received and wired:
+
+- **Horizontal logo** (`public/logo.png`, downscaled from the 2172×724 original to a 720×240 optimised copy at 201 KB) — replaces the placeholder OP gold square + monospace wordmark in the Navbar. Rendered via `next/image` at 44px tall (36px on phones < 480px).
+- **Compass/wave emblem** (`src/app/icon.png` and `src/app/apple-icon.png` at 512×512; `public/emblem-{64,256,512}.png` for other uses) — Next 15 auto-wires the `app/icon.png` and `app/apple-icon.png` as the favicon + apple touch icon. The Footer masthead now uses `emblem-64.png` next to the plaintext wordmark. `SiteStructuredData` `Organization.logo` points at `emblem-512.png`. The root `opengraph-image` now embeds the full horizontal logo instead of the placeholder square + "OP" text.
+
+The old placeholder OP-square lockup and the `.op-wordmark` / `.op-wordmark-tld` classes are gone from Navbar + Footer + globals.
+
 ## Ready for the next step
 
-Homepage, browse, set, card, printing, market, search, colours, leaders, card-finder all render at desktop + mobile viewports without regressions or empty-state confusion. Grid, typography, spacing and language now read as a finished collector product rather than a scaffold.
-
-**Blocking on:** the OnePiecePrices brand assets (horizontal logo for header/brand surfaces + compass/wave emblem for favicon/app icon) — waiting on those to swap out the placeholder "OP" gold-square + monospace wordmark before final commit.
+Homepage, browse, set, card, printing, market, search, colours, leaders, card-finder all render at desktop + mobile viewports without regressions or empty-state confusion. Brand identity is in place. Grid, typography, spacing and language read as a finished collector product rather than a scaffold. Ready for data integration.

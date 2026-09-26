@@ -15,7 +15,7 @@ export default function SiteStructuredData() {
         url: SITE_URL,
         logo: {
           '@type': 'ImageObject',
-          url: `${SITE_URL}/logo.png`,
+          url: `${SITE_URL}/emblem-512.png`,
           width: 512,
           height: 512,
         },

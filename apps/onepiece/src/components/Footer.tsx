@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 // Site footer. Groups live routes by product area, and preserves
 // Bandai IP attribution. Cousin file on MTGPrices carries WotC
@@ -65,27 +66,14 @@ export default function Footer() {
         >
           <div style={{ maxWidth: 300 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <div
+              <Image
+                src="/emblem-64.png"
+                alt=""
                 aria-hidden
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background:
-                    'linear-gradient(135deg, var(--gold-300) 0%, var(--gold-400) 60%, var(--coral-400) 100%)',
-                  boxShadow:
-                    '0 2px 6px rgba(200,140,26,0.35), inset 0 1px 0 rgba(255,255,255,0.5)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontFamily: "'Outfit', sans-serif",
-                  fontWeight: 800,
-                  color: '#3B1E00',
-                  fontSize: 16,
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                OP
-              </div>
+                width={64}
+                height={64}
+                className="op-footer-emblem"
+              />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span
                   style={{
@@ -98,17 +86,6 @@ export default function Footer() {
                   }}
                 >
                   OnePiecePrices
-                  <span
-                    style={{
-                      color: 'var(--gold-500)',
-                      fontSize: 11,
-                      marginLeft: 4,
-                      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-                      letterSpacing: '0.15em',
-                    }}
-                  >
-                    .io
-                  </span>
                 </span>
                 <span className="label-mono" style={{ marginTop: 4 }}>
                   Prices · Treatments · Sets

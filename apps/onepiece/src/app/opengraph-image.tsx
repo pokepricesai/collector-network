@@ -1,8 +1,10 @@
 import { ImageResponse } from 'next/og';
+import { SITE_URL } from '@/lib/site-url';
 
 // Root open-graph image. Warm ivory background with the OP colour
-// crest fading in from the corner and a large gold title. Individual
-// pages can override this with their own opengraph-image route.
+// crest fading in from the corner and the horizontal wordmark logo
+// at the top. Individual pages can override with their own
+// opengraph-image route.
 
 export const runtime = 'edge';
 export const size = { width: 1200, height: 630 };
@@ -41,56 +43,15 @@ export default async function OGImage() {
             display: 'flex',
           }}
         />
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 20,
-          }}
-        >
-          <div
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 18,
-              background:
-                'linear-gradient(135deg, #E9B23A 0%, #C88C1A 60%, #E85A2C 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#3B1E00',
-              fontSize: 34,
-              fontWeight: 800,
-              letterSpacing: -1,
-            }}
-          >
-            OP
-          </div>
-          <div
-            style={{
-              fontSize: 40,
-              fontWeight: 800,
-              color: '#071431',
-              letterSpacing: -1,
-              display: 'flex',
-            }}
-          >
-            OnePiecePrices
-            <span
-              style={{
-                marginLeft: 8,
-                color: '#96660F',
-                fontSize: 18,
-                fontFamily: 'ui-monospace, monospace',
-                letterSpacing: 2,
-                display: 'flex',
-                alignItems: 'flex-end',
-                paddingBottom: 8,
-              }}
-            >
-              .io
-            </span>
-          </div>
+        <div style={{ display: 'flex' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`${SITE_URL}/logo.png`}
+            alt="OnePiecePrices"
+            width={420}
+            height={140}
+            style={{ display: 'block' }}
+          />
         </div>
 
         <div
