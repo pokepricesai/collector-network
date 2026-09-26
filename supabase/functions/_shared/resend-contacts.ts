@@ -78,9 +78,15 @@ export async function createContact(
   doFetch: FetchLike = fetch,
 ): Promise<CreateContactResult> {
   if (!apiKey) return { ok: false, status: 0, errorTag: 'missing-api-key' };
+  // Per Resend Create Contact docs (verified 2026-09-26):
+  //   segments is an Array of Objects, each with `id`.
+  //   topics   is an Array of Objects, each with `id` + `subscription`.
+  // An earlier docs read described segments as "Segment IDs to add
+  // contact to" (array of strings) — that was wrong. HTTP 422 fires
+  // on the string-array form. Object-array is the current shape.
   const body = {
     email: input.email,
-    segments: [input.segmentId],
+    segments: [{ id: input.segmentId }],
     topics: input.topics,
   };
   let res: Response;

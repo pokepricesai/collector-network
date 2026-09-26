@@ -529,7 +529,7 @@ test('syncUser: Resend 503 on topic PATCH → failure outcome', async () => {
 
 // -- Segment membership reconciliation (audit fix) ---------------
 
-test('syncUser first-time: POST /contacts body includes segments: [segmentId]', async () => {
+test('syncUser first-time: POST /contacts body includes segments: [{id: segmentId}]', async () => {
   const f = makeFixture({
     emails: { 'u1': 'alice@example.com' },
     preferences: { 'u1': [
@@ -552,7 +552,9 @@ test('syncUser first-time: POST /contacts body includes segments: [segmentId]', 
     activeTopics: [TOPIC_YGO],
   });
   const parsed = JSON.parse(captured);
-  assert.deepEqual(parsed.segments, ['seg-cn']);
+  // Resend expects segments as an array of objects (each with `id`).
+  // Array-of-strings returns HTTP 422 in live traffic.
+  assert.deepEqual(parsed.segments, [{ id: 'seg-cn' }]);
 });
 
 test('syncUser returning: GET segments returns other segment only → POST add-to-CN-segment fires', async () => {

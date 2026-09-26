@@ -52,7 +52,10 @@ test('createContact POSTs to /contacts with Bearer + segments + topics', async (
   const headers = calls[0]!.init.headers as Record<string, string>;
   assert.equal(headers.authorization, 'Bearer re_secret_apikey_XXXXXX');
   const parsed = JSON.parse(captured);
-  assert.deepEqual(parsed.segments, ['seg-1']);
+  // Per Resend Create Contact docs: segments is an ARRAY OF OBJECTS
+  // (each with `id`), not an array of strings. The array-of-strings
+  // form returns HTTP 422 in live traffic.
+  assert.deepEqual(parsed.segments, [{ id: 'seg-1' }]);
   assert.deepEqual(parsed.topics, [{ id: 't-ygo', subscription: 'opt_in' }]);
   assert.equal(parsed.unsubscribed, undefined, 'unsubscribed must NEVER be in the body');
 });
