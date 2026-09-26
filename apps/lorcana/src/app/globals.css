@@ -1,0 +1,677 @@
+/* LorcanaPrice — collector design system.
+   Illuminated-manuscript palette: warm parchment page, deep-purple
+   Amethyst-ink primary, gilded gold interactive accent, teal-sapphire
+   as a restrained cool accent. The six Lorcana inks (Amber, Amethyst,
+   Emerald, Ruby, Sapphire, Steel) live under --ink-* and are used
+   sparingly on chips, filters and treatment badges. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ── Foundation ─────────────────────────────────────────────── */
+  --bg:               #F6EFE0;   /* warm parchment */
+  --bg-light:         #F1E7D2;
+  --bg-strong:        #E8DABC;
+  --surface:          #FFFDF7;
+  --surface-raised:   #FFFFFF;
+  --card:             #FFFDF7;
+
+  --text:             #2A1E4A;   /* deep amethyst ink */
+  --text-strong:      #1B1236;
+  --text-muted:       #5F5678;
+  --text-subtle:      #8B839F;
+
+  /* ── Brand — gilded gold (interactive accent, kept restrained) ─ */
+  --gold-50:          #FBF2D9;
+  --gold-100:         #F5E1A6;
+  --gold-200:         #E8CB72;
+  --gold-300:         #D0AC46;
+  --gold-400:         #B98A3A;
+  --gold-500:         #8E6924;
+  --gold-600:         #5F4718;
+
+  --accent:           var(--gold-400);
+  --accent-hover:     var(--gold-500);
+  --accent-soft:      rgba(185,138,58,0.14);
+  --accent-border:    rgba(142,105,36,0.36);
+
+  /* Primary CTA = Amethyst ink (deep, saturated, unmistakably Lorcana) */
+  --amethyst-50:      #F0EAFA;
+  --amethyst-100:     #D8C7F4;
+  --amethyst-200:     #B598E8;
+  --amethyst-300:     #8A63D8;
+  --amethyst-400:     #6D42BE;
+  --amethyst-500:     #52309A;
+  --amethyst-600:     #3B2274;
+  --amethyst-700:     #251549;
+
+  --primary:          var(--amethyst-400);
+  --primary-hover:    var(--amethyst-500);
+  --primary-strong:   var(--amethyst-600);
+  --primary-soft:     rgba(109,66,190,0.12);
+  --primary-border:   rgba(59,34,116,0.28);
+
+  /* Sapphire — cool secondary accent (Sapphire ink flavour) */
+  --sapphire-300:     #4A8FD4;
+  --sapphire-400:     #2D6EBD;
+  --sapphire-500:     #1B5194;
+  --sapphire-soft:    rgba(45,110,189,0.14);
+
+  /* Accent-2 = a companion gilded highlight, used on labels + tags */
+  --accent-2:         #7A4EF0;
+  --accent-2-soft:    rgba(122,78,240,0.12);
+
+  /* Deep midnight — dark surfaces (chase treatment panels) */
+  --midnight:         #170B34;
+  --midnight-2:       #241549;
+  --midnight-3:       #2F1D5E;
+
+  /* ── Status ────────────────────────────────────────────────── */
+  --green:            #2F8B62;
+  --green-soft:       rgba(47,139,98,0.14);
+  --red:              #B93F44;
+  --red-soft:         rgba(185,63,68,0.14);
+  --amber:            #A8781A;
+  --amber-soft:       rgba(168,120,26,0.15);
+
+  /* ── Structural ────────────────────────────────────────────── */
+  --border:           #E5D8B6;
+  --border-light:     #D8C89E;
+  --border-strong:    #BBA574;
+  --shadow-sm:        0 1px 2px rgba(30,17,60,0.06);
+  --shadow-md:        0 6px 18px rgba(30,17,60,0.10), 0 2px 4px rgba(30,17,60,0.04);
+  --shadow-lg:        0 18px 44px rgba(30,17,60,0.14), 0 4px 10px rgba(30,17,60,0.06);
+  --shadow-gold:      0 8px 24px rgba(185,138,58,0.20);
+
+  --radius-sm:        8px;
+  --radius:           12px;
+  --radius-lg:        16px;
+  --radius-xl:        22px;
+
+  /* ── Six Lorcana inks ─────────────────────────────────────────
+     Palette values used on chips, filter facets and treatment
+     stripes. Chosen for legibility against the parchment base,
+     not to replicate the exact card-face swatches. */
+  --ink-amber:        #E7A81A;
+  --ink-amber-ink:    #4D3406;
+  --ink-amethyst:     #7A4EF0;
+  --ink-amethyst-ink: #2A1462;
+  --ink-emerald:      #2C9A65;
+  --ink-emerald-ink:  #0D3B23;
+  --ink-ruby:         #D63A4A;
+  --ink-ruby-ink:     #4E0E15;
+  --ink-sapphire:     #2E77CD;
+  --ink-sapphire-ink: #0F2A55;
+  --ink-steel:        #6B7A94;
+  --ink-steel-ink:    #1F2A3E;
+}
+
+* { box-sizing: border-box; }
+*, *::before, *::after { min-width: 0; }
+
+html {
+  overflow-x: clip;
+  max-width: 100vw;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+
+body {
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, p, span, div { overflow-wrap: anywhere; }
+
+h1, h2, h3, h4 {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.015em;
+}
+
+/* Page-hero band used by index pages. */
+.lc-page-hero,
+.op-page-hero {
+  position: relative;
+  padding: 24px 20px 22px;
+  border-radius: 18px;
+  margin-bottom: 24px;
+  background:
+    radial-gradient(70% 90% at 0% 0%, rgba(122,78,240,0.10) 0%, transparent 60%),
+    radial-gradient(60% 80% at 100% 100%, rgba(185,138,58,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #FBF6E7 0%, var(--bg) 100%);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  isolation: isolate;
+}
+.lc-page-hero::after,
+.op-page-hero::after {
+  content: '';
+  position: absolute;
+  left: 24px; right: 24px; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(to right, transparent 0%, rgba(185,138,58,0.55) 50%, transparent 100%);
+  opacity: 0.6;
+}
+@media (min-width: 640px) {
+  .lc-page-hero, .op-page-hero { padding: 28px 28px 26px; }
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary-hover); }
+
+::placeholder { color: var(--text-muted); opacity: 0.7; }
+
+/* ── Motion ──────────────────────────────────────────────────── */
+@keyframes fadeIn   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer  { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes twinkle  { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+.animate-fade-in    { animation: fadeIn 0.28s ease-out; }
+.animate-fade-in-up { animation: fadeInUp 0.4s ease-out both; }
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.10s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.20s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in, .animate-fade-in-up { animation: none; }
+}
+
+/* ── Cards & hover ───────────────────────────────────────────── */
+.card-hover {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(30,17,60,0.10), 0 3px 6px rgba(30,17,60,0.04);
+  border-color: var(--border-light);
+}
+.card-hover-gold:hover {
+  border-color: var(--accent-border);
+  box-shadow: 0 12px 30px rgba(185,138,58,0.14), 0 3px 6px rgba(30,17,60,0.04);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: inherit; font-weight: 700; font-size: 14px; line-height: 1;
+  border-radius: 10px; padding: 11px 18px; cursor: pointer;
+  border: 1px solid transparent; text-decoration: none;
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--amethyst-400) 0%, var(--amethyst-500) 100%);
+  color: #FFFFFF;
+  box-shadow: 0 2px 4px rgba(59,34,116,0.20), inset 0 1px 0 rgba(255,255,255,0.14);
+}
+.btn-primary:hover { color: #FFFFFF; box-shadow: 0 6px 18px rgba(59,34,116,0.30), inset 0 1px 0 rgba(255,255,255,0.20); transform: translateY(-1px); }
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold-300) 0%, var(--gold-400) 100%);
+  color: #2E1D06;
+  box-shadow: 0 2px 4px rgba(185,138,58,0.20), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.btn-gold:hover { color: #2E1D06; box-shadow: var(--shadow-gold), inset 0 1px 0 rgba(255,255,255,0.4); transform: translateY(-1px); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.btn-ghost:hover { background: var(--surface); border-color: var(--primary-border); color: var(--primary); }
+.btn-dark {
+  background: linear-gradient(180deg, var(--midnight-2) 0%, var(--midnight) 100%);
+  color: #F1E7C7;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 2px 4px rgba(30,17,60,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.btn-dark:hover { color: #FFFFFF; }
+.btn-sm { padding: 8px 12px; font-size: 12.5px; border-radius: 8px; }
+.btn-lg { padding: 14px 22px; font-size: 15px; border-radius: 12px; }
+
+/* ── Chips ───────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+  background: var(--bg-light); color: var(--text);
+  border: 1px solid var(--border);
+}
+.chip-gold      { background: var(--accent-soft); color: var(--gold-600); border-color: var(--accent-border); }
+.chip-amethyst  { background: var(--primary-soft); color: var(--primary-strong); border-color: var(--primary-border); }
+.chip-sapphire  { background: var(--sapphire-soft); color: var(--sapphire-500); border-color: rgba(27,81,148,0.32); }
+.chip-ivy       { background: var(--green-soft); color: var(--green); border-color: rgba(47,139,98,0.30); }
+
+/* Six Lorcana ink chips — used on ink filters and card ink badges. */
+.chip-ink--amber    { background: rgba(231,168,26,0.16); color: var(--ink-amber-ink);    border-color: rgba(231,168,26,0.36); }
+.chip-ink--amethyst { background: rgba(122,78,240,0.14); color: var(--ink-amethyst-ink); border-color: rgba(122,78,240,0.34); }
+.chip-ink--emerald  { background: rgba(44,154,101,0.14); color: var(--ink-emerald-ink); border-color: rgba(44,154,101,0.32); }
+.chip-ink--ruby     { background: rgba(214,58,74,0.14);  color: var(--ink-ruby-ink);    border-color: rgba(214,58,74,0.32); }
+.chip-ink--sapphire { background: rgba(46,119,205,0.14); color: var(--ink-sapphire-ink);border-color: rgba(46,119,205,0.32); }
+.chip-ink--steel    { background: rgba(107,122,148,0.14); color: var(--ink-steel-ink);   border-color: rgba(107,122,148,0.34); }
+
+/* Back-compat aliases so existing OP colour classes still render. */
+.chip-red    { background: rgba(214,58,74,0.14);  color: var(--ink-ruby-ink);    border-color: rgba(214,58,74,0.32); }
+.chip-green  { background: rgba(44,154,101,0.14); color: var(--ink-emerald-ink); border-color: rgba(44,154,101,0.32); }
+.chip-blue   { background: rgba(46,119,205,0.14); color: var(--ink-sapphire-ink);border-color: rgba(46,119,205,0.32); }
+.chip-purple { background: rgba(122,78,240,0.14); color: var(--ink-amethyst-ink);border-color: rgba(122,78,240,0.34); }
+.chip-black  { background: rgba(107,122,148,0.14); color: var(--ink-steel-ink);   border-color: rgba(107,122,148,0.34); }
+.chip-yellow { background: rgba(231,168,26,0.16); color: var(--ink-amber-ink);   border-color: rgba(231,168,26,0.36); }
+.chip-ocean  { background: var(--sapphire-soft);  color: var(--sapphire-500);    border-color: rgba(27,81,148,0.32); }
+
+/* ── Skeleton ────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, #EDE1C6 25%, #F4EBD1 50%, #EDE1C6 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 10px;
+}
+
+.price-up   { color: var(--green); }
+.price-down { color: var(--red);   }
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+details summary::-webkit-details-marker { display: none; }
+details summary::marker { display: none; }
+
+/* ── Sort buttons ────────────────────────────────────────────── */
+.sort-btn {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  padding: 6px 16px; font-size: 13px; font-weight: 600; color: var(--text-muted);
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.sort-btn:hover { background: var(--accent-soft); color: var(--gold-600); border-color: var(--accent-border); }
+.sort-btn.active { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
+
+/* ── Prestige badge ──────────────────────────────────────────── */
+.badge-prestige {
+  display: inline-block; background: var(--accent-2-soft); color: var(--accent-2);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(122,78,240,0.30);
+}
+
+.label-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em;
+  color: var(--text-muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold-300);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Decorative accents — illuminated-parchment band.
+   Used sparingly. Product content always dominates.
+   ═══════════════════════════════════════════════════════════════ */
+
+.hero-shell {
+  position: relative;
+  background:
+    radial-gradient(90% 80% at 10% -10%, rgba(122,78,240,0.14) 0%, rgba(122,78,240,0) 60%),
+    radial-gradient(70% 90% at 100% 110%, rgba(185,138,58,0.12) 0%, rgba(185,138,58,0) 60%),
+    linear-gradient(180deg, #FBF6E7 0%, var(--bg) 100%);
+  overflow: hidden;
+  isolation: isolate;
+}
+.lc-hero-shell, .op-hero-shell {
+  padding: 40px 16px 32px;
+}
+@media (min-width: 640px) {
+  .lc-hero-shell, .op-hero-shell {
+    padding: 48px 24px 40px;
+  }
+}
+
+.feature-shell {
+  position: relative;
+  background:
+    radial-gradient(70% 70% at 8% 0%, rgba(122,78,240,0.10) 0%, rgba(122,78,240,0) 60%),
+    radial-gradient(60% 80% at 100% 100%, rgba(185,138,58,0.08) 0%, rgba(185,138,58,0) 60%),
+    linear-gradient(180deg, #F9F1DA 0%, #F1E5C6 100%);
+  overflow: hidden;
+  isolation: isolate;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ivory-band {
+  position: relative;
+  background:
+    radial-gradient(60% 80% at 10% 0%, rgba(185,138,58,0.08) 0%, rgba(185,138,58,0) 60%),
+    radial-gradient(50% 70% at 100% 100%, rgba(122,78,240,0.06) 0%, rgba(122,78,240,0) 60%),
+    var(--bg);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Six-ink wheel — a soft crown of Lorcana's ink palette behind the
+   hero shell. Very low opacity, no logos, no letters. */
+.lc-ink-wheel, .op-colour-crest {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(920px, 96%);
+  height: 220px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 10% 60%, rgba(231,168,26,0.55)  0%, transparent 22%),
+    radial-gradient(circle at 26% 55%, rgba(122,78,240,0.55)  0%, transparent 22%),
+    radial-gradient(circle at 42% 60%, rgba(44,154,101,0.50)  0%, transparent 22%),
+    radial-gradient(circle at 58% 55%, rgba(214,58,74,0.50)   0%, transparent 22%),
+    radial-gradient(circle at 74% 60%, rgba(46,119,205,0.55)  0%, transparent 22%),
+    radial-gradient(circle at 90% 55%, rgba(107,122,148,0.45) 0%, transparent 22%);
+  opacity: 0.28;
+  z-index: 0;
+  filter: blur(2px);
+}
+@media (prefers-reduced-motion: reduce) { .lc-ink-wheel, .op-colour-crest { filter: none; } }
+
+.spark-field {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 22%, rgba(185,138,58,0.30), transparent 60%),
+    radial-gradient(1.2px 1.2px at 78% 18%, rgba(122,78,240,0.22), transparent 60%),
+    radial-gradient(1.1px 1.1px at 40% 65%, rgba(185,138,58,0.20), transparent 60%),
+    radial-gradient(1.4px 1.4px at 88% 60%, rgba(122,78,240,0.22), transparent 60%),
+    radial-gradient(1.1px 1.1px at 25% 82%, rgba(185,138,58,0.20), transparent 60%),
+    radial-gradient(1.3px 1.3px at 62% 88%, rgba(122,78,240,0.20), transparent 60%);
+  animation: twinkle 8s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+.gilt-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--gold-300) 20%, var(--gold-300) 80%, transparent 100%);
+  opacity: 0.5;
+}
+
+.gold-text {
+  background: linear-gradient(135deg, var(--gold-300) 0%, var(--gold-500) 55%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.coral-text {
+  background: linear-gradient(135deg, #E85A2C, #C4441B);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-logo {
+  width: 100%;
+  max-width: 220px;
+}
+@media (min-width: 640px)  { .hero-logo { max-width: 260px; } }
+@media (min-width: 1024px) { .hero-logo { max-width: 300px; } }
+@media (min-width: 1400px) { .hero-logo { max-width: 320px; } }
+
+/* Nav link styling with amethyst underline for active. */
+.nav-link {
+  position: relative;
+  color: var(--text);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+  transition: color 150ms ease, background 150ms ease;
+}
+[role="menu"] {
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+[role="menu"] [role="menuitem"] {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+button.nav-link, button.btn, button.chip {
+  font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.nav-link:hover { color: var(--primary); background: transparent; }
+.nav-link.active {
+  color: var(--primary);
+  background: transparent;
+}
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  left: 12px; right: 12px; bottom: 4px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--amethyst-400), var(--gold-400));
+  border-radius: 2px;
+}
+
+/* ── Lorcana signature elements ─────────────────────────────── */
+
+/* Ink rail — a six-segment strip of the Lorcana ink palette used at
+   the top of card tiles. Only present inks light up. Kept the
+   `op-colour-rail` selector working for the migrated grid. */
+.lc-ink-rail,
+.op-colour-rail {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  height: 3px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.lc-ink-rail > span,
+.op-colour-rail > span {
+  display: block;
+  height: 100%;
+  background: #c8bea6;
+  opacity: 0.35;
+}
+.lc-ink-rail > span[data-present='true'][data-ink='amber'],
+.op-colour-rail > span[data-present='true'][data-hue='yellow']  { background: var(--ink-amber);    opacity: 1; }
+.lc-ink-rail > span[data-present='true'][data-ink='amethyst'],
+.op-colour-rail > span[data-present='true'][data-hue='purple']  { background: var(--ink-amethyst); opacity: 1; }
+.lc-ink-rail > span[data-present='true'][data-ink='emerald'],
+.op-colour-rail > span[data-present='true'][data-hue='green']   { background: var(--ink-emerald);  opacity: 1; }
+.lc-ink-rail > span[data-present='true'][data-ink='ruby'],
+.op-colour-rail > span[data-present='true'][data-hue='red']     { background: var(--ink-ruby);     opacity: 1; }
+.lc-ink-rail > span[data-present='true'][data-ink='sapphire'],
+.op-colour-rail > span[data-present='true'][data-hue='blue']    { background: var(--ink-sapphire); opacity: 1; }
+.lc-ink-rail > span[data-present='true'][data-ink='steel'],
+.op-colour-rail > span[data-present='true'][data-hue='black']   { background: var(--ink-steel);    opacity: 1; }
+
+/* Treatment badge — chase axis is the biggest collectible distinction
+   on this site. Fixed shape so a row of badges lines up. */
+.treatment-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 3px 10px;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-weight: 700; font-size: 11px; letter-spacing: 0.06em;
+  border-radius: 6px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+/* Lorcana rarity + chase treatment badges.
+   See src/lib/lorcana/treatment.ts + docs/lorcana/data-audit.md §3. */
+.treatment-badge--nonfoil,
+.treatment-badge--foil-nonfoil,
+.treatment-badge--common,
+.treatment-badge--uncommon      { background: rgba(94,86,120,0.10); color: #4A4270; border-color: rgba(94,86,120,0.28); }
+.treatment-badge--rare,
+.treatment-badge--super-rare    { background: var(--sapphire-soft); color: var(--sapphire-500); border-color: rgba(27,81,148,0.35); }
+.treatment-badge--foil          { background: linear-gradient(135deg, rgba(185,138,58,0.28), rgba(122,78,240,0.22)); color: #4A360A; border-color: rgba(185,138,58,0.44); }
+.treatment-badge--legendary,
+.treatment-badge--l-foil,
+.treatment-badge--l-nonfoil     { background: rgba(185,138,58,0.20); color: var(--gold-600); border-color: rgba(142,105,36,0.44); }
+.treatment-badge--epic,
+.treatment-badge--ep-foil,
+.treatment-badge--ep-nonfoil    { background: rgba(214,58,74,0.16); color: var(--ink-ruby-ink); border-color: rgba(214,58,74,0.38); }
+.treatment-badge--iconic,
+.treatment-badge--icon,
+.treatment-badge--ic-foil,
+.treatment-badge--ic-nonfoil    { background: linear-gradient(135deg, rgba(231,168,26,0.28), rgba(122,78,240,0.22)); color: #2A1462; border-color: rgba(122,78,240,0.46); }
+.treatment-badge--enchanted,
+.treatment-badge--en-foil,
+.treatment-badge--en-nonfoil    { background: rgba(122,78,240,0.18); color: var(--ink-amethyst-ink); border-color: rgba(122,78,240,0.44); }
+.treatment-badge--promo,
+.treatment-badge--p-foil,
+.treatment-badge--p-nonfoil     { background: rgba(44,154,101,0.14); color: #164C31; border-color: rgba(44,154,101,0.34); }
+
+/* Printing fingerprint — compact monospace pill listing set + card no.
+   + finish. Kept .op-fingerprint working for migrated grids. */
+.lc-fingerprint,
+.op-fingerprint {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 3px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(42,30,74,0.06);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.lc-fingerprint > .sep,
+.op-fingerprint > .sep { opacity: 0.4; }
+
+/* Engraved hairline. Used to divide treatment sections. */
+.lc-engraved, .op-engraved {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(185, 138, 58, 0.35) 10%,
+    rgba(122, 78, 240, 0.55) 50%,
+    rgba(185, 138, 58, 0.35) 90%,
+    transparent 100%
+  );
+  box-shadow: 0 1px 0 rgba(30, 17, 60, 0.35);
+}
+
+/* Empty card-art placeholder — subtle ink-drop silhouette on
+   parchment. Renders as our product's flavour, not a dev scaffold. */
+.lc-card-empty,
+.op-card-empty {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(122,78,240,0.12) 0%, transparent 55%),
+    radial-gradient(120% 100% at 50% 110%, rgba(185,138,58,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #F1E5C8 0%, #E4D3A9 100%);
+  overflow: hidden;
+  isolation: isolate;
+}
+.lc-card-empty::before,
+.op-card-empty::before {
+  content: '';
+  position: absolute;
+  inset: 12% 18%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 140' fill='none' stroke='%238E6924' stroke-width='0.9' opacity='0.72'><rect x='6' y='6' width='88' height='128' rx='8'/><path d='M50 22 C 58 44, 72 54, 72 74 A 22 22 0 1 1 28 74 C 28 54, 42 44, 50 22 Z' fill='%237A4EF0' fill-opacity='0.18' stroke='%237A4EF0' stroke-opacity='0.55'/><circle cx='44' cy='72' r='4.5' fill='%23FFFDF7' opacity='0.65'/><path d='M14 22 h72 M14 118 h72' opacity='0.4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.35;
+  pointer-events: none;
+}
+.lc-card-empty > span,
+.op-card-empty > span {
+  position: absolute;
+  bottom: 10px; left: 0; right: 0;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: rgba(142,105,36,0.65);
+  text-transform: uppercase;
+}
+
+/* Card image halo. */
+.lc-card-halo, .op-card-halo { position: relative; }
+
+/* Responsive two-column grid used by the card + printing pages. */
+.lc-card-hero-grid,
+.op-card-hero-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 720px) {
+  .lc-card-hero-grid, .op-card-hero-grid {
+    grid-template-columns: minmax(220px, 320px) 1fr;
+  }
+}
+.lc-card-halo::before,
+.op-card-halo::before {
+  content: '';
+  position: absolute; inset: -20px;
+  background: var(--lc-halo, radial-gradient(60% 60% at 50% 30%, rgba(122,78,240,0.16), transparent 70%));
+  filter: blur(24px);
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 40px;
+}
+.lc-card-halo > *, .op-card-halo > * { position: relative; z-index: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .lc-card-halo::before, .op-card-halo::before { filter: none; opacity: 0.6; }
+}
+
+/* Dark chase panel — a deep-amethyst island used for the Chase / most
+   valuable treatments module. The ONE dark surface on the site. */
+.lc-chase-panel,
+.op-chase-panel {
+  --panel-bg-1: #241549;
+  --panel-bg-2: #170B34;
+  --panel-fg: #F1E7C7;
+  --panel-fg-muted: #B7ADCE;
+  --panel-border: rgba(185, 138, 58, 0.22);
+  position: relative;
+  color: var(--panel-fg);
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(185, 138, 58, 0.10), transparent 60%),
+    linear-gradient(180deg, var(--panel-bg-1) 0%, var(--panel-bg-2) 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px 22px;
+  box-shadow: 0 12px 40px rgba(30, 17, 60, 0.20);
+  overflow: hidden;
+}
+.lc-chase-panel h2, .lc-chase-panel h3,
+.op-chase-panel h2, .op-chase-panel h3 { color: var(--panel-fg); }
+.lc-chase-panel .label-mono,
+.op-chase-panel .label-mono { color: var(--gold-300); }
+
+.lc-chase-cell,
+.op-chase-cell {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  display: grid; gap: 4px;
+}
+.lc-chase-cell .price,
+.op-chase-cell .price {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-weight: 700; font-size: 20px; letter-spacing: -0.01em;
+  color: #F6EED9;
+  line-height: 1.1;
+}
