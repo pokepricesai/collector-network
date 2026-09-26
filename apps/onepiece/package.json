@@ -12,9 +12,11 @@
     "clean": "rimraf .next .turbo node_modules"
   },
   "dependencies": {
+    "@collector-network/auth": "workspace:^",
     "@collector-network/database": "workspace:*",
     "@collector-network/market-data": "workspace:*",
     "@collector-network/network-config": "workspace:*",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.4",
     "@vercel/analytics": "^2.0.1",
     "next": "^15.1.4",

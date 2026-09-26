@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getCurrentUser } from '@collector-network/auth';
 import { getSetBundle } from '@/server/browse';
 import { getCardBundleByCardId } from '@/server/read';
 import { canonicalFor } from '@/lib/seo';
@@ -10,7 +11,10 @@ import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import PriceHistorySpark from '@/components/card/PriceHistorySpark';
+import { AddToCollection } from '@/components/AddToCollection';
+import { GradedPricesPanel } from '@/components/GradedPricesPanel';
 import { getPrintingHistory } from '@/server/history';
+import { getGradedRowsForAnchor } from '@/server/graded';
 import type { OpCardView, OpPrintingView } from '@/server/read';
 import type { TcgCard } from '@collector-network/database';
 
@@ -235,8 +239,27 @@ export default async function PrintingPage({
                 </p>
               </div>
             )}
+
+            {anchorPrinting && (
+              <AddToCollection
+                cardId={anchorCardView.card.id}
+                printingId={anchorPrinting.printing.id}
+                cardName={bundle.name}
+                isSignedIn={!!(await getCurrentUser())}
+              />
+            )}
           </div>
         </div>
+
+        {anchorPrinting && (
+          <GradedPanelForPrinting
+            printingId={anchorPrinting.printing.id}
+            cardId={anchorCardView.card.id}
+            setCode={canonicalSetLabel}
+            collectorNumber={resolved.matched.collector_number}
+            finish={anchorPrinting.printing.finish}
+          />
+        )}
 
         <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
           <header>
@@ -352,6 +375,33 @@ export default async function PrintingPage({
           </section>
         )}
       </div>
+    </div>
+  );
+}
+
+async function GradedPanelForPrinting({
+  printingId,
+  cardId,
+  setCode,
+  collectorNumber,
+  finish,
+}: {
+  printingId: string;
+  cardId: string;
+  setCode: string;
+  collectorNumber: string | null;
+  finish: string | null;
+}) {
+  const rows = await getGradedRowsForAnchor({ printingId, cardId });
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 28 }}>
+      <GradedPricesPanel
+        rows={rows}
+        setCode={setCode}
+        collectorNumber={collectorNumber}
+        finish={finish}
+      />
     </div>
   );
 }

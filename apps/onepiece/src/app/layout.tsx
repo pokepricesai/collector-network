@@ -5,6 +5,7 @@ import './globals.css';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import SiteStructuredData from '@/components/SiteStructuredData';
+import { AccountChip } from '@/components/AccountChip';
 import { SITE_LAUNCHED, SITE_URL } from '@/lib/site-url';
 
 const SITE_NAME = 'OnePiecePrices';
@@ -96,7 +97,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
         <SiteStructuredData />
-        <Navbar />
+        <Navbar accountSlot={<AccountChip />} />
         <main className="flex-1">{children}</main>
         <Footer />
         {/* Vercel Web Analytics — anonymous page-view counts + the

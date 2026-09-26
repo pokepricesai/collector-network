@@ -20,6 +20,9 @@ importers:
 
   apps/onepiece:
     dependencies:
+      '@collector-network/auth':
+        specifier: workspace:^
+        version: link:../../packages/auth
       '@collector-network/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -29,6 +32,9 @@ importers:
       '@collector-network/network-config':
         specifier: workspace:*
         version: link:../../packages/network-config
+      '@supabase/ssr':
+        specifier: ^0.12.7
+        version: 0.12.7(@supabase/supabase-js@2.117.0)
       '@supabase/supabase-js':
         specifier: ^2.45.4
         version: 2.117.0

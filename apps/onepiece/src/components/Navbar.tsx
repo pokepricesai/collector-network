@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 // Site navigation. Primary desktop bar exposes the surfaces One Piece
@@ -9,6 +9,10 @@ import { useRouter, usePathname } from 'next/navigation';
 // Movers, Insights. A Tools dropdown holds secondary utilities. On
 // narrower widths (below ~1280) Leaders + Colours + Card Finder move
 // into Tools.
+//
+// The `accountSlot` prop is populated by a server component (see
+// AccountChip.tsx) so we can render authenticated state — a client
+// component can't call getCurrentUser() directly.
 
 type NavItem = { label: string; href: string };
 
@@ -68,9 +72,17 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
       { label: 'Insights', href: '/insights' },
     ],
   },
+  {
+    title: 'Account',
+    items: [
+      { label: 'My Collection', href: '/collection' },
+      { label: 'Account', href: '/account' },
+      { label: 'Sign in', href: '/sign-in' },
+    ],
+  },
 ];
 
-export default function Navbar() {
+export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() ?? '/';
   const [menuOpen, setMenuOpen] = useState(false);
@@ -210,6 +222,12 @@ export default function Navbar() {
         </div>
       </form>
 
+      {accountSlot && (
+        <div className="nav-account-slot" style={{ display: 'none', flexShrink: 0 }}>
+          {accountSlot}
+        </div>
+      )}
+
       <button
         className="mobile-menu-btn"
         onClick={() => setMenuOpen((v) => !v)}
@@ -310,17 +328,20 @@ export default function Navbar() {
           .nav-search { display: block !important; }
           .desktop-nav-wide { display: flex !important; }
           .desktop-nav-medium { display: none !important; }
+          .nav-account-slot { display: flex !important; }
         }
         @media (min-width: 1080px) and (max-width: 1279px) {
           .mobile-menu-btn { display: none !important; }
           .nav-search { display: block !important; }
           .desktop-nav-wide { display: none !important; }
           .desktop-nav-medium { display: flex !important; }
+          .nav-account-slot { display: flex !important; }
         }
         @media (max-width: 1079px) {
           .desktop-nav-wide { display: none !important; }
           .desktop-nav-medium { display: none !important; }
           .nav-search { display: none !important; }
+          .nav-account-slot { display: none !important; }
           .mobile-menu-btn { display: inline-flex !important; }
         }
         /* Shrink the header logo below 480px so the hamburger button
