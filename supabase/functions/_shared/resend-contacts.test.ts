@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  addContactToSegment,
   createContact,
+  getContactSegments,
   getContactTopics,
   patchContactEmail,
   patchContactTopics,
@@ -115,7 +117,7 @@ test('createContact never surfaces the provider response body in the result', as
 
 // -- patchContactEmail (drift) ------------------------------------
 
-test('patchContactEmail PATCHes /contacts/{id} with email + segments only', async () => {
+test('patchContactEmail PATCHes /contacts/{id} with email only (no segments, no topics, no unsubscribed)', async () => {
   let captured = '';
   const { fetch, calls } = makeMockFetch((_u, init) => {
     captured = String(init.body ?? '');
@@ -124,13 +126,15 @@ test('patchContactEmail PATCHes /contacts/{id} with email + segments only', asyn
   await patchContactEmail('key', {
     contactId: 'c-1',
     email: 'new@example.com',
-    segmentId: 'seg-1',
   }, fetch);
   assert.equal(calls[0]!.url, 'https://api.resend.com/contacts/c-1');
   assert.equal(calls[0]!.init.method, 'PATCH');
   const parsed = JSON.parse(captured);
   assert.equal(parsed.email, 'new@example.com');
-  assert.deepEqual(parsed.segments, ['seg-1']);
+  // PATCH /contacts/{id} does not document `segments` as
+  // writable. Segment membership is managed via the dedicated
+  // /contacts/{id}/segments/{segment_id} sub-resource.
+  assert.equal(parsed.segments, undefined, 'segments must NOT be in the email-drift body');
   assert.equal(parsed.topics, undefined, 'topics must NOT be in the email-drift body');
   assert.equal(parsed.unsubscribed, undefined, 'unsubscribed must NEVER be in the body');
 });
@@ -138,7 +142,7 @@ test('patchContactEmail PATCHes /contacts/{id} with email + segments only', asyn
 test('patchContactEmail 404 propagates so the worker can recreate', async () => {
   const { fetch } = makeMockFetch(() => ({ status: 404 }));
   const r = await patchContactEmail('key', {
-    contactId: 'gone', email: 'a@b.com', segmentId: 's',
+    contactId: 'gone', email: 'a@b.com',
   }, fetch);
   assert.equal(r.ok, false);
   assert.equal(r.errorTag, 'resend-404');
@@ -149,10 +153,68 @@ test('patchContactEmail encodes contactId for URL safety', async () => {
   await patchContactEmail('key', {
     contactId: 'weird/id with space',
     email: 'a@b.com',
-    segmentId: 's',
   }, fetch);
   // Encoded form present, raw form absent.
   assert.ok(calls[0]!.url.includes('weird%2Fid%20with%20space'));
+});
+
+// -- getContactSegments -------------------------------------------
+
+test('getContactSegments GETs /contacts/{id}/segments and returns id list', async () => {
+  const body = JSON.stringify({
+    object: 'list',
+    has_more: false,
+    data: [
+      { id: 'seg-general', name: 'General', created_at: '2025-01-01' },
+      { id: 'seg-cn',      name: 'Collector Network Contacts', created_at: '2026-09-01' },
+    ],
+  });
+  const { fetch, calls } = makeMockFetch(() => ({ status: 200, body }));
+  const r = await getContactSegments('key', 'c-1', fetch);
+  assert.equal(calls[0]!.url, 'https://api.resend.com/contacts/c-1/segments');
+  assert.equal(calls[0]!.init.method, 'GET');
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.data.map((d) => d.segmentId), ['seg-general', 'seg-cn']);
+});
+
+test('getContactSegments empty list on 200 with data:[]', async () => {
+  const { fetch } = makeMockFetch(() => ({ status: 200, body: '{"data":[]}' }));
+  const r = await getContactSegments('key', 'c-1', fetch);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.data, []);
+});
+
+test('getContactSegments 404 → resend-404, empty data', async () => {
+  const { fetch } = makeMockFetch(() => ({ status: 404 }));
+  const r = await getContactSegments('key', 'gone', fetch);
+  assert.equal(r.ok, false);
+  assert.equal(r.errorTag, 'resend-404');
+  assert.deepEqual(r.data, []);
+});
+
+// -- addContactToSegment ------------------------------------------
+
+test('addContactToSegment POSTs /contacts/{id}/segments/{segment_id} with no body', async () => {
+  const { fetch, calls } = makeMockFetch(() => ({ status: 201 }));
+  const r = await addContactToSegment('key', 'c-1', 'seg-cn', fetch);
+  assert.equal(r.ok, true);
+  assert.equal(calls[0]!.url, 'https://api.resend.com/contacts/c-1/segments/seg-cn');
+  assert.equal(calls[0]!.init.method, 'POST');
+  // No body at all. Path-only endpoint.
+  assert.equal(calls[0]!.init.body, undefined);
+});
+
+test('addContactToSegment 429 propagates as resend-429', async () => {
+  const { fetch } = makeMockFetch(() => ({ status: 429 }));
+  const r = await addContactToSegment('key', 'c-1', 'seg-cn', fetch);
+  assert.equal(r.errorTag, 'resend-429');
+});
+
+test('addContactToSegment encodes both path segments for URL safety', async () => {
+  const { fetch, calls } = makeMockFetch(() => ({ status: 201 }));
+  await addContactToSegment('key', 'contact id/1', 'seg/id', fetch);
+  assert.ok(calls[0]!.url.includes('contact%20id%2F1'));
+  assert.ok(calls[0]!.url.includes('seg%2Fid'));
 });
 
 // -- getContactTopics ---------------------------------------------

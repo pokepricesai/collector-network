@@ -34,7 +34,17 @@ export interface CreateContactResult {
 export interface PatchContactEmailInput {
   contactId: string;
   email: string;
+}
+
+export interface SegmentMembership {
   segmentId: string;
+}
+
+export interface SegmentsResult {
+  ok: boolean;
+  status: number;
+  data: SegmentMembership[];
+  errorTag?: string;
 }
 
 export interface SimpleResult {
@@ -101,9 +111,12 @@ export async function createContact(
   return { ok: false, status: res.status, errorTag: `resend-${res.status}` };
 }
 
-// Update a contact's email (email drift) and re-affirm segment
-// membership. NEVER writes topics (that goes through the
-// dedicated sub-resource) and NEVER writes `unsubscribed`.
+// Update a contact's email (email drift). NEVER writes topics
+// (that goes through the dedicated /topics sub-resource) and
+// NEVER writes `unsubscribed`. Also does NOT write `segments` —
+// PATCH /contacts/{id} does not document segments as a writable
+// field, and segment membership is managed via the dedicated
+// /contacts/{id}/segments/{segment_id} sub-resource instead.
 export async function patchContactEmail(
   apiKey: string,
   input: PatchContactEmailInput,
@@ -112,7 +125,6 @@ export async function patchContactEmail(
   if (!apiKey) return { ok: false, status: 0, errorTag: 'missing-api-key' };
   const body = {
     email: input.email,
-    segments: [input.segmentId],
   };
   let res: Response;
   try {
@@ -197,6 +209,83 @@ export async function patchContactTopics(
       headers: authHeaders(apiKey),
       body: JSON.stringify(diff),
     });
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      errorTag: err instanceof Error ? `network:${err.name}` : 'network',
+    };
+  }
+  if (res.status >= 200 && res.status < 300) {
+    return { ok: true, status: res.status };
+  }
+  try { await res.text(); } catch { /* swallow */ }
+  return { ok: false, status: res.status, errorTag: `resend-${res.status}` };
+}
+
+// Read a contact's current segment memberships. Used to detect
+// whether we need to add the contact to the Collector Network
+// Contacts segment (idempotent add via the sub-resource below).
+// Response shape (Resend docs verified 2026-09-26):
+//   { object: 'list', has_more: boolean,
+//     data: [{id, name, created_at}, ...] }
+// We only care about the ids; other columns are dropped.
+export async function getContactSegments(
+  apiKey: string,
+  contactId: string,
+  doFetch: FetchLike = fetch,
+): Promise<SegmentsResult> {
+  if (!apiKey) return { ok: false, status: 0, data: [], errorTag: 'missing-api-key' };
+  let res: Response;
+  try {
+    res = await doFetch(`${BASE}/contacts/${encodeURIComponent(contactId)}/segments`, {
+      method: 'GET',
+      headers: authHeaders(apiKey),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      data: [],
+      errorTag: err instanceof Error ? `network:${err.name}` : 'network',
+    };
+  }
+  if (res.status >= 200 && res.status < 300) {
+    let parsed: { data?: Array<{ id?: string }> } = {};
+    try { parsed = (await res.json()) as typeof parsed; } catch { /* swallow */ }
+    const data: SegmentMembership[] = [];
+    for (const row of parsed.data ?? []) {
+      if (typeof row.id === 'string' && row.id.length > 0) {
+        data.push({ segmentId: row.id });
+      }
+    }
+    return { ok: true, status: res.status, data };
+  }
+  try { await res.text(); } catch { /* swallow */ }
+  return { ok: false, status: res.status, data: [], errorTag: `resend-${res.status}` };
+}
+
+// Add a contact to a segment via the dedicated sub-resource.
+// This is ADDITIVE: it never removes the contact from any other
+// segment it already belongs to. That's exactly what we need to
+// coexist with PokePrices' existing `General` segment membership.
+// If the contact is already a member, Resend returns success.
+export async function addContactToSegment(
+  apiKey: string,
+  contactId: string,
+  segmentId: string,
+  doFetch: FetchLike = fetch,
+): Promise<SimpleResult> {
+  if (!apiKey) return { ok: false, status: 0, errorTag: 'missing-api-key' };
+  let res: Response;
+  try {
+    res = await doFetch(
+      `${BASE}/contacts/${encodeURIComponent(contactId)}/segments/${encodeURIComponent(segmentId)}`,
+      {
+        method: 'POST',
+        headers: authHeaders(apiKey),
+      },
+    );
   } catch (err) {
     return {
       ok: false,

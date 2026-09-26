@@ -217,13 +217,44 @@ $env:MARKETING_SYNC_TRIGGER_SECRET = $null
 
 ## Step 8 — Verify in the Resend dashboard
 
+Verify BOTH segment membership AND topic subscriptions for
+every backfilled contact.
+
 - **Segments** → `Collector Network Contacts` should show
-  `<N>` members matching the backfill response.
-- Each contact's per-topic subscription (Contacts → click a
-  contact → Topics) matches their Supabase preference for the
-  matching topic.
-- Existing PokePrices state (General segment, Untitled
-  drafts) is unchanged.
+  `<N>` members matching the backfill response body's
+  `succeeded` count.
+- For each contact currently in `General` (PokePrices legacy):
+  it must ALSO appear in `Collector Network Contacts` if that
+  user has a CN marketing preference row. `General`
+  membership must NOT have been removed. The two segments
+  co-exist.
+- Contacts NOT in the Supabase preference table must NOT
+  appear in `Collector Network Contacts` — Amendment 1
+  (membership is not consent) is what stops CN-A backfilled
+  users without preferences from ending up here.
+- Click each contact → **Segments** tab. Confirm it lists at
+  least `Collector Network Contacts`. If the contact was
+  already in `General` or another segment, confirm those are
+  still present.
+- Click each contact → **Topics** tab. Confirm the
+  `subscription` for each topic matches the Supabase
+  preference:
+  - `site:ygo` = `opt_in` when
+    `collector_marketing_preferences.email_opt_in = true` for
+    scope=site, site_code=ygo. Else `opt_out` — or the topic
+    may be absent if the user has no preference row for it
+    (Amendment 1).
+  - `network` = same rule against scope=network,
+    site_code=null.
+- Existing PokePrices state — `General` segment, both
+  `Untitled` broadcast drafts, verified domains — is
+  unchanged.
+
+Also run the privilege audit block from
+`docs/network/schema-request-cn-d1.md` §"Post-migration
+verification". Every anon/authenticated row must return `f`,
+every service_role row must return `t`. Any `t` in the wrong
+column blocks Step 9.
 
 ## STOP checkpoint
 
@@ -290,18 +321,20 @@ With the cron running:
 2. Toggle the YGO opt-in ON. Save.
 3. Wait ~60-90 s.
 4. Confirm the contact appears in the `Collector Network
-   Contacts` segment with `site:ygo` = `opt_in`.
+   Contacts` segment (Resend dashboard → Segments) AND the
+   contact's Topics tab shows `site:ygo` = `opt_in`.
 5. Toggle the YGO opt-in OFF. Save.
 6. Wait ~60-90 s.
 7. Confirm the contact's `site:ygo` flipped to `opt_out`.
    The contact remains in the segment (never deleted, never
-   `unsubscribed=true`).
+   `unsubscribed=true`). If the contact also had `General`
+   before (PokePrices legacy), it must STILL have `General`.
 8. Trigger a Secure Email Change for the same user via
    `/settings`. Confirm both emails.
 9. Wait ~60-90 s.
 10. Confirm the SAME Resend contact id now shows the new
     email. `collector_marketing_contacts.synced_email`
-    matches.
+    matches. Segment membership unchanged.
 
 ## Step 11 — Cadence step-down (post-validation)
 

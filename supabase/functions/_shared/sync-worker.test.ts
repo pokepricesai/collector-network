@@ -303,6 +303,10 @@ test('syncUser returning: sends smallest corrective PATCH (Gate B additive)', as
     mappings: { 'u1': { userId: 'u1', resendContactId: 'r-1', syncedEmail: 'alice@example.com' } },
   });
   const { fetch, calls } = makeMockFetch([
+    // GET segments: already in the CN segment. No POST expected.
+    { method: 'GET', urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [{ id: 'seg-1', name: 'Collector Network Contacts', created_at: '2026-09-01' }],
+    } },
     // GET topics: network already opt_in, ygo opt_out (default)
     { method: 'GET', urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
       data: [
@@ -336,10 +340,13 @@ test('syncUser returning: no diff → no PATCH call (idempotent)', async () => {
     mappings: { 'u1': { userId: 'u1', resendContactId: 'r-1', syncedEmail: 'alice@example.com' } },
   });
   const { fetch, calls } = makeMockFetch([
+    { method: 'GET', urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [{ id: 'seg-1' }],
+    } },
     { method: 'GET', urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
       data: [{ id: 't-ygo', subscription: 'opt_in' }],
     } },
-    // No PATCH mock registered — if it fires, 599 will surface.
+    // No PATCH / POST mocks registered — if any fires, 599 will surface.
   ]);
   const outcome = await syncUser('u1', {
     supabase: adapterFor(f),
@@ -350,6 +357,7 @@ test('syncUser returning: no diff → no PATCH call (idempotent)', async () => {
   });
   assert.equal(outcome.kind, 'success');
   assert.equal(calls.filter((c) => c.method === 'PATCH').length, 0);
+  assert.equal(calls.filter((c) => c.method === 'POST').length, 0);
 });
 
 test('syncUser: opt-out flip PATCHes with opt_out for that topic only', async () => {
@@ -361,6 +369,9 @@ test('syncUser: opt-out flip PATCHes with opt_out for that topic only', async ()
     mappings: { 'u1': { userId: 'u1', resendContactId: 'r-1', syncedEmail: 'alice@example.com' } },
   });
   const { fetch, calls } = makeMockFetch([
+    { method: 'GET', urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [{ id: 'seg-1' }],
+    } },
     { method: 'GET', urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
       data: [{ id: 't-ygo', subscription: 'opt_in' }],
     } },
@@ -380,7 +391,7 @@ test('syncUser: opt-out flip PATCHes with opt_out for that topic only', async ()
 
 // -- syncUser: email drift ---------------------------------------
 
-test('syncUser: email drift → PATCH email, then GET+PATCH topics if needed', async () => {
+test('syncUser: email drift → PATCH email (no segments field), then check segment + topics', async () => {
   const f = makeFixture({
     emails: { 'u1': 'NEW@example.com' },
     preferences: { 'u1': [
@@ -390,6 +401,9 @@ test('syncUser: email drift → PATCH email, then GET+PATCH topics if needed', a
   });
   const { fetch, calls } = makeMockFetch([
     { method: 'PATCH', urlPattern: /\/contacts\/r-1$/, status: 200 },
+    { method: 'GET',   urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [{ id: 'seg-1' }],
+    } },
     { method: 'GET',   urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
       data: [{ id: 't-ygo', subscription: 'opt_in' }], // already in target state
     } },
@@ -406,7 +420,8 @@ test('syncUser: email drift → PATCH email, then GET+PATCH topics if needed', a
   const emailPatch = calls.find((c) => c.method === 'PATCH' && /\/contacts\/r-1$/.test(c.url))!;
   const parsed = JSON.parse(emailPatch.body);
   assert.equal(parsed.email, 'new@example.com'); // normalised
-  assert.deepEqual(parsed.segments, ['seg-1']);
+  // segments and topics NEVER in the email-drift body.
+  assert.equal(parsed.segments, undefined);
   assert.equal(parsed.topics, undefined);
   // Mapping now shows synced_email updated.
   assert.deepEqual(f.emailUpdates, [{ userId: 'u1', email: 'new@example.com' }]);
@@ -414,7 +429,7 @@ test('syncUser: email drift → PATCH email, then GET+PATCH topics if needed', a
 
 // -- syncUser: 404 recovery + failure propagation -----------------
 
-test('syncUser: PATCH topics returns 404 → falls back to POST + upserts mapping', async () => {
+test('syncUser: GET segments returns 404 → falls back to POST /contacts + upserts mapping', async () => {
   const f = makeFixture({
     emails: { 'u1': 'alice@example.com' },
     preferences: { 'u1': [
@@ -423,6 +438,31 @@ test('syncUser: PATCH topics returns 404 → falls back to POST + upserts mappin
     mappings: { 'u1': { userId: 'u1', resendContactId: 'r-stale', syncedEmail: 'alice@example.com' } },
   });
   const { fetch, calls } = makeMockFetch([
+    { method: 'GET',  urlPattern: /\/contacts\/r-stale\/segments$/, status: 404 },
+    { method: 'POST', urlPattern: /\/contacts$/, status: 201, body: { id: 'r-new' } },
+  ]);
+  const outcome = await syncUser('u1', {
+    supabase: adapterFor(f),
+    resendApiKey: 'key',
+    doFetch: fetch,
+    segmentId: 'seg-1',
+    activeTopics: [TOPIC_YGO],
+  });
+  assert.equal(outcome.kind, 'success');
+  assert.equal(f.mappings['u1']!.resendContactId, 'r-new');
+  assert.equal(calls.filter((c) => c.method === 'POST').length, 1);
+});
+
+test('syncUser: GET topics returns 404 (after successful segments GET) → recreate via POST', async () => {
+  const f = makeFixture({
+    emails: { 'u1': 'alice@example.com' },
+    preferences: { 'u1': [
+      { userId: 'u1', scope: 'site', siteCode: 'ygo', emailOptIn: true },
+    ] },
+    mappings: { 'u1': { userId: 'u1', resendContactId: 'r-stale', syncedEmail: 'alice@example.com' } },
+  });
+  const { fetch } = makeMockFetch([
+    { method: 'GET',  urlPattern: /\/contacts\/r-stale\/segments$/, status: 200, body: { data: [{ id: 'seg-1' }] } },
     { method: 'GET',  urlPattern: /\/contacts\/r-stale\/topics$/, status: 404 },
     { method: 'POST', urlPattern: /\/contacts$/, status: 201, body: { id: 'r-new' } },
   ]);
@@ -434,9 +474,7 @@ test('syncUser: PATCH topics returns 404 → falls back to POST + upserts mappin
     activeTopics: [TOPIC_YGO],
   });
   assert.equal(outcome.kind, 'success');
-  // Mapping now points at the new contact id.
   assert.equal(f.mappings['u1']!.resendContactId, 'r-new');
-  assert.equal(calls.filter((c) => c.method === 'POST').length, 1);
 });
 
 test('syncUser: Resend 429 on POST → failure outcome with resend-429 tag', async () => {
@@ -472,6 +510,7 @@ test('syncUser: Resend 503 on topic PATCH → failure outcome', async () => {
     mappings: { 'u1': { userId: 'u1', resendContactId: 'r-1', syncedEmail: 'alice@example.com' } },
   });
   const { fetch } = makeMockFetch([
+    { method: 'GET',   urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: { data: [{ id: 'seg-1' }] } },
     { method: 'GET',   urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
       data: [{ id: 't-ygo', subscription: 'opt_out' }],
     } },
@@ -486,6 +525,141 @@ test('syncUser: Resend 503 on topic PATCH → failure outcome', async () => {
   });
   assert.equal(outcome.kind, 'failure');
   if (outcome.kind === 'failure') assert.equal(outcome.errorTag, 'resend-503');
+});
+
+// -- Segment membership reconciliation (audit fix) ---------------
+
+test('syncUser first-time: POST /contacts body includes segments: [segmentId]', async () => {
+  const f = makeFixture({
+    emails: { 'u1': 'alice@example.com' },
+    preferences: { 'u1': [
+      { userId: 'u1', scope: 'site', siteCode: 'ygo', emailOptIn: true },
+    ] },
+  });
+  let captured = '';
+  const { fetch } = makeMockFetch([
+    { method: 'POST', urlPattern: /\/contacts$/, status: 201, body: { id: 'r-new' } },
+  ]);
+  const wrapped: FetchLike = async (u, init) => {
+    if (String(init.method ?? '') === 'POST') captured = String(init.body ?? '');
+    return fetch(u, init);
+  };
+  await syncUser('u1', {
+    supabase: adapterFor(f),
+    resendApiKey: 'key',
+    doFetch: wrapped,
+    segmentId: 'seg-cn',
+    activeTopics: [TOPIC_YGO],
+  });
+  const parsed = JSON.parse(captured);
+  assert.deepEqual(parsed.segments, ['seg-cn']);
+});
+
+test('syncUser returning: GET segments returns other segment only → POST add-to-CN-segment fires', async () => {
+  const f = makeFixture({
+    emails: { 'u1': 'alice@example.com' },
+    preferences: { 'u1': [
+      { userId: 'u1', scope: 'site', siteCode: 'ygo', emailOptIn: true },
+    ] },
+    // Simulates a PokePrices-legacy contact that already has the
+    // General segment but has never been added to CN Contacts.
+    mappings: { 'u1': { userId: 'u1', resendContactId: 'r-1', syncedEmail: 'alice@example.com' } },
+  });
+  const { fetch, calls } = makeMockFetch([
+    { method: 'GET', urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [{ id: 'seg-general', name: 'General' }],
+    } },
+    { method: 'POST', urlPattern: /\/contacts\/r-1\/segments\/seg-cn$/, status: 201 },
+    { method: 'GET',   urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
+      data: [{ id: 't-ygo', subscription: 'opt_in' }],
+    } },
+  ]);
+  const outcome = await syncUser('u1', {
+    supabase: adapterFor(f),
+    resendApiKey: 'key',
+    doFetch: fetch,
+    segmentId: 'seg-cn',
+    activeTopics: [TOPIC_YGO],
+  });
+  assert.equal(outcome.kind, 'success');
+  // Segment add fired exactly once, additively — never touches General.
+  const segAdds = calls.filter((c) => c.method === 'POST' && /\/segments\/seg-cn$/.test(c.url));
+  assert.equal(segAdds.length, 1);
+  assert.equal(segAdds[0]!.body, ''); // path-only endpoint, no body
+});
+
+test('syncUser returning: contact already in CN segment → no add-to-segment POST', async () => {
+  const f = makeFixture({
+    emails: { 'u1': 'alice@example.com' },
+    preferences: { 'u1': [
+      { userId: 'u1', scope: 'site', siteCode: 'ygo', emailOptIn: true },
+    ] },
+    mappings: { 'u1': { userId: 'u1', resendContactId: 'r-1', syncedEmail: 'alice@example.com' } },
+  });
+  const { fetch, calls } = makeMockFetch([
+    { method: 'GET', urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [
+        { id: 'seg-general', name: 'General' },
+        { id: 'seg-cn',      name: 'Collector Network Contacts' },
+      ],
+    } },
+    { method: 'GET',   urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
+      data: [{ id: 't-ygo', subscription: 'opt_in' }],
+    } },
+    // No add-to-segment POST expected. Any POST request would
+    // hit the fall-through 599 in makeMockFetch.
+  ]);
+  const outcome = await syncUser('u1', {
+    supabase: adapterFor(f),
+    resendApiKey: 'key',
+    doFetch: fetch,
+    segmentId: 'seg-cn',
+    activeTopics: [TOPIC_YGO],
+  });
+  assert.equal(outcome.kind, 'success');
+  assert.equal(calls.filter((c) => c.method === 'POST').length, 0);
+});
+
+test('syncUser: unrelated segment memberships (e.g. General) are NEVER removed', async () => {
+  // Explicit invariant test: the worker only calls GET
+  // /segments and POST /segments/{id}. There is no DELETE code
+  // path anywhere in the module for segment removal.
+  const f = makeFixture({
+    emails: { 'u1': 'alice@example.com' },
+    preferences: { 'u1': [
+      { userId: 'u1', scope: 'site', siteCode: 'ygo', emailOptIn: true },
+    ] },
+    mappings: { 'u1': { userId: 'u1', resendContactId: 'r-1', syncedEmail: 'alice@example.com' } },
+  });
+  const { fetch, calls } = makeMockFetch([
+    { method: 'GET', urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [
+        { id: 'seg-general', name: 'General' },
+        { id: 'seg-random',  name: 'Some other pre-existing segment' },
+      ],
+    } },
+    { method: 'POST', urlPattern: /\/contacts\/r-1\/segments\/seg-cn$/, status: 201 },
+    { method: 'GET',   urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
+      data: [{ id: 't-ygo', subscription: 'opt_in' }],
+    } },
+  ]);
+  await syncUser('u1', {
+    supabase: adapterFor(f),
+    resendApiKey: 'key',
+    doFetch: fetch,
+    segmentId: 'seg-cn',
+    activeTopics: [TOPIC_YGO],
+  });
+  assert.equal(
+    calls.filter((c) => c.method === 'DELETE').length,
+    0,
+    'worker must never DELETE any segment membership',
+  );
+  // General + seg-random never appear in an ADD URL either.
+  for (const c of calls) {
+    assert.equal(/\/segments\/seg-general/.test(c.url), false);
+    assert.equal(/\/segments\/seg-random/.test(c.url), false);
+  }
 });
 
 // -- runReconcile ------------------------------------------------
@@ -675,6 +849,9 @@ test('invariant: `unsubscribed` never appears in any request body across create 
   let allBodies = '';
   const { fetch } = makeMockFetch([
     { method: 'PATCH', urlPattern: /\/contacts\/r-1$/, status: 200 },
+    { method: 'GET',   urlPattern: /\/contacts\/r-1\/segments$/, status: 200, body: {
+      data: [{ id: 'seg-1' }],
+    } },
     { method: 'GET',   urlPattern: /\/contacts\/r-1\/topics$/, status: 200, body: {
       data: [{ id: 't-ygo', subscription: 'opt_in' }],
     } },

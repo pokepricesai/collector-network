@@ -182,8 +182,17 @@ as $$
   limit greatest(1, coalesce(p_limit, 100));
 $$;
 
+-- Lock the function down. `revoke ... from public` removes the
+-- default catch-all EXECUTE, but Supabase's `anon` and
+-- `authenticated` roles are real roles that can hold explicit
+-- grants — revoke from them by name too. `service_role` is
+-- Supabase's superuser-adjacent role that the Edge Function
+-- uses via SUPABASE_SERVICE_ROLE_KEY; grant it EXECUTE
+-- explicitly rather than relying on ownership defaults.
 revoke all on function public.collector_marketing_events_since(timestamptz, uuid, integer, integer) from public;
--- Service role auto-grants; nothing else needed for the worker.
+revoke all on function public.collector_marketing_events_since(timestamptz, uuid, integer, integer) from anon;
+revoke all on function public.collector_marketing_events_since(timestamptz, uuid, integer, integer) from authenticated;
+grant execute on function public.collector_marketing_events_since(timestamptz, uuid, integer, integer) to service_role;
 
 -- Upsert a sync failure with exponential backoff based on the
 -- current attempts count. Called by the worker after each
@@ -226,10 +235,51 @@ begin
 end;
 $$;
 
+-- Same privilege hardening as events_since above.
 revoke all on function public.collector_marketing_sync_record_failure(uuid, text, timestamptz, integer) from public;
+revoke all on function public.collector_marketing_sync_record_failure(uuid, text, timestamptz, integer) from anon;
+revoke all on function public.collector_marketing_sync_record_failure(uuid, text, timestamptz, integer) from authenticated;
+grant execute on function public.collector_marketing_sync_record_failure(uuid, text, timestamptz, integer) to service_role;
 
 commit;
 ```
+
+## Post-migration verification (privilege audit)
+
+Run these read-only queries in the Supabase SQL Editor **after
+applying the migration** to prove the internal RPCs are not
+callable from PostgREST. Each row must return the expected
+value.
+
+```sql
+-- collector_marketing_events_since must be invisible to
+-- authenticated + anon and callable only by service_role.
+select 'anon.events_since'          as check, has_function_privilege('anon',          'public.collector_marketing_events_since(timestamptz, uuid, integer, integer)', 'execute') as granted
+union all
+select 'authenticated.events_since',       has_function_privilege('authenticated', 'public.collector_marketing_events_since(timestamptz, uuid, integer, integer)', 'execute')
+union all
+select 'service_role.events_since',        has_function_privilege('service_role',  'public.collector_marketing_events_since(timestamptz, uuid, integer, integer)', 'execute')
+union all
+select 'anon.sync_record_failure',         has_function_privilege('anon',          'public.collector_marketing_sync_record_failure(uuid, text, timestamptz, integer)', 'execute')
+union all
+select 'authenticated.sync_record_failure',has_function_privilege('authenticated', 'public.collector_marketing_sync_record_failure(uuid, text, timestamptz, integer)', 'execute')
+union all
+select 'service_role.sync_record_failure', has_function_privilege('service_role',  'public.collector_marketing_sync_record_failure(uuid, text, timestamptz, integer)', 'execute');
+```
+
+Expected:
+
+| check | granted |
+|---|---|
+| anon.events_since | **f** |
+| authenticated.events_since | **f** |
+| service_role.events_since | **t** |
+| anon.sync_record_failure | **f** |
+| authenticated.sync_record_failure | **f** |
+| service_role.sync_record_failure | **t** |
+
+Any `t` in the anon or authenticated rows is a stop-the-line
+finding — do not proceed to Step 3 of the deployment runbook.
 
 ## Post-migration seed (run AFTER Resend Segment + Topics exist)
 

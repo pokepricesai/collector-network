@@ -23,7 +23,9 @@
 //     created on its own.
 
 import {
+  addContactToSegment,
   createContact,
+  getContactSegments,
   getContactTopics,
   patchContactEmail,
   patchContactTopics,
@@ -241,7 +243,7 @@ export async function syncUser(
   if (mapping.syncedEmail !== emailNorm) {
     const patched = await patchContactEmail(
       ctx.resendApiKey,
-      { contactId: mapping.resendContactId, email: emailNorm, segmentId: ctx.segmentId },
+      { contactId: mapping.resendContactId, email: emailNorm },
       ctx.doFetch,
     );
     if (!patched.ok) {
@@ -254,7 +256,41 @@ export async function syncUser(
     await ctx.supabase.updateContactMappingEmail(userId, emailNorm);
   }
 
-  // 4. Current topic state on Resend.
+  // 4. Segment membership reconciliation. Resend Contacts are
+  //    global and can live in zero, one, or multiple Segments.
+  //    Broadcast targeting depends on our CN-D-managed contacts
+  //    belonging to the Collector Network Contacts segment. Any
+  //    other segments (e.g. PokePrices' `General`) are left
+  //    untouched — add-contact-to-segment is additive per
+  //    Resend docs.
+  const segs = await getContactSegments(
+    ctx.resendApiKey,
+    mapping.resendContactId,
+    ctx.doFetch,
+  );
+  if (!segs.ok) {
+    if (segs.status === 404) {
+      return await recreateAfter404(userId, emailNorm, target, ctx);
+    }
+    return { kind: 'failure', errorTag: toErrorTag(segs) };
+  }
+  const inCnSegment = segs.data.some((s) => s.segmentId === ctx.segmentId);
+  if (!inCnSegment) {
+    const added = await addContactToSegment(
+      ctx.resendApiKey,
+      mapping.resendContactId,
+      ctx.segmentId,
+      ctx.doFetch,
+    );
+    if (!added.ok) {
+      if (added.status === 404) {
+        return await recreateAfter404(userId, emailNorm, target, ctx);
+      }
+      return { kind: 'failure', errorTag: toErrorTag(added) };
+    }
+  }
+
+  // 5. Current topic state on Resend.
   const current = await getContactTopics(
     ctx.resendApiKey,
     mapping.resendContactId,
