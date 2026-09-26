@@ -3,7 +3,7 @@ import { canonicalFor } from '@/lib/seo';
 
 export const metadata: Metadata = {
   title: 'Privacy policy',
-  description: 'LorcanaPrice privacy policy.',
+  description: 'LorcanaPrices privacy policy.',
   alternates: { canonical: canonicalFor('/privacy') },
 };
 
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
         </div>
         <h1 style={{ margin: 0, fontSize: 30 }}>Privacy policy</h1>
         <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          LorcanaPrice collects the minimum data required to serve pages.
+          LorcanaPrices collects the minimum data required to serve pages.
           Anonymous page-view metrics are recorded via Vercel Web Analytics.
           We do not sell personal data. If we ever add authenticated
           collection tracking, an authenticated section of the site will

@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title:
-    'LorcanaPrice — every printing, every Enchanted for Disney Lorcana',
+    'LorcanaPrices — every printing, every Enchanted for Disney Lorcana',
   description:
     'Live Disney Lorcana prices, printings and chase treatments. Enchanted, Iconic, Epic, Legendary and Promo cards priced individually across foil and nonfoil. Full set catalogue and market movers.',
   alternates: { canonical: `${SITE_URL}/` },

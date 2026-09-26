@@ -1,4 +1,4 @@
-/* LorcanaPrice — collector design system.
+/* LorcanaPrices — collector design system.
    Illuminated-manuscript palette: warm parchment page, deep-purple
    Amethyst-ink primary, gilded gold interactive accent, teal-sapphire
    as a restrained cool accent. The six Lorcana inks (Amber, Amethyst,
@@ -112,13 +112,15 @@
 *, *::before, *::after { min-width: 0; }
 
 html {
-  overflow-x: clip;
+  overflow-x: hidden;
   max-width: 100vw;
+  width: 100%;
   -webkit-text-size-adjust: 100%;
 }
 body {
-  overflow-x: clip;
+  overflow-x: hidden;
   max-width: 100vw;
+  width: 100%;
 }
 
 body {
@@ -325,20 +327,41 @@ details summary::marker { display: none; }
 
 .hero-shell {
   position: relative;
+  width: 100%;
+  max-width: 100vw;
   background:
     radial-gradient(90% 80% at 10% -10%, rgba(122,78,240,0.14) 0%, rgba(122,78,240,0) 60%),
     radial-gradient(70% 90% at 100% 110%, rgba(185,138,58,0.12) 0%, rgba(185,138,58,0) 60%),
     linear-gradient(180deg, #FBF6E7 0%, var(--bg) 100%);
   overflow: hidden;
   isolation: isolate;
+  contain: layout;
 }
 .lc-hero-shell, .op-hero-shell {
-  padding: 40px 16px 32px;
+  padding: 32px 12px 28px;
 }
 @media (min-width: 640px) {
   .lc-hero-shell, .op-hero-shell {
     padding: 48px 24px 40px;
   }
+}
+
+/* Hero H1 + body copy. Slightly tighter on mobile so long lines like
+   "One collector-grade catalogue." keep both edges inside the 390px
+   viewport, and no line silently clips against overflow-x: clip. */
+.lc-hero-h1 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.lc-hero-copy {
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+@media (min-width: 640px) {
+  .lc-hero-copy { font-size: 16.5px; }
 }
 
 .feature-shell {
@@ -423,6 +446,30 @@ details summary::marker { display: none; }
 @media (min-width: 640px)  { .hero-logo { max-width: 260px; } }
 @media (min-width: 1024px) { .hero-logo { max-width: 300px; } }
 @media (min-width: 1400px) { .hero-logo { max-width: 320px; } }
+
+/* Header brand logo. next/image renders /public/logo.png at a fixed
+   pixel height; width: auto preserves the ~3:1 aspect ratio. Shrunk
+   on very narrow phones so the hamburger + search input have room. */
+.lc-nav-logo {
+  display: block;
+  max-width: 100%;
+  height: 46px;
+  width: auto;
+}
+@media (max-width: 480px) {
+  .lc-nav-logo { height: 38px; }
+}
+
+/* Emblem-only lockup used in the Footer masthead. Sized down from the
+   256px source with a soft drop-shadow so it sits on the parchment
+   without a hard edge. */
+.lc-footer-emblem {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  filter: drop-shadow(0 2px 4px rgba(30,17,60,0.14));
+  flex-shrink: 0;
+}
 
 /* Nav link styling with amethyst underline for active. */
 .nav-link {

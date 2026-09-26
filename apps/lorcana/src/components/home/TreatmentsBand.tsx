@@ -78,7 +78,7 @@ export default function TreatmentsBand() {
             }}
           >
             Enchanted, Iconic, Epic and promotional printings are each
-            their own priced entity on LorcanaPrice, so an Enchanted
+            their own priced entity on LorcanaPrices, so an Enchanted
             overprint is never buried under its base-rarity sibling.
           </p>
         </div>

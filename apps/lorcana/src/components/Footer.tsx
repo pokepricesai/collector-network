@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 // Site footer. Groups live routes by product area and carries the
 // Ravensburger / Disney unofficial-use disclaimer.
@@ -63,7 +64,15 @@ export default function Footer() {
           }}
         >
           <div style={{ maxWidth: 320 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <Image
+                src="/emblem-256.png"
+                alt=""
+                aria-hidden
+                width={256}
+                height={256}
+                className="lc-footer-emblem"
+              />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span
                   style={{
@@ -75,7 +84,7 @@ export default function Footer() {
                     lineHeight: 1,
                   }}
                 >
-                  Lorcana<span style={{ color: 'var(--accent-2)' }}>Price</span>
+                  Lorcana<span style={{ color: 'var(--accent-2)' }}>Prices</span>
                 </span>
                 <span className="label-mono" style={{ marginTop: 6 }}>
                   Prices · Inks · Enchanted chase
@@ -133,7 +142,7 @@ export default function Footer() {
             financial advice.
           </p>
           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-            © {new Date().getFullYear()} LorcanaPrice.io
+            © {new Date().getFullYear()} LorcanaPrices
           </span>
         </div>
       </div>

@@ -60,7 +60,7 @@ export function canonicalFor(path: string, opts: { keepQuery?: boolean } = {}): 
   return `${SITE_ORIGIN}${clean}`;
 }
 
-export const TITLE_BRAND_SUFFIX = ' · LorcanaPrice';
+export const TITLE_BRAND_SUFFIX = ' · LorcanaPrices';
 
 export function isSitemapEligible(path: string): boolean {
   return policyForPath(path) === 'INDEX';

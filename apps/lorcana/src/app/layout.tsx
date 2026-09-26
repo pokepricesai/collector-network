@@ -8,7 +8,7 @@ import SiteStructuredData from '@/components/SiteStructuredData';
 import { AccountChip } from '@/components/AccountChip';
 import { SITE_LAUNCHED, SITE_URL } from '@/lib/site-url';
 
-const SITE_NAME = 'LorcanaPrice';
+const SITE_NAME = 'LorcanaPrices';
 const SITE_TAGLINE = 'Live Disney Lorcana prices, sets and Enchanted chases';
 // Marketing copy only names treatments we can back with production
 // data — see docs/lorcana/data-audit.md §3 and §4. Enchanted, Iconic,
@@ -16,7 +16,7 @@ const SITE_TAGLINE = 'Live Disney Lorcana prices, sets and Enchanted chases';
 // nonfoil is the finish axis. No language variants exist in the
 // current ingest.
 const SITE_DESCRIPTION =
-  'LorcanaPrice. Live Disney Lorcana card prices, printings and chase treatments — Enchanted, Iconic, Epic, Legendary and Promo cards priced individually across foil and nonfoil. Set catalogue, ink discovery, market movers and graded-price history. Free, no login required. Not affiliated with Disney or Ravensburger.';
+  'LorcanaPrices. Live Disney Lorcana card prices, printings and chase treatments — Enchanted, Iconic, Epic, Legendary and Promo cards priced individually across foil and nonfoil. Set catalogue, ink discovery, market movers and graded-price history. Free, no login required. Not affiliated with Disney or Ravensburger.';
 
 const LAUNCHED_ROBOTS: NonNullable<Metadata['robots']> = {
   index: true,

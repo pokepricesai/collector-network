@@ -176,11 +176,11 @@ export function AuthForm({ mode }: Props) {
   return (
     <div style={wrapStyle}>
       <h1 style={{ margin: 0, fontFamily: "Outfit, system-ui, sans-serif", fontSize: 24, letterSpacing: '-0.01em', color: 'var(--text-strong)' }}>
-        {mode === 'sign-in' ? 'Sign in to LorcanaPrice' : 'Create your LorcanaPrice account'}
+        {mode === 'sign-in' ? 'Sign in to LorcanaPrices' : 'Create your LorcanaPrices account'}
       </h1>
       <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.55 }}>
         {mode === 'sign-in'
-          ? 'One LorcanaPrice account across collections and preferences. Browse without signing in whenever you want.'
+          ? 'One LorcanaPrices account across collections and preferences. Browse without signing in whenever you want.'
           : SHARED_ACCOUNT_EXPLANATION}
       </p>
 

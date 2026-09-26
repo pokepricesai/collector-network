@@ -20,7 +20,7 @@ export default function HomeSearch({
 
   return (
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         <span
           aria-hidden
           style={{
@@ -40,8 +40,10 @@ export default function HomeSearch({
           onChange={(e) => setQ(e.target.value)}
           placeholder={placeholder}
           aria-label="Search Lorcana cards"
+          size={1}
           style={{
             width: '100%',
+            minWidth: 0,
             padding: '14px 14px 14px 40px',
             borderRadius: 12,
             border: '1px solid var(--border)',

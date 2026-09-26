@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { readMiddlewareSession } from '@collector-network/auth';
 
-// Canonical origin for LorcanaPrice. www gets a 308 to apex so
+// Canonical origin for LorcanaPrices. www gets a 308 to apex so
 // browsers and crawlers converge. Vercel deployment hosts
 // (lorcana-web.vercel.app) are left alone so preview/CI still work.
 const CANONICAL_HOST = 'lorcanaprice.io';

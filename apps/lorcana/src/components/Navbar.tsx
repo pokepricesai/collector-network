@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -120,29 +121,27 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
     >
       <Link
         href="/"
-        aria-label="LorcanaPrice home"
+        aria-label="LorcanaPrices home"
         style={{
           display: 'flex',
           alignItems: 'center',
           textDecoration: 'none',
           flexShrink: 0,
           height: 48,
-          gap: 10,
         }}
       >
-        <BrandMark />
-        <span
-          className="lc-wordmark"
-          style={{
-            fontFamily: '"Outfit", ui-sans-serif, system-ui, sans-serif',
-            fontWeight: 800,
-            fontSize: 22,
-            letterSpacing: -0.3,
-            color: 'var(--text)',
-          }}
-        >
-          Lorcana<span style={{ color: 'var(--accent-2)' }}>Price</span>
-        </span>
+        {/* Horizontal wordmark. Source asset is 2172×724 (3:1); we
+            render at ~46px tall in the 68px header — the emblem is
+            baked in on the left so no separate icon is needed. */}
+        <Image
+          src="/logo.png"
+          alt="LorcanaPrices"
+          width={2172}
+          height={724}
+          priority
+          className="lc-nav-logo"
+          style={{ height: 46, width: 'auto' }}
+        />
       </Link>
 
       <div
@@ -342,37 +341,10 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
           .mobile-menu-btn { display: inline-flex !important; }
         }
         @media (max-width: 480px) {
-          :global(.lc-wordmark) { font-size: 18px !important; }
+          :global(.lc-nav-logo) { height: 38px !important; }
         }
       `}</style>
     </nav>
-  );
-}
-
-// Placeholder brand mark — a stylised ink-drop glyph rendered in SVG.
-// The final logo lands separately; keeping it inline avoids shipping
-// an OP asset with the wrong art.
-function BrandMark() {
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      width="32"
-      height="32"
-      aria-hidden="true"
-      style={{ display: 'block', flexShrink: 0 }}
-    >
-      <defs>
-        <linearGradient id="lc-nav-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#7A4EF0" />
-          <stop offset="1" stopColor="#B98A3A" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M16 3 C 20 10, 26 14, 26 20 A 10 10 0 1 1 6 20 C 6 14, 12 10, 16 3 Z"
-        fill="url(#lc-nav-grad)"
-      />
-      <circle cx="12.5" cy="18" r="2.4" fill="rgba(255,255,255,0.85)" />
-    </svg>
   );
 }
 

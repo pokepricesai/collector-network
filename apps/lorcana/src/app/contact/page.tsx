@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { canonicalFor } from '@/lib/seo';
 
 export const metadata: Metadata = {
-  title: 'Contact LorcanaPrice',
-  description: 'Get in touch with LorcanaPrice. Corrections, data feedback, partnership enquiries.',
+  title: 'Contact LorcanaPrices',
+  description: 'Get in touch with LorcanaPrices. Corrections, data feedback, partnership enquiries.',
   alternates: { canonical: canonicalFor('/contact') },
 };
 
@@ -21,7 +21,7 @@ export default function ContactPage() {
           <a href="mailto:hello@lorcanaprice.io">hello@lorcanaprice.io</a>.
         </p>
         <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          LorcanaPrice is part of the Collector Network family of TCG sites
+          LorcanaPrices is part of the Collector Network family of TCG sites
           (Yu-Gi-Oh, Magic, Pokémon, Lorcana).
         </p>
       </div>

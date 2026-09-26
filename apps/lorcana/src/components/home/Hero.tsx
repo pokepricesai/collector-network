@@ -29,10 +29,11 @@ export default function Hero({
           position: 'relative',
           zIndex: 1,
           display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gap: 26,
         }}
       >
-        <div style={{ textAlign: 'center', display: 'grid', gap: 14 }}>
+        <div style={{ textAlign: 'center', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 14 }}>
           <span
             className="badge-prestige"
             style={{ margin: '0 auto', animation: 'fadeInUp 0.4s ease-out' }}
@@ -40,8 +41,9 @@ export default function Hero({
             Live Lorcana prices · Inks · Enchanted chase
           </span>
           <h1
+            className="lc-hero-h1"
             style={{
-              fontSize: 'clamp(22px, 4.6vw, 46px)',
+              fontSize: 'clamp(24px, 5.6vw, 46px)',
               margin: 0,
               lineHeight: 1.15,
               letterSpacing: '-0.02em',
@@ -52,17 +54,9 @@ export default function Hero({
             <br />
             <span className="gold-text">Every Enchanted.</span>
             <br />
-            One collector-grade catalogue.
+            One catalogue.
           </h1>
-          <p
-            style={{
-              maxWidth: 720,
-              margin: '0 auto',
-              fontSize: 16.5,
-              color: 'var(--text-muted)',
-              lineHeight: 1.55,
-            }}
-          >
+          <p className="lc-hero-copy">
             {cardCount > 0 && setCount > 0 ? (
               <>
                 Track {formatNumber(cardCount)} cards across{' '}
@@ -71,9 +65,9 @@ export default function Hero({
             ) : (
               <>Track every Disney Lorcana card.</>
             )}{' '}
-            Common through Enchanted, foil and nonfoil, promo and D23
-            drops are each priced individually — an Enchanted overprint
-            never gets buried under its base rarity.
+            Foil and nonfoil, Enchanted, Iconic, Epic and Promo drops
+            are each priced individually — an Enchanted overprint never
+            gets buried under its base rarity.
           </p>
         </div>
 

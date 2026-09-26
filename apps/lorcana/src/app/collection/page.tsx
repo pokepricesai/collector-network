@@ -29,7 +29,7 @@ export default async function CollectionPage() {
             Schema pending
           </div>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--text-muted)' }}>
-            Collection storage is being provisioned for LorcanaPrice. This page will start working
+            Collection storage is being provisioned for LorcanaPrices. This page will start working
             automatically once the shared-schema migration has been applied. Your account is unaffected —
             you can still browse cards, sets and market data in the meantime.
           </p>

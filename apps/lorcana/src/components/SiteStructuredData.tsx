@@ -10,17 +10,23 @@ export default function SiteStructuredData() {
       {
         '@type': 'Organization',
         '@id': `${SITE_URL}/#org`,
-        name: 'LorcanaPrice',
-        alternateName: 'LorcanaPrice.io',
+        name: 'LorcanaPrices',
+        alternateName: 'LorcanaPrices.io',
         url: SITE_URL,
+        logo: {
+          '@type': 'ImageObject',
+          url: `${SITE_URL}/emblem-512.png`,
+          width: 512,
+          height: 512,
+        },
         description:
-          'LorcanaPrice. Live Disney Lorcana card prices, printings, chase treatments and set catalogue. Independent price aggregator — not affiliated with Disney or Ravensburger.',
+          'LorcanaPrices. Live Disney Lorcana card prices, printings, chase treatments and set catalogue. Independent price aggregator — not affiliated with Disney or Ravensburger.',
       },
       {
         '@type': 'WebSite',
         '@id': `${SITE_URL}/#website`,
         url: SITE_URL,
-        name: 'LorcanaPrice',
+        name: 'LorcanaPrices',
         publisher: { '@id': `${SITE_URL}/#org` },
         inLanguage: 'en-US',
         potentialAction: {

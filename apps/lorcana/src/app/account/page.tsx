@@ -48,7 +48,7 @@ export default async function AccountPage() {
           <h2 style={tileTitleStyle}>My Lorcana Collection</h2>
           <p style={tileMetaStyle}>
             Track every card you own — raw and graded — with live market value from the same data
-            the rest of LorcanaPrice uses.
+            the rest of LorcanaPrices uses.
           </p>
         </Link>
         <Link href="/browse" style={tileStyle}>

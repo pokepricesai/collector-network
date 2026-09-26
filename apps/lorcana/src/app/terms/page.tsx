@@ -3,7 +3,7 @@ import { canonicalFor } from '@/lib/seo';
 
 export const metadata: Metadata = {
   title: 'Terms',
-  description: 'LorcanaPrice terms of use.',
+  description: 'LorcanaPrices terms of use.',
   alternates: { canonical: canonicalFor('/terms') },
 };
 
@@ -16,10 +16,10 @@ export default function TermsPage() {
         </div>
         <h1 style={{ margin: 0, fontSize: 30 }}>Terms of use</h1>
         <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          LorcanaPrice is provided informationally. Prices are aggregated
+          LorcanaPrices is provided informationally. Prices are aggregated
           from third-party marketplaces and can be stale. Nothing on this
           site is financial or investment advice. Disney Lorcana and Lorcana
-          Card Game are trademarks of their respective owners; LorcanaPrice
+          Card Game are trademarks of their respective owners; LorcanaPrices
           is unofficial and unaffiliated.
         </p>
       </div>
