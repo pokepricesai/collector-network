@@ -1,8 +1,53 @@
 # CN-D1 pre-implementation review
 
-Status: **APPROVED with amendments — 2026-09-26.** Implementation
-in progress. Not touching live Resend / not enabling the cron
-until the deployment sequence explicitly reaches those steps.
+Status: **CLOSED — 2026-09-26.** All 11 deployment steps applied,
+all 3 live smoke tests PASS, cron at final `*/5 * * * *` cadence,
+sync_failures = 0, email-drift nudge trigger installed and
+proven. See "Live results" below and
+`docs/network/schema-request-cn-d1-email-nudge.md` for the
+post-Test-C trigger amendment.
+
+## Live results (2026-09-26)
+
+- **Gate A (PokePrices Resend audit):** PASS. Same workspace as
+  CN-C. Existing state: legacy `General` segment, 2 `Untitled`
+  broadcast drafts, PokePrices lifecycle/transactional domains.
+  0 contacts, 0 topics pre-CN-D1.
+- **Gate B (PATCH `/contacts/{id}/topics` semantics):** PASS.
+  Additive/merge; omitted topics preserved. Observability via
+  `GET /contacts/{id}/topics` (not the base contact object).
+- **Backfill:** 7 managed contacts created from 7 users with
+  actual `collector_marketing_preferences` rows. Zero
+  membership-only leaks (Amendment 1 upheld).
+- **Test A — YGO preference propagation:** PASS both directions
+  (opt_in and opt_out). Same `resend_contact_id`, additive
+  PATCH on `/topics`, no duplicate contact, network untouched.
+  Cron picked up the change within one minute of each toggle.
+- **Test B — network preference propagation:** PASS. Same
+  contact, only the network topic subscription changed.
+  `site:ygo` unchanged.
+- **Test C — Secure Email Change / contact drift repair:**
+  PASS. `AFTER UPDATE OF email ON auth.users` trigger installed
+  (see `schema-request-cn-d1-email-nudge.md`) — enqueues one
+  synthetic retry-queue row for managed contacts only, never
+  for unmanaged users, fail-open so an auth-side email update
+  can't be aborted by CN-D1. Test C proved the drift-repair
+  flow: PATCH `/contacts/{id}` with new email, same
+  `resend_contact_id`, no duplicate contact, segment + topics
+  preserved.
+- **Final Resend workspace state:** 8 managed contacts in
+  `Collector Network Contacts`; 2 topics (`site:ygo`,
+  `network`) both `default_subscription = opt_out`; General
+  segment + 2 Untitled broadcast drafts untouched; no new
+  broadcast created; no MTG / Pokemon / One Piece / Lorcana
+  topics created.
+- **Cron:** single job (`jobid=3`, `jobname=sync-marketing-contacts`,
+  `active=true`), Vault-lookup command intact, no secret
+  literal, final cadence `*/5 * * * *`.
+- **Sync failures:** 0.
+- **CN-D2:** not started.
+
+## Original pre-implementation review (retained for history)
 
 **Amendments folded in from 2026-09-26 review:**
 

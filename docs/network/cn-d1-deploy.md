@@ -1,9 +1,17 @@
 # CN-D1 deployment runbook
 
-Status: **AWAITING APPLY** — nothing live yet. Every step
-carries `--project-ref egidpsrkqvymvioidatc` explicitly.
-Preflightluke walks the steps in order. STOP checkpoints call
-out where to pause for verification.
+Status: **APPLIED — CN-D1 CLOSED 2026-09-26.** All 11 steps
+executed against `egidpsrkqvymvioidatc`. Cadence stepped from
+`* * * * *` to `*/5 * * * *` after Test C. Email-drift trigger
+installed post-Test-C via
+`docs/network/schema-request-cn-d1-email-nudge.md`. See
+`docs/network/cn-d1-review.md` for the full live-results table.
+
+The runbook below is retained as canonical procedure for
+re-runs (new brand onboarding, disaster recovery, or
+audit reconstruction).
+
+---
 
 Prereqs:
 - Supabase CLI ≥ 2.115 (currently 2.115.0 installed).

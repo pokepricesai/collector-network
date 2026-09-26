@@ -1,11 +1,16 @@
 # CN-D architecture + slice plan (proposal)
 
-Status: **PROPOSAL v3** — architecture only. Not started.
-CN-C is **closed** as of 2026-09-26. CN-D1 remains blocked on
-Gate A (PokePrices Resend account audit) and Gate B
-(PATCH `/contacts` topics semantics experiment) — both
-recorded in the "Verification steps before implementation"
-section below.
+Status: **CN-D1 CLOSED — 2026-09-26.** CN-C closed 2026-09-26.
+Gate A + Gate B PASS. All CN-D1 slice work applied to
+`egidpsrkqvymvioidatc`: 5 tables + 2 RPCs + 1 SECURITY DEFINER
+trigger on `auth.users(email)`, `sync-marketing-contacts`
+Edge Function deployed (v3), pg_cron on `*/5 * * * *`,
+8 managed Resend contacts in `Collector Network Contacts`,
+2 topics (`site:ygo`, `network`) both `default_subscription =
+opt_out`, sync_failures = 0. Full close-out summary in
+`docs/network/cn-d1-review.md` and
+`docs/network/schema-request-cn-d1-email-nudge.md`. **CN-D2
+not started.**
 
 **v2 — 2026-09-26.** Rewritten after a live check against the
 current Resend REST API. The v1 audience-per-scope model is
