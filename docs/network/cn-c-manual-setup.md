@@ -1,13 +1,45 @@
 # CN-C manual setup: Resend auth-email hook
 
-Status: **PENDING MANUAL STEPS**. The code + tests are in place but
-the live Supabase Send Email Hook is deliberately **not enabled**
-until every step below has been completed by preflightluke in the
-Resend and Supabase dashboards.
+Status: **APPLIED — CN-C closed, 2026-09-26.**
 
-The CN-C spec explicitly requires: *"Do NOT enable the live
-Supabase Send Email Hook yet unless the required real secrets and
-verified sender already exist."* This doc is that checklist.
+## Result
+
+- Live Send Email Hook enabled on preflightluke's Supabase
+  project (`egidpsrkqvymvioidatc`), pointing at the
+  `auth-email` Edge Function.
+- Resend domain verified with DKIM/SPF passing.
+- `RESEND_API_KEY`, `AUTH_EMAIL_FROM_ADDRESS`,
+  `SEND_EMAIL_HOOK_SECRET` provisioned as Supabase secrets.
+- All six smoke-test rows PASS (see
+  `docs/network/cn-c-smoke-test.md`):
+  1. Signup confirmation — PASS
+  2. Password recovery — PASS
+  3. Secure email change — PASS
+  4. Resend dashboard delivery + tags + idempotency — PASS
+  5. Edge Function clean 204 — PASS
+  6. Final browser URL contains no auth params — PASS
+- Sites covered at close: **YGO** (ygoprices.io). MTG,
+  PokePrices, One Piece, and Lorcana pick up the same shared
+  hook automatically on their own launch schedules; the brand
+  registry adds each hostname when its production domain is
+  final.
+- Two live-test defects were found and fixed during smoke
+  testing, both landed before CN-C close:
+  - `bd1ba56` — 204 response must be null-bodied (Deno
+    runtime crash).
+  - `3599624` — first-party `/auth/confirm` route replacing
+    the `/auth/v1/verify` link the Supabase admin endpoint
+    rejects for browser clicks.
+  - `028bfbd` — `/settings` change-email UX enabling the
+    Secure Email Change smoke test.
+- No secrets leaked; no PII in logs; no marketing state
+  touched (CN-D territory).
+
+The rest of this doc is the historical setup checklist,
+preserved so a re-run (new provider account, disaster
+recovery, adding a new brand) has a canonical procedure.
+
+---
 
 ## Architecture recap
 

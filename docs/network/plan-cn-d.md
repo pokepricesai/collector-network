@@ -1,7 +1,11 @@
 # CN-D architecture + slice plan (proposal)
 
-Status: **PROPOSAL** — architecture only. Not started. Awaiting
-CN-C closure and preflightluke's sign-off on this plan.
+Status: **PROPOSAL v3** — architecture only. Not started.
+CN-C is **closed** as of 2026-09-26. CN-D1 remains blocked on
+Gate A (PokePrices Resend account audit) and Gate B
+(PATCH `/contacts` topics semantics experiment) — both
+recorded in the "Verification steps before implementation"
+section below.
 
 **v2 — 2026-09-26.** Rewritten after a live check against the
 current Resend REST API. The v1 audience-per-scope model is

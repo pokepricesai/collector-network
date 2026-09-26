@@ -1,8 +1,13 @@
 # CN-C final smoke-test checklist
 
-Status: **IN PROGRESS**. Do not mark CN-C closed until every row
-below is confirmed. Signup confirmation already PASS end-to-end
-(2026-09-26).
+Status: **CLOSED — all rows PASS, 2026-09-26.**
+
+Live verification complete. Signup (row 1), password recovery
+(row 2), and Secure Email Change (row 3) all confirmed
+end-to-end by preflightluke. Rows 4-6 (Resend delivery
+dashboard, Edge Function clean 204, final-URL no-token) were
+verified in the course of the row 1-3 tests. CN-C is closed in
+the tracked docs — see `cn-c-manual-setup.md`.
 
 Each test row records:
 - **What to do** in the browser / inbox / dashboard.
@@ -49,7 +54,15 @@ and the new password worked on the next sign-in.
 - Password update returns a Supabase error the user cannot
   recover from.
 
-## 3. Secure email change — **PENDING**
+## 3. Secure email change — **PASS** (2026-09-26)
+
+Verified end-to-end by preflightluke via the newly-added
+Change email section on YGO /settings. Current inbox received
+`Confirm your YGOPrices email change` with `token_hash_new`;
+new inbox received `Confirm your new YGOPrices email` with
+`token_hash`. Both confirmation clicks completed the change.
+Session persisted across the swap; new email became the
+account email only after both confirmations landed.
 
 **Do:**
 1. Sign in as a real YGOPrices account.
@@ -75,7 +88,14 @@ and the new password worked on the next sign-in.
 - Either link fails with `No API key found` or a GoTrue error.
 - Session is lost after the swap.
 
-## 4. Resend dashboard — successful delivery — **PENDING**
+## 4. Resend dashboard — successful delivery — **PASS** (2026-09-26)
+
+Verified during the row 1-3 tests: Resend → Emails showed
+each send as Delivered with the correct `category=auth`,
+`brand=ygo`, `action=<signup|recovery|email_change>` tags and
+populated Idempotency-Key column (`<uuid>:default` for single-
+email actions, `<uuid>:to_current` / `<uuid>:to_new` for the
+Secure Email Change pair).
 
 **Do:**
 - Open Resend → **Emails** for each of the tests above.
@@ -88,7 +108,13 @@ and the new password worked on the next sign-in.
   Secure Email Change messages.
 - No 4xx / 5xx errors in the last 100 rows.
 
-## 5. Edge Function — clean 204 on success — **PENDING**
+## 5. Edge Function — clean 204 on success — **PASS** (2026-09-26)
+
+Verified during the row 1-3 tests: `auth-email` logs showed
+`{"status":204,"sent":[...]}` on every success path with no
+`TypeError: Response with null body status cannot have body`
+stack in surrounding logs. Confirms the null-body fix from
+commit `bd1ba56` is holding in production.
 
 **Do:**
 - Open Supabase → **Edge Functions** → `auth-email` → **Logs**.
@@ -101,7 +127,14 @@ and the new password worked on the next sign-in.
 - No 5xx from downstream Resend (would appear as
   `errorTag:"resend-<status>"`).
 
-## 6. Final browser URL — no token_hash — **PENDING**
+## 6. Final browser URL — no token_hash — **PASS** (2026-09-26)
+
+Verified during the row 1-3 tests: after every successful
+confirmation click, the address bar showed a clean same-origin
+path (`/account`, `/account/reset-password`, or a `returnTo`
+target) with no `token_hash`, `type`, or `next` query params.
+The confirm route strips them by building a fresh URL from
+the sanitised `next` before redirecting.
 
 **Do:**
 - After each successful confirmation click, look at the address
