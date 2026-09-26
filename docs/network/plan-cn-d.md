@@ -11,6 +11,36 @@ not one Segment per scope. Verified endpoints, semantics, and
 webhook event names are recorded in the "Resend API
 verification" section below and drive every downstream decision.
 
+**v3 — 2026-09-26.** Three architecture corrections applied
+after CN-D v2 review:
+
+1. **Consent and deliverability are separated.** Hard bounce,
+   soft bounce, complaint, and provider-side suppression are
+   NOT rewritten as marketing opt-outs. They live on a new
+   `collector_email_delivery_state` table. Consent history in
+   `collector_marketing_preferences` /
+   `collector_marketing_consent_events` remains intact even
+   when an address becomes undeliverable.
+2. **Stable Resend contact mapping** lives in
+   `collector_marketing_contacts` — `(user_id,
+   resend_contact_id, synced_email, ...)`. All Resend PATCH
+   traffic keys off `resend_contact_id`, not off the current
+   email string. Cleanly handles Secure Email Change; sync
+   worker reads the mapping to detect email drift.
+3. **PokePrices Resend audit is a gate on CN-D1.** PokePrices
+   already has a live Resend integration. Before CN-D1
+   creates a segment/topics/contacts we must enumerate the
+   existing state and decide how to coexist (or migrate).
+   Audit checklist + findings slot below.
+
+Also from v3: the shared segment is renamed **Collector
+Network Contacts** (not "Subscribers") — a retained contact may
+legitimately have every topic set to opt_out, and the container
+name should not imply subscription. PATCH `/contacts` topic
+semantics (additive vs replace-all) must be verified
+**experimentally**, not assumed, before CN-D1 code goes live.
+See "Verification steps before implementation" below.
+
 ## Resend API verification (2026-09-26)
 
 Fetched from https://resend.com/docs at the timestamp above.
@@ -176,16 +206,21 @@ preference_center) already writes both tables atomically inside
 one RPC. CN-D adds one more valid source (`resend_webhook`) and
 uses the same atomic-write pattern from a webhook-driven RPC.
 
-## Resend Contacts data model (v2)
+## Resend Contacts data model (v3)
 
 One **segment** + six **topics**, per the API verification above.
 
-**Segment** (created once, at CN-D1 rollout):
+**Segment** (created once, at CN-D1 rollout, subject to the
+PokePrices audit finding a segment we should reuse instead):
 
-- `Collector Network Subscribers` — the master mailing list.
-  Every user with at least one opt-in is a contact in this
-  segment. Its `id` (a Resend UUID) is written into a small
-  singleton config table.
+- `Collector Network Contacts` — the master container. Every
+  user we hold marketing state for is a contact in this
+  segment, INCLUDING users whose topic subscriptions are all
+  `opt_out`. The segment name is deliberately not
+  "Subscribers" — a retained contact may legitimately be fully
+  opted-out (we still hold the historical record and the
+  Resend contact id). Its `id` (a Resend UUID) is written into
+  a small singleton config table.
 
 **Topics** (one per scope; created once, at CN-D1 rollout — the
 opt_in topics for `mtg`/`pokemon`/`onepiece`/`lorcana` exist
@@ -211,6 +246,8 @@ create table collector_marketing_topics (
   site_code    text references collector_sites(code),
   resend_topic_id text not null,
   active       boolean not null default true,
+  default_subscription text not null default 'opt_out'
+                        check (default_subscription in ('opt_in','opt_out')),
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   check ((scope = 'site' and site_code is not null)
@@ -226,9 +263,147 @@ create table collector_marketing_config (
 );
 ```
 
-Rows are inserted by preflightluke after creating the segment
-and topics in the Resend dashboard. Setting `active=false` on a
+`default_subscription = 'opt_out'` at the schema layer for every
+seeded topic row — enforces the "topics default to opt-out"
+rule at the source of truth, not in application code. Rows are
+inserted by preflightluke after creating the segment and topics
+in the Resend dashboard (or after adopting existing PokePrices
+segment/topics per audit findings). Setting `active=false` on a
 topic row freezes sync for that scope without a schema change.
+
+### Stable Resend contact mapping (v3)
+
+Resend keys contacts by UUID; email is a mutable attribute of a
+contact, not its identity. CN-D holds the mapping locally so
+Secure Email Change and any future email edits do not require
+guessing at Resend's side:
+
+```sql
+create table collector_marketing_contacts (
+  user_id            uuid primary key references auth.users(id) on delete cascade,
+  resend_contact_id  text not null unique,
+  synced_email       text not null,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  last_synced_at     timestamptz not null default now(),
+  last_sync_status   text not null default 'ok' check (last_sync_status in ('ok','error'))
+);
+create index collector_marketing_contacts_synced_email_idx
+  on collector_marketing_contacts (synced_email);
+```
+
+- **First sync** creates the Resend contact (POST /contacts),
+  captures the returned `id`, inserts the mapping row.
+- **Every subsequent sync** issues `PATCH /contacts/{resend_contact_id}`
+  — never `PATCH /contacts/{email}`. Email is just another
+  field on the body.
+- **Secure Email Change** flow: sync worker compares
+  `auth.users.email` vs `collector_marketing_contacts.synced_email`
+  for the affected user; if different, the next PATCH body
+  includes the new email, and `synced_email` is updated on
+  success. No separate `collector_email_changes` queue.
+- **Cascade on user delete:** if `auth.users` row is deleted,
+  the mapping cascades. Reverse-sync webhook still fires
+  `contact.deleted` on Resend's side; handler sees no user_id
+  and 204s cleanly.
+
+## Consent vs deliverability (v3)
+
+Two orthogonal states. Do not conflate them.
+
+### Consent (marketing choice, immutable ledger)
+
+Owned by CN-A/CN-B, unchanged:
+
+- `collector_marketing_preferences` — current per-scope opt state.
+- `collector_marketing_consent_events` — append-only history.
+- Sources: `signup / settings / preference_center / admin /
+  migration / resend_webhook`.
+- **`resend_webhook` source is reserved for the narrow case
+  where the user themselves changed their marketing choice on
+  Resend** (unsubscribed a topic on Resend's preference page, or
+  performed a first-party global-unsubscribe click). Provider-
+  side deliverability failures do NOT write here.
+
+### Deliverability (provider verdict on the address)
+
+New table, orthogonal to consent:
+
+```sql
+create table collector_email_delivery_state (
+  user_id       uuid primary key references auth.users(id) on delete cascade,
+  status        text not null check (status in
+                  ('deliverable',
+                   'hard_bounce',
+                   'soft_bounce_watch',
+                   'complaint',
+                   'provider_suppressed',
+                   'manual_suppressed')),
+  reason        text,        -- resend subType + free-form
+  source        text not null check (source in
+                  ('resend_webhook','manual','sync_probe')),
+  observed_at   timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- Append-only history, mirrors the consent-events pattern.
+create table collector_email_delivery_events (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references auth.users(id) on delete cascade,
+  status        text not null,
+  reason        text,
+  source        text not null,
+  resend_event_id text,      -- for correlating back to a Resend webhook
+  occurred_at   timestamptz not null default now()
+);
+create index collector_email_delivery_events_user_idx
+  on collector_email_delivery_events (user_id, occurred_at desc);
+```
+
+Owner-only SELECT RLS. Write access via SECURITY DEFINER RPCs
+only (mirror of the CN-A pattern).
+
+### Broadcast eligibility
+
+Conceptually a broadcast may address `user × topic` iff:
+
+```
+collector_marketing_preferences[user, scope].email_opt_in = true
+AND collector_marketing_contacts[user].last_sync_status = 'ok'
+AND (
+  collector_email_delivery_state[user] is null
+  OR collector_email_delivery_state[user].status = 'deliverable'
+)
+AND user does not carry a network-scope 'global marketing opt-out' preference row
+```
+
+That last clause covers a genuine user-initiated global
+unsubscribe — see "Global unsubscribe semantics" below. The DB
+does not enforce the eligibility computation because sending is
+CN-E territory; CN-D's job is only to keep every input to that
+computation truthful.
+
+### Global unsubscribe semantics (design frozen before CN-D2)
+
+Two distinct signals can flip a Resend contact's global
+`unsubscribed` flag to true. We must not treat them the same:
+
+| Trigger | Signal on webhook | Meaning | CN-D action |
+|---|---|---|---|
+| User clicks Resend's global-unsubscribe / preference-page unsubscribe-from-everything | `contact.updated` with `unsubscribed=true` AND the change wasn't preceded by a `suppression.added` / bounce / complaint we just observed | User-initiated marketing withdrawal | **Consent-side**: opt-out on every scope the user carries, `consent_source='resend_webhook'`. Deliverability untouched. |
+| Resend auto-set `unsubscribed=true` because of `suppression.added` / hard bounce / complaint | `contact.updated` following a same-user `suppression.added` OR `email.bounced` (Permanent) OR `email.complained` within a short causal window | Provider verdict on address | **Deliverability-side**: write `collector_email_delivery_state` with the appropriate status + source. Consent untouched. |
+
+Because the raw `contact.updated` event alone can't tell the two
+apart, CN-D2 correlates via a short in-memory (or lightweight
+DB) window: if a `suppression.added` / `email.bounced` /
+`email.complained` for the same user fired within the last N
+seconds, treat the following `contact.updated`
+`unsubscribed=true` as provider-driven and route to
+deliverability. Otherwise route to consent. The window and the
+tie-breaker rule are the last thing designed before CN-D2 code
+starts; both events end up in
+`collector_email_delivery_events` OR
+`collector_marketing_consent_events`, never both.
 
 ### Contact write pattern
 
@@ -237,26 +412,33 @@ Resend call — either create or update — that sets every
 relevant field atomically:
 
 ```
-PATCH https://api.resend.com/contacts/{email}
+PATCH https://api.resend.com/contacts/{resend_contact_id}
 Authorization: Bearer <RESEND_API_KEY>
 {
-  "email": "<user email>",
-  "segments": ["<CN Subscribers segment id>"],
+  "email": "<user email — updated only when auth.users.email
+             differs from collector_marketing_contacts.synced_email>",
+  "segments": ["<Collector Network Contacts segment id>"],
   "topics": [
     { "id": "<site:ygo topic id>",     "subscription": "opt_in" },
     { "id": "<site:mtg topic id>",     "subscription": "opt_out" },
     ...
     { "id": "<network topic id>",      "subscription": "opt_in" }
   ]
-  // unsubscribed is intentionally NOT written here — reserved
-  // for suppression / global-unsubscribe webhook responses so
-  // per-scope opt-outs stay semantically independent.
+  // `unsubscribed` is intentionally NOT written here — the
+  // forward sync never touches this field. It is a
+  // deliverability signal owned by reverse-sync + Resend's own
+  // suppression logic.
 }
 ```
 
-Contact-not-found on PATCH falls through to
-`POST /contacts` with the same body. Either way, one round-trip
-per user per sync cycle.
+**First-time users** (no `collector_marketing_contacts` row):
+`POST /contacts` with the same body; on 200 capture the returned
+`id` and insert the mapping row atomically. On subsequent runs
+that user's PATCH keys off the stored `resend_contact_id`.
+
+If `PATCH /contacts/{id}` returns 404 (contact deleted
+externally), CN-D falls back to `POST` and reinserts the mapping
+with the fresh id, logging the recreate for ops visibility.
 
 ## Change feed + reconciliation strategy
 
@@ -327,39 +509,56 @@ insert into collector_marketing_sync_state (id) values ('primary')
   Consent tables are on `on delete cascade` from `auth.users` so
   the row disappears before we sync.
 
-## Reverse sync: Resend → Supabase
+## Reverse sync: Resend → Supabase (v3)
 
 CN-D2 ships an Edge Function `resend-webhook`. Immediate
 processing (no queueing) per the "reverse should be immediate"
-directive.
+directive. Every webhook is routed to EITHER the consent RPCs
+OR the deliverability RPCs — never both. Consent history is
+preserved even when an address becomes undeliverable.
 
-1. Standard Webhooks (same scheme Resend uses on the outbound
-   side — reuse `verify-webhook.ts` from CN-C verbatim).
-2. Parse event; route on `type`:
-   - **`contact.updated`** — diff the payload against the last-
-     known-state cached in our per-user retry table (or against
-     what our current Supabase preferences imply). For every
-     topic subscription that flipped, call
-     `apply_resend_topic_change(v_user, v_scope, v_site_code, v_new_state)`.
-     If `unsubscribed` also flipped to true, additionally call
-     `apply_resend_global_unsubscribe(v_user)`.
-   - **`email.bounced`** with `bounce.type == 'Permanent'`
-     → `apply_resend_global_unsubscribe(v_user)`. Soft
-     bounces (`Temporary`) ignored (no state change).
-   - **`email.complained`** → `apply_resend_global_unsubscribe`.
-   - **`suppression.added`** → `apply_resend_global_unsubscribe`.
-   - **`contact.deleted`** → `apply_resend_global_unsubscribe`
-     defensively (a contact getting deleted in Resend implies
-     the recipient shouldn't be marketed to).
-3. RPCs write the preference rows (`email_opt_in=false`,
-   `withdrawn_at=now()`, `consent_source='resend_webhook'`) plus
-   consent events atomically, mirror of
-   `set_*_marketing_preference`.
-   - `apply_resend_topic_change` writes one scope.
-   - `apply_resend_global_unsubscribe` iterates every scope the
-     user currently carries in `collector_marketing_preferences`
-     and writes an opt-out on each, with one consent event per
-     scope.
+1. Standard Webhooks signature verification via reused
+   `_shared/verify-webhook.ts` (secret =
+   `RESEND_WEBHOOK_SECRET`).
+2. Lookup user by `resend_contact_id` via
+   `collector_marketing_contacts`. Unknown contact → 204 no-op
+   + log (contact was created outside CN-D's control; likely
+   PokePrices legacy — see audit).
+3. Route on `type`:
+
+| Resend event | Route | RPC |
+|---|---|---|
+| `contact.updated` — per-topic subscription changed | consent | `apply_resend_topic_change(user, scope, site, opt_in)` |
+| `contact.updated` — `unsubscribed=true`, NO recent bounce/complaint/suppression for this user | consent | `apply_resend_global_marketing_withdrawal(user)` |
+| `contact.updated` — `unsubscribed=true`, WITHIN N sec of `suppression.added`/`email.bounced` Permanent/`email.complained` for this user | deliverability | already handled by the earlier event (below); ignore |
+| `email.bounced` `bounce.type='Permanent'` | deliverability | `record_email_delivery_state(user, 'hard_bounce', bounce.subType, resend_event_id)` |
+| `email.bounced` `bounce.type='Temporary'` | deliverability | `record_email_delivery_state(user, 'soft_bounce_watch', bounce.subType, resend_event_id)` — used for future retry pacing, not eligibility |
+| `email.complained` | deliverability | `record_email_delivery_state(user, 'complaint', ...)` |
+| `suppression.added` | deliverability | `record_email_delivery_state(user, 'provider_suppressed', ...)` |
+| `suppression.removed` | deliverability | `record_email_delivery_state(user, 'deliverable', 'suppression-lifted', ...)` — restores marketing eligibility for a re-verified address |
+| `contact.deleted` | consent + deliverability | (defensive) `apply_resend_global_marketing_withdrawal(user)` AND `record_email_delivery_state(user, 'manual_suppressed', 'contact-deleted', ...)` |
+
+RPCs (all SECURITY DEFINER, atomic writes, `search_path=''`):
+
+- `public.apply_resend_topic_change(p_user_id uuid, p_scope
+  text, p_site_code text, p_opt_in boolean)` — one scope; one
+  event with `consent_source='resend_webhook'`.
+- `public.apply_resend_global_marketing_withdrawal(p_user_id
+  uuid)` — iterates every scope the user currently carries
+  and writes opt-out + event per scope. Never writes
+  deliverability state.
+- `public.record_email_delivery_state(p_user_id uuid,
+  p_status text, p_reason text, p_resend_event_id text)` —
+  upserts `collector_email_delivery_state` and appends
+  `collector_email_delivery_events`. Never writes consent.
+
+**Correlation window** for the `contact.updated` +
+`suppression.added` / bounce / complaint ambiguity: CN-D2
+checks `collector_email_delivery_events` for a same-user event
+within the last N seconds (start with 30 s). If found, the
+subsequent `unsubscribed=true` is provider-driven and the
+consent-side RPC is NOT called. If not, the consent-side RPC
+IS called.
 
 All webhook processing is immediate — the pg_cron forward sync
 handles Supabase → Resend direction only.
@@ -397,34 +596,190 @@ every row of `collector_marketing_preferences where email_opt_in
 Expected volume: 4 users at CN-A backfill. Any opt-ins added
 since then. Well below any rate limit.
 
-## Where things live
+## Where things live (v3)
 
 | Concern | Location |
 |---|---|
 | Segment id | `collector_marketing_config.resend_segment_id` (singleton) |
-| Topic mapping | `collector_marketing_topics` table (6 rows: 5 site + 1 network) |
-| Watermark | `collector_marketing_sync_state` table |
-| Retry state | `collector_marketing_sync_failures` table |
-| Reverse-sync RPCs | `public.apply_resend_topic_change(user, scope, site, opt_in)` + `public.apply_resend_global_unsubscribe(user)` |
+| Topic mapping | `collector_marketing_topics` (6 rows: 5 site + 1 network, `default_subscription='opt_out'`) |
+| **Contact mapping (stable Resend id ↔ user)** | `collector_marketing_contacts` |
+| Watermark | `collector_marketing_sync_state` |
+| Retry state | `collector_marketing_sync_failures` |
+| **Deliverability state (current)** | `collector_email_delivery_state` |
+| **Deliverability events (append-only)** | `collector_email_delivery_events` |
+| Consent RPCs (reverse-sync) | `apply_resend_topic_change`, `apply_resend_global_marketing_withdrawal` |
+| Deliverability RPC | `record_email_delivery_state` |
 | Forward sync worker | `supabase/functions/sync-marketing-contacts/` |
 | Webhook handler | `supabase/functions/resend-webhook/` |
-| Shared: contact/segment/topic REST transport | `supabase/functions/_shared/resend-contacts.ts` |
+| Shared REST transport | `supabase/functions/_shared/resend-contacts.ts` |
 | Shared: verify-webhook.ts | reused from CN-C verbatim |
-| pg_cron trigger | `select cron.schedule(...)` calling the sync fn URL. **1 min during rollout, 5 min steady state.** |
-| Env vars | `RESEND_API_KEY` reused from CN-C. `SYNC_MARKETING_HOOK_SECRET` + `RESEND_WEBHOOK_SECRET` are new. |
+| pg_cron trigger | `cron.schedule(...)` calling the sync fn URL. **1 min during rollout, 5 min steady state.** |
+| Env vars | `RESEND_API_KEY` reused from CN-C. `RESEND_WEBHOOK_SECRET` is new. |
+
+## Verification steps before implementation (v3 gates)
+
+Both must complete + be recorded in this doc before CN-D1
+touches Resend.
+
+### Gate A — PokePrices Resend account audit
+
+PokePrices already has a live Resend integration. Before CN-D1
+creates a segment, topics, or contacts we must enumerate what
+exists and decide whether to reuse, coexist, or migrate.
+
+**What I could verify from this repo (2026-09-26):**
+
+- No PokePrices source code lives in `collector-network/`. The
+  README states "PokePrices — remains in its own existing
+  repository."
+- No `RESEND_API_KEY` value or PokePrices Resend account
+  reference lives in this repo (grepped for `pokeprices|POKE_RESEND|
+  api.resend.com` — only CN-C references appear).
+- Therefore this audit must be executed against the PokePrices
+  Resend workspace directly — either by preflightluke pasting
+  the findings below, or by preflightluke giving CN-D
+  read-only access to a token scoped to the PokePrices Resend
+  account so the sync worker's audit mode can enumerate.
+
+**Audit commands** (run against the PokePrices Resend account
+key; safe read-only calls; no writes):
+
+```bash
+# 1. Same account as CN-C auth key?
+#    Compare API-key prefix + call GET /audiences / GET /segments
+#    with both keys. Same account = same output set.
+curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
+     https://api.resend.com/segments
+curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
+     https://api.resend.com/audiences   # deprecated, but returns legacy state
+
+# 2. Contacts count + first page shape
+curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
+     "https://api.resend.com/contacts?limit=10"
+
+# 3. Existing topics
+curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
+     https://api.resend.com/topics
+
+# 4. Broadcast history — reveals whether Resend is currently
+#    used for marketing at all vs transactional only.
+curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
+     https://api.resend.com/broadcasts
+
+# 5. Recent email activity (spot-check for transactional vs
+#    marketing pattern — auth confirmation vs newsletter)
+curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
+     "https://api.resend.com/emails?limit=20"
+
+# 6. Domains configured (verifies which sender domain the
+#    PokePrices key controls — do CN + PokePrices share
+#    a verified domain?)
+curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
+     https://api.resend.com/domains
+```
+
+**Findings slot** (leave PENDING; fill in during audit):
+
+| Question | Finding |
+|---|---|
+| Same Resend account/workspace as CN-C `RESEND_API_KEY`? | PENDING |
+| Existing Audiences (legacy)? Count + names | PENDING |
+| Existing Segments? Count + names + ids | PENDING |
+| Existing Topics? Count + names + ids | PENDING |
+| Existing Contacts? Approximate count + any `unsubscribed=true` populated | PENDING |
+| Existing Broadcasts? Any marketing sends already historical? | PENDING |
+| Recent Emails: transactional / marketing / both? | PENDING |
+| Verified domains? Overlap with CN-C `send.collector.network` sender? | PENDING |
+| Any suppression list entries we must preserve? | PENDING |
+
+**Coexistence decisions to record after audit:**
+
+1. If same account → CN-D creates the `Collector Network
+   Contacts` segment alongside any PokePrices marketing state;
+   both live in the same workspace. Add a topic naming rule:
+   PokePrices legacy topics stay untouched, CN-D uses the
+   `site:*` / `network` namespace.
+2. If different account → CN-D operates against a NEW
+   dedicated Collector Network Resend workspace; PokePrices
+   integration continues in its own account and consumes the
+   shared Supabase consent tables via CN-D's read APIs if it
+   wants to align (out of scope for CN-D1).
+3. Any existing PokePrices Contact with `unsubscribed=true`
+   MUST be preserved — CN-D never resets `unsubscribed` from
+   forward sync (already true in the design; note it
+   explicitly).
+4. Any existing PokePrices Segment we could reuse as
+   "Collector Network Contacts"? If yes, capture its id
+   instead of creating a new one.
+5. Existing Broadcasts / templates: untouched.
+
+**Audit status:** PENDING. Do not proceed to Gate B or CN-D1
+until every row above has a value.
+
+### Gate B — PATCH /contacts topics semantics (experimental)
+
+The Resend docs are ambiguous on whether
+`PATCH /contacts/{id}` with `{topics: [...]}` is additive or
+replace-all. CN-D's forward sync sends the full topics vector
+either way, but the write-cost analysis and the reverse-sync
+diff logic both depend on the answer.
+
+**Experiment** (safe, uses a throwaway test contact against the
+CN-C `RESEND_API_KEY` on the Collector Network Resend account,
+provided CN + PokePrices share the account and the audit
+doesn't forbid it; otherwise use a scratch account):
+
+1. Create a test contact with `topics: [{id: T1, subscription:
+   'opt_in'}, {id: T2, subscription: 'opt_in'}]`.
+2. `GET /contacts/{id}` — confirm both topics returned.
+3. `PATCH /contacts/{id}` with `{topics: [{id: T3,
+   subscription: 'opt_in'}]}` (a third, unrelated topic; T1
+   and T2 omitted from body).
+4. `GET /contacts/{id}` — inspect the returned topics array.
+   - If T1 and T2 are still `opt_in` → PATCH is **additive**.
+   - If T1 and T2 are gone or reset → PATCH is
+     **replace-all**.
+5. Delete the test contact.
+
+**Result slot** (leave PENDING; fill in during experiment):
+
+| Question | Finding |
+|---|---|
+| PATCH `topics` behaviour | PENDING (additive / replace-all) |
+| Empty `topics: []` on PATCH — clears everything, or no-op? | PENDING |
+| PATCH with unknown topic id — 400, or silent ignore? | PENDING |
+
+Regardless of finding, CN-D's forward sync sends the full
+current topics vector on every PATCH (defensive). The
+experiment result determines only whether the reverse-sync
+`contact.updated` diff can rely on Resend returning the full
+vector on `GET` (it does; verified via the List Contacts
+response shape).
+
+**Experiment status:** PENDING.
 
 ## Slice breakdown
 
 Three tight slices. Each ships independently and is a STOP
 checkpoint for manual verification before the next.
 
-### CN-D1 — Schema + segment/topic config + forward sync
+### CN-D1 — Schema + segment/topic config + contact mapping + forward sync
+
+**Gate:** Do not start CN-D1 until Gate A (PokePrices audit) and
+Gate B (PATCH topics experiment) are both filled in above.
 
 - **Schema migration:**
   - Create `collector_marketing_config` (singleton, holds
     `resend_segment_id`).
   - Create `collector_marketing_topics` (6 rows once
-    populated: 5 site scopes + 1 network scope).
+    populated: 5 site scopes + 1 network scope,
+    `default_subscription='opt_out'`).
+  - Create `collector_marketing_contacts` (stable Resend id
+    mapping; user_id PK, resend_contact_id unique).
+  - Create `collector_email_delivery_state` +
+    `collector_email_delivery_events` (deliverability side —
+    ships in CN-D1 even though writes come in CN-D2, so the
+    schema is settled before webhook code exists).
   - Create `collector_marketing_sync_state` (watermark).
   - Create `collector_marketing_sync_failures` (per-user retry
     backoff state).
@@ -435,25 +790,47 @@ checkpoint for manual verification before the next.
     assertion: `select count(*) from ...consent_events where
     source='brevo_webhook'` returns 0.
 - **Manual dashboard steps (docs/network/cn-d1-manual-setup.md):**
-  1. Create the `Collector Network Subscribers` segment in
-     Resend → dashboard → Segments; capture the UUID → INSERT
-     `collector_marketing_config`.
+  1. Per Gate A audit outcome: EITHER create the
+     `Collector Network Contacts` segment in Resend → dashboard
+     → Segments (name is not "Subscribers"; a fully opted-out
+     retained contact still belongs), capture the UUID → INSERT
+     `collector_marketing_config`; OR reuse the existing
+     PokePrices segment id if the audit finds an appropriate
+     one and preflightluke elects to reuse.
   2. Create the six topics (`site:ygo`, `site:mtg`,
      `site:pokemon`, `site:onepiece`, `site:lorcana`,
      `network`) in Resend → dashboard → Topics; capture each
      UUID → INSERT six rows into `collector_marketing_topics`.
-     Set `active=true` for `site:ygo` + `network`, `active=false`
+     `active=true` for `site:ygo` + `network`, `active=false`
      for the other four until each site launches its shared
-     consent integration.
+     consent integration. **PokePrices legacy topics (if any
+     found in Gate A) MUST NOT be renamed or reused unless the
+     audit explicitly says so.**
 - **Edge function `sync-marketing-contacts`:**
   - Reads watermark + events since.
-  - Groups by user; reads current
-    `collector_marketing_preferences` rows + `auth.users.email`
-    + active topic mapping for each user.
-  - One PATCH per user against `/contacts/{email}` with the
-    full topic subscription vector + segment membership.
-    Fallback to POST `/contacts` on 404. `unsubscribed` is
-    NEVER written from forward sync.
+  - Groups by user; for each affected user reads:
+    - current `collector_marketing_preferences` rows,
+    - `auth.users.email`,
+    - active topic mapping (rows where `active=true`),
+    - existing `collector_marketing_contacts` row (may be
+      absent → first sync for this user).
+  - Computes the target `topics` vector: for each active
+    topic, `subscription='opt_in'` iff the matching
+    preference row has `email_opt_in=true`, else `opt_out`.
+    Inactive topics (currently `site:mtg`, `site:pokemon`,
+    `site:onepiece`, `site:lorcana` at CN-D1 launch) are
+    omitted entirely from the vector.
+  - If `collector_marketing_contacts` row exists:
+    `PATCH /contacts/{resend_contact_id}` with the full
+    topics vector + segment membership + (only when
+    drift-detected) new email.
+  - Else: `POST /contacts` with the same body; capture the
+    returned `id`; insert the mapping row atomically.
+  - On PATCH 404: recreate via POST and update the mapping
+    (contact was deleted externally). Log the recreate.
+  - `unsubscribed` field is NEVER included in the body from
+    forward sync. Consent + deliverability are the only
+    signals that ever flip it.
   - Advances watermark on success.
   - Rate-limit safe: batch cap + exponential backoff on 429.
 - **pg_cron schedule:** `* * * * *` (1 min) during rollout;
@@ -463,104 +840,149 @@ checkpoint for manual verification before the next.
   `email_opt_in=true`, groups by user, issues the same PATCH.
   Idempotent — re-running is a no-op if state matches.
 - **Tests (mock fetch, no live Resend credits):**
-  - opt-in event → PATCH `/contacts/{email}` body includes
-    matching topic subscription = `opt_in`.
+  - First-time user (no `collector_marketing_contacts` row)
+    → POST `/contacts`, mapping row inserted with returned id.
+  - Returning user → PATCH `/contacts/{resend_contact_id}`
+    NOT `/contacts/{email}`.
+  - opt-in event → PATCH body includes matching topic
+    subscription = `opt_in`.
   - opt-out event on scope X while other scopes still opt-in
     → PATCH body has `opt_out` on X, `opt_in` on others.
     `unsubscribed` field absent from body.
+  - Email drift (auth.users.email != synced_email) → PATCH
+    body includes new email; on success `synced_email` is
+    updated in the mapping row.
+  - No drift → PATCH body omits email field.
+  - PATCH returns 404 → fallback POST + mapping row upsert;
+    log records `recreate=true`.
   - unchanged event → no Resend call.
-  - Resend 429 → backoff retry; watermark not advanced.
+  - Resend 429 → backoff retry; watermark not advanced;
+    failure row appended to `collector_marketing_sync_failures`.
   - Resend 5xx → same.
-  - Inactive topic row (onepiece/lorcana at CN-D1 launch) →
-    excluded from the topics vector for that scope.
+  - Inactive topic row (mtg/pokemon/onepiece/lorcana at CN-D1
+    launch) → excluded entirely from the topics vector.
   - Missing segment config → sync short-circuits with a
     log-friendly error, no partial writes.
   - User with all scopes opted-out → contact still PATCHed
     with an all-`opt_out` topics vector (never marks
     `unsubscribed=true`).
+  - No PII (email addresses) in log summaries. Domain-only
+    tags for observability.
 - **Docs:** `docs/network/cn-d1-manual-setup.md` covering
   segment + topic creation, config INSERTs, backfill run,
   smoke tests. Mirror the CN-C manual-setup structure.
 - **STOP** for manual dashboard verification. Preflightluke
   confirms:
-  1. Segment + topics show up in the Resend dashboard.
-  2. Post-backfill contact list matches expected user
-     count.
+  1. Segment + topics show up in the Resend dashboard (and
+     any PokePrices legacy state is untouched).
+  2. `collector_marketing_contacts` row count matches
+     `collector_marketing_preferences` distinct-user count for
+     opted-in users after backfill.
   3. Opting-in via /settings on ygoprices.io lands the
-     contact with the right topics within ~1 minute.
-  4. Opting-out via /settings removes the topic subscription
-     within ~1 minute.
+     contact with the right topics within ~1 minute; a
+     mapping row appears.
+  4. Opting-out via /settings flips the topic subscription
+     within ~1 minute; mapping row stays; `unsubscribed`
+     field on the Resend contact remains false.
+  5. Secure Email Change flow: change an opted-in user's
+     email via CN-C; next sync cycle PATCHes the existing
+     contact with the new email; Resend dashboard shows the
+     same contact id with updated email; `synced_email` in
+     the mapping row matches.
 
 ### CN-D2 — Reverse sync via Resend webhook
+
+**Gate:** design the global-unsubscribe correlation-window
+mechanics (see "Global unsubscribe semantics" above) and
+record N (seconds) + tie-breaker rule in this doc before
+CN-D2 code starts. Suggested starting N = 30.
 
 - Edge function `resend-webhook`:
   - Standard Webhooks signature verification via reused
     `_shared/verify-webhook.ts` (secret =
     `RESEND_WEBHOOK_SECRET`).
-  - Route by `type`:
-    - `contact.updated` — diff topics vs Supabase current
-      state, call `apply_resend_topic_change` for each
-      flipped topic. If `unsubscribed=true` in the payload,
-      additionally call `apply_resend_global_unsubscribe`.
-    - `email.bounced` with `bounce.type='Permanent'`,
-      `email.complained`, `suppression.added`,
-      `contact.deleted` → `apply_resend_global_unsubscribe`.
-  - Lookup user by email (join `auth.users.email`).
-    Unknown email → 204 no-op + log.
-  - Lookup scope+site by topic id (join
-    `collector_marketing_topics.resend_topic_id`). Unknown
-    topic → 204 no-op + log.
-- **RPCs (both SECURITY DEFINER, atomic preference + event
-  writes, `search_path=''`):**
+  - Lookup user by `resend_contact_id` via
+    `collector_marketing_contacts`. Unknown contact → 204
+    no-op + log (likely PokePrices legacy or an orphan).
+  - Route to consent RPCs OR deliverability RPCs per the
+    reverse-sync table above. Never both, except
+    `contact.deleted` which triggers both defensively.
+- **Consent RPCs** (SECURITY DEFINER, atomic preference +
+  event writes, `search_path=''`):
   - `public.apply_resend_topic_change(p_user_id uuid,
-    p_scope text, p_site_code text, p_opt_in boolean)` —
-    writes one preference row + one event with
-    source='resend_webhook'.
-  - `public.apply_resend_global_unsubscribe(p_user_id uuid)`
-    — reads every existing preference row for the user,
-    writes opt-out on each + one event per scope.
-  - Both refuse `p_user_id` that isn't in `auth.users` (defensive;
-    the webhook handler already filters).
+    p_scope text, p_site_code text, p_opt_in boolean)` — one
+    scope; one event with `consent_source='resend_webhook'`.
+  - `public.apply_resend_global_marketing_withdrawal(p_user_id
+    uuid)` — iterates every scope the user currently carries;
+    opt-out + event per scope. Never writes deliverability.
+- **Deliverability RPC**:
+  - `public.record_email_delivery_state(p_user_id uuid,
+    p_status text, p_reason text, p_resend_event_id text)` —
+    upserts `collector_email_delivery_state`; appends
+    `collector_email_delivery_events`. Never writes consent.
 - Configure the Resend webhook endpoint in the dashboard —
-  subscribe to `contact.*`, `email.bounced`, `email.complained`,
-  `suppression.added`.
+  subscribe to `contact.updated`, `contact.deleted`,
+  `email.bounced`, `email.complained`, `suppression.added`,
+  `suppression.removed`.
 - **Tests:**
   - signature rejection (missing / stale / tampered).
-  - `contact.updated` with one topic flipped opt_in→opt_out →
-    one preference row updated + one event with
-    source='resend_webhook'. Other scopes untouched.
-  - `contact.updated` with `unsubscribed=true` → opt-out on
-    every scope the user currently carries; one event per
-    scope.
-  - `email.bounced` Permanent → global opt-out.
-  - `email.bounced` Temporary → 204 no-op (no state change).
-  - `email.complained` → global opt-out.
-  - `suppression.added` → global opt-out.
-  - `contact.deleted` → global opt-out (defensive).
-  - unknown email → 204 no-op + log.
-  - unknown topic_id in a `contact.updated` payload → skipped,
-    other topics processed, log emitted.
-  - no tokens/emails/api-keys leaked in log summaries (CN-C
-    invariant preserved).
-- **STOP** for manual verification: trigger an unsubscribe
-  from the Resend preference page for the test recipient →
-  Supabase preference row for that scope flips within ~2s,
-  event row appears with source='resend_webhook',
-  `collector_marketing_consent_events.occurred_at` matches
-  event delivery.
+  - `contact.updated` with one topic flipped opt_in→opt_out
+    → one consent preference row updated; one consent event
+    with `source='resend_webhook'`; other scopes untouched;
+    deliverability state untouched.
+  - `contact.updated` with `unsubscribed=true`, NO recent
+    bounce/complaint/suppression for this user → treated as
+    user-initiated global marketing withdrawal; opt-out on
+    every current scope; deliverability state untouched.
+  - `contact.updated` with `unsubscribed=true`, WITHIN the
+    correlation window of an `email.bounced` Permanent for
+    same user → skipped (deliverability already recorded);
+    consent tables untouched.
+  - `email.bounced` Permanent → deliverability row status =
+    `hard_bounce`; consent tables untouched; consent history
+    preserved.
+  - `email.bounced` Temporary → deliverability row status =
+    `soft_bounce_watch`; consent tables untouched.
+  - `email.complained` → deliverability status = `complaint`.
+  - `suppression.added` → deliverability status =
+    `provider_suppressed`.
+  - `suppression.removed` → deliverability status =
+    `deliverable` with reason = `'suppression-lifted'`.
+  - `contact.deleted` → BOTH consent global withdrawal AND
+    deliverability `manual_suppressed` written (defensive).
+  - Unknown Resend contact id → 204 no-op + log.
+  - Unknown topic id in a `contact.updated` payload → topic
+    skipped, other topics processed, log emitted.
+  - No tokens / emails / api-keys leaked in log summaries
+    (CN-C invariant preserved).
+- **STOP** for manual verification:
+  1. Trigger a topic unsubscribe from Resend's preference
+     page for the test recipient → Supabase preference row
+     for that scope flips within ~2 s, event row with
+     `source='resend_webhook'` appears, deliverability
+     table untouched, `collector_marketing_consent_events.occurred_at`
+     matches event delivery.
+  2. Bounce a message to a known-bad address → deliverability
+     row appears with status `hard_bounce`; consent tables
+     for that user untouched; consent history intact.
 
 ### CN-D3 — Ops surface + drift detection
 
 - Read view `collector_marketing_sync_status` exposing
   `last_event_id`, `last_run_at`, `last_error`, failure count.
+- Read view `collector_email_deliverability_summary` — one row
+  per non-`deliverable` state count, for at-a-glance ops.
 - Periodic (daily) drift check job: pick a small sample of
-  opted-in users, verify their presence in the mapped Resend
-  audience, log discrepancies.
+  opted-in users, `GET /contacts/{resend_contact_id}` for each,
+  verify the topic subscriptions returned match Supabase state,
+  log discrepancies. Cheap — samples, not full audit.
+- Reconciliation runbook (one page): "user reports still
+  receiving newsletter after opting out" — order of checks
+  (Supabase pref → sync failure row → Resend contact topics →
+  deliverability state).
 - Alerting hooks (log-based; no PagerDuty integration in this
   slice).
-- Docs: closure doc for CN-D + one-page runbook for a common
-  drift scenario ("user reports still receiving newsletter
-  after opting out").
+- Docs: closure doc for CN-D + the runbook.
 
 CN-D closes when CN-D3 is applied and 7 days of clean sync logs
 have accumulated.
@@ -577,48 +999,52 @@ have accumulated.
 
 ## What could bite us
 
-- **Topics are a first-class contact field.** Every PATCH we
-  send has to include the FULL topics vector, not a delta —
-  otherwise omitted topics may be left as whatever they were
-  previously. CN-D1 tests must cover this: after writing
-  `{topics: [ygo=opt_in]}` then `{topics: [network=opt_in]}`,
-  the second write MUST leave ygo=opt_in intact. **Verify at
-  CN-D1**: is Resend's PATCH additive or replace-all on
-  `topics`? The docs are ambiguous on the point. If Resend
-  replaces, this is fine as long as we send the full vector.
-  If Resend merges, sync becomes cheaper. Either way, we send
-  the full vector defensively.
+- **PATCH topics semantics is a Gate B question, not a
+  post-launch bite-mark.** Run the experiment before CN-D1.
+  Regardless of finding, forward sync sends the full vector
+  defensively; the finding only informs cost analysis and the
+  reverse-sync diff strategy.
 - **Global `unsubscribed` blocks broadcasts, not transactional.**
-  Confirm at CN-D1 that a contact with `unsubscribed=true`
-  still receives CN-C auth email (which uses the transactional
-  send path). Resend docs describe `unsubscribed` in terms of
-  "all Broadcasts," implying transactional is unaffected, but
-  worth a live check with a suppressed test address before
-  we trust it.
+  Docs describe `unsubscribed` in terms of "all Broadcasts,"
+  implying transactional (CN-C auth email) is unaffected. Verify
+  at CN-D1 with a live test address before trusting it. Ties
+  into the suppression-list concern below.
 - **Suppression list is account-global.** A hard bounce on any
   send (including auth email) adds the address to the account
   suppression list, which stops ALL future sends including
   transactional auth email. This is a Resend platform behaviour
-  we can't disable; the mitigation is (a) reverse-sync
-  `suppression.added` fast and (b) surface a "your account
-  email may be undeliverable" flag in the user's own /settings
-  page (post-CN-D concern, but flag it here).
-- **Email as identity.** Resend keys contacts by email. If a
-  user changes their email via CN-C Secure Email Change, we
-  need to update the Resend contact's email too. Supabase does
-  not natively emit an `email_changed` event; CN-D1 adds a
-  small `on update` trigger on `auth.users(email)` that inserts
-  a synthetic row into `collector_email_changes` which the
-  sync worker also drains. The sync uses
-  `PATCH /contacts/{id}` with `{email: <new>}` on the existing
-  contact id (fetched from a lookup), NOT create-a-new-contact,
-  to avoid duplicates.
+  we can't disable; CN-D's mitigation is (a) reverse-sync
+  `suppression.added` fast into `collector_email_delivery_state`
+  and (b) surface a "your account email may be undeliverable"
+  flag in the user's own /settings page (post-CN-D concern, but
+  the deliverability table now supplies the fact).
+- **Email as identity, solved v3.** Contact-mapping table keys
+  off `resend_contact_id`, so Secure Email Change becomes a
+  drift check + one PATCH with `email` set to the new address.
+  No separate `collector_email_changes` queue needed. The sync
+  worker naturally picks this up because CN-C's email-change
+  fires a consent event (via `apply_signup_marketing_consent` or
+  future logic) OR — worst case — the daily drift check in
+  CN-D3 catches it within 24 h.
+
+  **Refinement to consider:** if we want < 1 h latency on
+  email drift, add a tiny `on update` trigger on
+  `auth.users(email)` that inserts a synthetic row into
+  `collector_marketing_sync_failures` (retry_after=now()) so
+  the next sync cycle wakes up on it. Cheap; document at
+  CN-D1 whether we want it.
 - **Rate limits.** Resend enforces per-second limits on the
   contact API. Batch size cap + exponential backoff on 429 in
   the sync function.
 - **PII in logs.** Same rule as CN-C: never log the recipient
   email in full; domain-only tag for observability. No tokens
   or webhook payload bodies in logs.
+- **Reverse-sync ambiguity (`unsubscribed=true`).** The
+  correlation-window design is a hard gate on CN-D2. Get it
+  wrong and we either (a) misclassify user-initiated
+  unsubscribes as bounces and lose the consent event, or (b)
+  misclassify bounces as user withdrawals and add fake consent
+  events to the immutable ledger.
 
 ## Answered questions (preflightluke, 2026-09-26)
 
