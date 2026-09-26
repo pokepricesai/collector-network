@@ -1,9 +1,31 @@
 # CN-D1 pre-implementation review
 
-Status: **AWAITING APPROVAL — 2026-09-26.** Nothing is committed
-or applied yet. This doc lists every irreversible change CN-D1
-proposes, in the order it must happen, so preflightluke can veto
-or amend before the first live Resend or Supabase write.
+Status: **APPROVED with amendments — 2026-09-26.** Implementation
+in progress. Not touching live Resend / not enabling the cron
+until the deployment sequence explicitly reaches those steps.
+
+**Amendments folded in from 2026-09-26 review:**
+
+1. **Backfill scope tightened.** Only users with an actual row
+   in `collector_marketing_preferences` for `site:ygo` or
+   `network` are backfilled. CN-A `collector_user_sites`
+   membership never causes a Resend Contact or topic
+   subscription to be created on its own. Missing preference
+   stays missing preference.
+2. **Worker/backfill invocation is authenticated.** New
+   secret `MARKETING_SYNC_TRIGGER_SECRET` gates both cron and
+   backfill invocations. Edge function rejects any request
+   without a matching Bearer token. pg_cron reads the
+   credential from Supabase Vault by name; the literal never
+   appears in migrations, source, git, or logs.
+3. **Event watermark is composite + crash-safe.** Cursor is
+   `(occurred_at, event_id)` tuple, not timestamp-only.
+   Query uses row-tuple comparison plus a small read-lag so
+   concurrent-timestamp writes have committed before the
+   worker reads them. All Resend writes complete before any
+   Supabase state advances; a crash mid-batch produces zero
+   data loss because the worker re-reads the same events
+   next cycle and every Resend operation is idempotent.
 
 Gates A and B are both PASS (see `plan-cn-d.md`). CN-D1 is
 scoped strictly to forward sync of YGO + Network consent to

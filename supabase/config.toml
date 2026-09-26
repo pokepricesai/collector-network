@@ -14,3 +14,10 @@ project_id = "collector-network-local"
 # unauthenticated hook calls.
 [functions.auth-email]
 verify_jwt = false
+
+# CN-D1 marketing sync worker. Invoked by pg_cron (steady state)
+# and by preflightluke's manual backfill request. The function
+# verifies its own MARKETING_SYNC_TRIGGER_SECRET on every call;
+# no JWT gate needed.
+[functions.sync-marketing-contacts]
+verify_jwt = false
