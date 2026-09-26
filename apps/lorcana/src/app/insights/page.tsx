@@ -17,9 +17,9 @@ export default function InsightsIndex() {
   return (
     <div style={{ padding: '32px 24px' }}>
       <div style={{ maxWidth: 980, margin: '0 auto' }}>
-        <header className="op-page-hero" style={{ marginBottom: 24 }}>
+        <header className="lc-page-hero" style={{ marginBottom: 24 }}>
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+            <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
               Insights
             </div>
             <h1 style={{ margin: '4px 0 6px', fontSize: 30 }}>

@@ -60,7 +60,7 @@ export default function InksIndex() {
             <Link
               key={ink}
               href={`/inks/${ink}`}
-              className="card-hover card-hover-gold"
+              className="lc-hover lc-hover-gold"
               style={{
                 display: 'grid',
                 gap: 10,

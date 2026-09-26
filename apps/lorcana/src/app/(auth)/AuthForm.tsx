@@ -71,7 +71,7 @@ const submitStyle: React.CSSProperties = {
   padding: '11px 14px',
   borderRadius: 10,
   border: '1px solid var(--gold-600)',
-  background: 'var(--gold-600)',
+  background: 'var(--accent-2)',
   color: '#111',
   fontFamily: 'inherit',
   fontSize: 13,
@@ -278,7 +278,7 @@ export function AuthForm({ mode }: Props) {
                 type="checkbox"
                 checked={siteOpt}
                 onChange={(e) => setSiteOpt(e.target.checked)}
-                style={{ marginTop: 3, accentColor: 'var(--gold-600)', width: 16, height: 16 }}
+                style={{ marginTop: 3, accentColor: 'var(--accent-2)', width: 16, height: 16 }}
               />
               <span>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{siteCopy.label}</span>
@@ -290,7 +290,7 @@ export function AuthForm({ mode }: Props) {
                 type="checkbox"
                 checked={networkOpt}
                 onChange={(e) => setNetworkOpt(e.target.checked)}
-                style={{ marginTop: 3, accentColor: 'var(--gold-600)', width: 16, height: 16 }}
+                style={{ marginTop: 3, accentColor: 'var(--accent-2)', width: 16, height: 16 }}
               />
               <span>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{NETWORK_CONSENT_COPY.label}</span>
@@ -317,7 +317,7 @@ export function AuthForm({ mode }: Props) {
 
       <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--text-muted)', textAlign: 'center' }}>
         {mode === 'sign-in' ? "Don't have an account?" : 'Already have an account?'}{' '}
-        <Link href={otherHref} style={{ color: 'var(--gold-600)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+        <Link href={otherHref} style={{ color: 'var(--accent-2)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
           {mode === 'sign-in' ? 'Create one' : 'Sign in'}
         </Link>
       </p>

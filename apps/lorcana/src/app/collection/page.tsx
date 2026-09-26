@@ -25,7 +25,7 @@ export default async function CollectionPage() {
       <main style={pageStyle}>
         <PageHeader />
         <div style={panelStyle}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gold-600)', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-2)', marginBottom: 6 }}>
             Schema pending
           </div>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--text-muted)' }}>
@@ -100,7 +100,7 @@ export default async function CollectionPage() {
                 display: 'inline-block',
                 padding: '9px 14px',
                 borderRadius: 10,
-                background: 'var(--gold-600)',
+                background: 'var(--accent-2)',
                 color: '#111',
                 fontSize: 13,
                 fontWeight: 700,
@@ -186,7 +186,7 @@ export default async function CollectionPage() {
                   {row.is_graded && row.grader && row.grade && (
                     <>
                       {' · '}
-                      <span style={{ color: 'var(--gold-600)' }}>{row.grader.toUpperCase()} {row.grade}</span>
+                      <span style={{ color: 'var(--accent-2)' }}>{row.grader.toUpperCase()} {row.grade}</span>
                     </>
                   )}
                   {!row.is_graded && row.condition && (
@@ -229,7 +229,7 @@ export default async function CollectionPage() {
 function PageHeader() {
   return (
     <header style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--gold-600)' }}>Account · Collection</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent-2)' }}>Account · Collection</div>
       <h1 style={{ margin: '4px 0 4px', fontFamily: 'Outfit, system-ui, sans-serif', fontSize: 28, letterSpacing: '-0.01em' }}>
         Your Lorcana collection
       </h1>

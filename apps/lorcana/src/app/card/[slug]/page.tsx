@@ -10,26 +10,19 @@ import { LC_INK_LABEL } from '@/lib/lorcana/ink';
 import { TREATMENT_DISPLAY_ORDER } from '@/lib/lorcana/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
+import EffectText from '@/components/card/EffectText';
 import type { LcCardView, LcPrintingView } from '@/server/read';
 
 // Logical / gameplay card page. Shows every printing across every set
-// grouped by treatment. This is the URL that answers "how many
-// treatments exist for Mickey Mouse - Brave Little Tailor, and what does each cost?" —
-// the single most collector-relevant question in Lorcana.
+// grouped by treatment.
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
-// Best-effort reverse lookup: turn the slug back into a plausible
-// name. Names contain dots, ellipses and non-ASCII characters that
-// we can't fully round-trip. If the naive spaced-out slug misses, we
-// fall back to a name search and pick the exact slug match.
 async function resolveCardName(slug: string): Promise<string | null> {
   const naive = slug.replace(/-/g, ' ');
   const bundle = await getCardBundleByName(naive);
   if (bundle) return bundle.name;
-  // Fallback: fuzzy search + slug re-match. Handles names with dots
-  // ("Mickey Mouse - Brave Little Tailor"), apostrophes and other characters the slug drops.
   const candidates = await searchCards(naive.slice(0, 40), 40);
   const hit = candidates.find((c) => slugifyCardName(c.name) === slug);
   return hit?.name ?? null;
@@ -43,9 +36,13 @@ export async function generateMetadata({
   const { slug } = await params;
   const resolvedName = await resolveCardName(slug);
   if (!resolvedName) return { title: 'Card not found' };
+  const bundle = await getCardBundleByName(resolvedName);
+  const heroCard = bundle ? pickHero(bundle.cards) : null;
+  const rarityLabel = heroCard?.rarity.label ?? '';
+  const setLabel = heroCard?.set?.name ?? '';
   return {
-    title: `${resolvedName} — every printing, treatment and price`,
-    description: `${resolvedName} across every Disney Lorcana set. Base, foil, Enchanted, Iconic, Epic, Legendary and Promo treatments priced individually.`,
+    title: `${resolvedName} — Lorcana card prices, treatments and printings`,
+    description: `${resolvedName}${setLabel ? ` from ${setLabel}` : ''}${rarityLabel ? ` (${rarityLabel})` : ''}. Every printing across every set — foil, nonfoil and Enchanted overprint — priced individually with live retail on Cardmarket and TCGplayer.`,
     alternates: { canonical: canonicalFor(`/card/${slugifyCardName(resolvedName)}`) },
   };
 }
@@ -61,24 +58,14 @@ export default async function LogicalCardPage({
   const bundle = await getCardBundleByName(resolvedName);
   if (!bundle) notFound();
 
-  // Flatten all treatment printings from every rarity row, then group by
-  // treatment code so the page reads chase-first:
-  //   Treasure Rare (1) — panel per printing
-  //   Secret Rare (2)
-  //   Special Card (1)
-  //   Parallel (3)
-  //   Leader (2)
-  //   Promo (1)
-  //   Standard (12)
-  //   Reprint (1)
   const flat: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
   for (const c of bundle.cards) {
     for (const p of c.printings) flat.push({ cardView: c, printingView: p });
   }
 
-  // Pick hero art from the highest-rarity card row.
   const heroCard = pickHero(bundle.cards);
-  const heroImage = pickCardImage(heroCard.card.images);
+  const heroImage = pickCardImage(heroCard.card.images, 'large');
+  const isChase = ['EN', 'IC', 'EP'].includes(heroCard.rarity.code);
 
   const grouped = groupByTreatment(flat);
   const treatmentOrder: Array<{
@@ -92,41 +79,47 @@ export default async function LogicalCardPage({
     treatmentOrder.push({ label: entries[0]!.printingView.treatment.label, code, entries });
   }
 
-  const jsonLd = {
+  const canonical = canonicalFor(`/card/${slugifyCardName(bundle.name)}`);
+  const breadcrumbLd = {
     '@context': 'https://schema.org',
-    '@type': 'CreativeWork',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: canonicalFor('/') },
+      { '@type': 'ListItem', position: 2, name: 'Cards', item: canonicalFor('/cards/search') },
+      { '@type': 'ListItem', position: 3, name: bundle.name, item: canonical },
+    ],
+  };
+  const productLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
     name: bundle.name,
-    url: canonicalFor(`/card/${slugifyCardName(bundle.name)}`),
-    description: `${bundle.name} — every printing and treatment.`,
+    url: canonical,
+    image: heroImage ?? undefined,
+    category: 'Trading card game / Disney Lorcana',
+    description: `${bundle.name} — a Disney Lorcana card${heroCard.set ? ` from ${heroCard.set.name}` : ''}${heroCard.rarity.label ? ` at ${heroCard.rarity.label} rarity` : ''}. Every printing and treatment priced individually.`,
   } as const;
 
   return (
-    <div style={{ padding: '32px 24px' }}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    <div className="lc-container lc-section">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productLd) }} />
+
+      <Breadcrumbs
+        name={bundle.name}
+        setCode={heroCard.set?.code}
+        setName={heroCard.set?.name}
       />
 
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <Breadcrumbs name={bundle.name} />
-
-        <div
-          className="op-card-halo op-card-hero-grid"
-          style={{
-            gap: 28,
-            alignItems: 'flex-start',
-          }}
-        >
-          <div
-            style={{
-              background:
-                'linear-gradient(180deg, var(--bg-light) 0%, var(--bg-strong) 100%)',
-              border: '1px solid var(--border)',
-              borderRadius: 14,
-              overflow: 'hidden',
-              aspectRatio: '5 / 7',
-            }}
-          >
+      <div className="lc-card-hero-grid lc-halo" style={isChase ? { ['--lc-halo' as string]: 'radial-gradient(60% 60% at 50% 35%, rgba(122,78,240,0.28), transparent 70%)' } as React.CSSProperties : undefined}>
+        <div>
+          <div className={isChase ? 'lc-enchanted-glow' : undefined} style={{
+            background: 'linear-gradient(180deg, var(--surface-inset) 0%, var(--bg-strong) 100%)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            overflow: 'hidden',
+            aspectRatio: '5 / 7',
+            position: 'relative',
+          }}>
             {heroImage ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
@@ -135,133 +128,100 @@ export default async function LogicalCardPage({
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <div className="op-card-empty" aria-hidden>
-                <span>Art loading</span>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'grid', gap: 14 }}>
-            <div>
-              <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-                Disney Lorcana
-              </div>
-              <h1 style={{ margin: '4px 0 10px', fontSize: 30, lineHeight: 1.15 }}>
-                {bundle.name}
-              </h1>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {heroCard.gamedata.inks.map((c) => (
-                  <span key={c} className={`chip chip-ink chip-ink--${c}`}>
-                    {LC_INK_LABEL[c]}
-                  </span>
-                ))}
-                <span className="chip chip-gold" title="Base, foil, Enchanted, Iconic, Epic, Legendary and Promo treatments">
-                  {treatmentOrder.length} treatment{treatmentOrder.length === 1 ? '' : 's'} · {flat.length} printing{flat.length === 1 ? '' : 's'}
-                </span>
-              </div>
-            </div>
-
-            <CardStatGrid gamedata={heroCard.gamedata} classifications={heroCard.gamedata.classifications} />
-
-            {heroCard.gamedata.effectText && (
-              <div
-                style={{
-                  padding: 16,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 12,
-                }}
-              >
-                <div className="label-mono" style={{ marginBottom: 6 }}>
-                  Effect
-                </div>
-                <p style={{ margin: 0, lineHeight: 1.55 }}>
-                  {heroCard.gamedata.effectText}
-                </p>
-                {heroCard.gamedata.flavourText && (
-                  <>
-                    <div
-                      className="lc-engraved"
-                      aria-hidden
-                      style={{ margin: '12px 0' }}
-                    />
-                    <p style={{ margin: 0, lineHeight: 1.55, fontStyle: 'italic', color: 'var(--text-muted)' }}>
-                      {heroCard.gamedata.flavourText}
-                    </p>
-                  </>
-                )}
-              </div>
+              <div className="lc-card-empty" aria-hidden />
             )}
           </div>
         </div>
 
-        <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
-          <header>
-            <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-              Treatments
+        <div style={{ display: 'grid', gap: 14, minWidth: 0 }}>
+          <div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6, alignItems: 'center' }}>
+              {heroCard.set?.code && (
+                <span className="label-mono">
+                  <Link href={`/set/${encodeURIComponent(heroCard.set.code.toLowerCase())}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
+                    {heroCard.set.code.toUpperCase()}
+                  </Link>
+                  {heroCard.card.collector_number && ` · ${heroCard.card.collector_number}`}
+                </span>
+              )}
+              {heroCard.rarity.code !== 'UNKNOWN' && (
+                <span className={`treatment-badge treatment-badge--${heroCard.rarity.code.toLowerCase()}`}>
+                  {heroCard.rarity.label}
+                </span>
+              )}
             </div>
-            <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
-              Priced individually
-            </h2>
-            <p
-              style={{
-                margin: '6px 0 0',
-                color: 'var(--text-muted)',
-                fontSize: 14,
-                lineHeight: 1.55,
-                maxWidth: 640,
-              }}
-            >
-              Every treatment for {bundle.name} is a separate priced entity. Rarer
-              treatments appear first so the chase versions of this card are always
-              visible above the standard printing.
-            </p>
-          </header>
+            <h1 style={{ margin: 0, letterSpacing: '-0.015em' }}>
+              {bundle.name}
+            </h1>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+              {heroCard.gamedata.inks.map((c) => (
+                <span key={c} className={`chip chip-ink chip-ink--${c}`}>
+                  {LC_INK_LABEL[c]}
+                </span>
+              ))}
+              <span className="chip chip-gold">
+                {treatmentOrder.length} treatment{treatmentOrder.length === 1 ? '' : 's'} · {flat.length} printing{flat.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
 
-          {treatmentOrder.map((group) => (
-            <div key={group.code} style={{ display: 'grid', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                <span className={`treatment-badge treatment-badge--${group.code}`}>
-                  {group.label}
-                </span>
-                <span
-                  style={{
-                    fontSize: 13,
-                    color: 'var(--text-muted)',
-                    fontWeight: 600,
-                  }}
-                >
-                  {group.entries.length} printing
-                  {group.entries.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
-                  gap: 12,
-                }}
-              >
-                {group.entries.map(({ cardView, printingView }) => (
-                  <TreatmentPanel
-                    key={printingView.printing.id}
-                    cardView={cardView}
-                    printingView={printingView}
-                    linkToPrinting
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </section>
+          <CardStatGrid gamedata={heroCard.gamedata} classifications={heroCard.gamedata.classifications} />
+
+          {heroCard.gamedata.effectText && (
+            <EffectText
+              effectText={heroCard.gamedata.effectText}
+              flavourText={heroCard.gamedata.flavourText}
+            />
+          )}
+        </div>
       </div>
+
+      <section style={{ marginTop: 40, display: 'grid', gap: 24 }}>
+        <header>
+          <div className="label-mono">Treatments</div>
+          <h2 style={{ margin: '4px 0 6px' }}>
+            Priced individually
+          </h2>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55, maxWidth: 640 }}>
+            Every treatment for {bundle.name} is its own priced entity.
+            Rarer chase overprints (Enchanted, Iconic, Epic) surface first
+            so the collector-relevant versions are never buried under the
+            base rarity.
+          </p>
+        </header>
+
+        {treatmentOrder.map((group) => (
+          <div key={group.code} style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              <span className={`treatment-badge treatment-badge--${group.code}`}>
+                {group.label}
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>
+                {group.entries.length} printing{group.entries.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
+              gap: 12,
+            }}>
+              {group.entries.map(({ cardView, printingView }) => (
+                <TreatmentPanel
+                  key={printingView.printing.id}
+                  cardView={cardView}
+                  printingView={printingView}
+                  linkToPrinting
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }
 
 function pickHero(cards: LcCardView[]): LcCardView {
-  // Lorcana rarity ladder — highest first. Iconic + Enchanted are the
-  // marquee art slots and should always claim the hero image.
   const order: Record<string, number> = {
     enchanted: 9, en: 9,
     iconic: 8, ic: 8,
@@ -297,7 +257,7 @@ function groupByTreatment(
   return out;
 }
 
-function Breadcrumbs({ name }: { name: string }) {
+function Breadcrumbs({ name, setCode, setName }: { name: string; setCode?: string; setName?: string }) {
   return (
     <nav
       aria-label="Breadcrumb"
@@ -308,18 +268,24 @@ function Breadcrumbs({ name }: { name: string }) {
         display: 'flex',
         gap: 8,
         alignItems: 'center',
+        flexWrap: 'wrap',
       }}
     >
-      <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-        Home
-      </Link>
+      <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Home</Link>
       <span aria-hidden>›</span>
-      <Link
-        href="/cards/search"
-        style={{ color: 'var(--text-muted)', textDecoration: 'none' }}
-      >
-        Cards
-      </Link>
+      {setCode ? (
+        <>
+          <Link href="/browse" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Sets</Link>
+          <span aria-hidden>›</span>
+          <Link href={`/set/${encodeURIComponent(setCode.toLowerCase())}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
+            {setName ?? setCode.toUpperCase()}
+          </Link>
+        </>
+      ) : (
+        <>
+          <Link href="/cards/search" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Cards</Link>
+        </>
+      )}
       <span aria-hidden>›</span>
       <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{name}</span>
     </nav>

@@ -3,6 +3,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getSetBundle } from '@/server/browse';
 import { getSetMarketForLorcana } from '@/server/set-market';
+import {
+  getRarityDistributionForSet,
+  getFinishSplitForSet,
+} from '@/server/discovery';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug } from '@/lib/lorcana/slug';
 import { normaliseRarity } from '@/lib/lorcana/rarity';
@@ -10,41 +14,44 @@ import { toLcGamedata } from '@/lib/lorcana/gamedata';
 import { pickCardImage } from '@/lib/lorcana/image';
 import { SetMarketOverview } from '@/components/SetMarketOverview';
 import { SetGridClient, type SetGridEntry } from '@/components/SetGridClient';
+import RarityDistribution from '@/components/set/RarityDistribution';
+import FinishSplitPanel from '@/components/set/FinishSplitPanel';
+import ChaseCounts from '@/components/set/ChaseCounts';
 import type { TcgCard } from '@collector-network/database';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
-// Inferred set-type label from the code prefix. Bandai/OP set codes
-// follow a stable convention (OP = booster, EB = extra booster,
-// ST = starter deck, PRB = "Best" reprint booster). Kept here rather
-// than in shared metadata because tcg_sets.tcggraph_meta is empty
-// for OP today — see docs/lorcana/data-audit.md.
+// Lorcana set codes fall into three families (see
+// docs/lorcana/data-audit.md §2):
+//   * pure integers 1..13 — main-set boosters
+//   * p1/p2/p3         — promo sets
+//   * cp / c2          — Challenge promos
+//   * d23              — D23 Collection
+//   * dis              — EPCOT Festival of the Arts
+//   * coconut / pd1 / cc1 — one-off products
 function inferSetType(code: string): string {
   const c = code.toLowerCase();
-  if (c.startsWith('op')) return 'Booster';
-  if (c.startsWith('eb')) return 'Extra booster';
-  if (c.startsWith('st')) return 'Starter deck';
-  if (c.startsWith('prb')) return 'Best-of reprint';
-  if (c === 'p' || c.startsWith('pr') || c === 'oppr') return 'Promo';
+  if (/^\d+$/.test(c)) return 'Main set';
+  if (c.startsWith('p') && /^p\d+$/.test(c)) return 'Promo set';
+  if (c === 'cp' || c === 'c2') return 'Challenge promo';
+  if (c === 'd23') return 'D23 Collection';
+  if (c === 'dis') return 'EPCOT collection';
+  if (c === 'coconut') return 'Format Coconut';
+  if (c === 'pd1') return 'Party Deck';
+  if (c === 'cc1') return "Curator's Collection";
   return 'Set';
 }
 
 function formatReleased(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+      year: 'numeric', month: 'long', day: 'numeric',
     });
-  } catch {
-    return iso;
-  }
+  } catch { return iso; }
 }
 
 function pickHero(family: TcgCard[]): TcgCard {
-  // Highest Lorcana rarity claims the tile art. Enchanted → Iconic →
-  // Epic → Legendary → Super rare → Rare → Uncommon → Common → Promo.
   const order: Record<string, number> = {
     enchanted: 9, en: 9,
     iconic: 8, ic: 8,
@@ -75,8 +82,8 @@ export async function generateMetadata({
   if (!bundle) return { title: 'Set not found' };
   const setLabel = bundle.set.name;
   return {
-    title: `${setLabel} — every card, treatment and market price`,
-    description: `Complete Lorcana ${setLabel} set (${bundle.set.code.toUpperCase()}). Every card, treatment, live retail price, set value and top-value chase cards.`,
+    title: `${setLabel} — Lorcana set value, chase cards and every printing`,
+    description: `Complete Disney Lorcana ${setLabel} (${bundle.set.code.toUpperCase()}) set: card list, rarity mix, Enchanted / Iconic / Epic count, foil vs nonfoil value split and live retail on every printing.`,
     alternates: {
       canonical: canonicalFor(`/set/${encodeURIComponent(bundle.set.code.toLowerCase())}`),
     },
@@ -94,9 +101,6 @@ export default async function SetPage({
 
   const { set, cards } = bundle;
 
-  // Group logical cards by name so parallels / secret / treasure /
-  // special variants sit together (matches how a collector actually
-  // thinks about the set).
   const byName = new Map<string, TcgCard[]>();
   for (const c of cards) {
     const bucket = byName.get(c.name);
@@ -105,12 +109,21 @@ export default async function SetPage({
   }
   const uniqueNames = [...byName.keys()].sort((a, b) => a.localeCompare(b));
 
-  // Market overview (server) — value + coverage + top-value +
-  // cheapest. Movers are held back until the 7d honest window clears.
-  const market = await getSetMarketForLorcana(set.id, cards, { topN: 5 });
+  // Fetch market overview + rarity distribution + finish split in
+  // parallel. Each is a small server helper — no shared client cost.
+  const [market, rarityRows, finishSplit] = await Promise.all([
+    getSetMarketForLorcana(set.id, cards, { topN: 5 }),
+    getRarityDistributionForSet(set.id, cards),
+    getFinishSplitForSet(cards),
+  ]);
 
-  const priceLookup = new Map<string, number>(market.mostValuable.concat(market.cheapest).map((t) => [t.cardId, t.priceUsd]));
-  // Broader price lookup from the full market fetch: reuse both lists.
+  const rarityCounts: Record<string, number> = {};
+  for (const c of cards) {
+    const r = c.rarity ?? 'Unknown';
+    rarityCounts[r] = (rarityCounts[r] ?? 0) + 1;
+  }
+
+  const priceLookup = new Map<string, number>();
   for (const t of market.mostValuable) priceLookup.set(t.cardId, t.priceUsd);
   for (const t of market.cheapest) priceLookup.set(t.cardId, t.priceUsd);
 
@@ -156,7 +169,7 @@ export default async function SetPage({
   };
 
   return (
-    <div style={{ padding: '32px 24px' }}>
+    <div className="lc-container lc-section">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
@@ -166,80 +179,74 @@ export default async function SetPage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionLd) }}
       />
 
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <nav
-          aria-label="Breadcrumb"
-          style={{
-            marginBottom: 16,
-            fontSize: 13,
-            color: 'var(--text-muted)',
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-          }}
-        >
-          <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Home</Link>
-          <span aria-hidden>›</span>
-          <Link href="/browse" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Sets</Link>
-          <span aria-hidden>›</span>
-          <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>
-            {set.code.toUpperCase()} — {set.name}
-          </span>
-        </nav>
+      <nav
+        aria-label="Breadcrumb"
+        style={{
+          marginBottom: 14,
+          fontSize: 13,
+          color: 'var(--text-muted)',
+          display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+        }}
+      >
+        <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Home</Link>
+        <span aria-hidden>›</span>
+        <Link href="/browse" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Sets</Link>
+        <span aria-hidden>›</span>
+        <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>
+          {set.code.toUpperCase()} · {set.name}
+        </span>
+      </nav>
 
-        <header className="op-page-hero" style={{ marginBottom: 24 }}>
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-                {set.code.toUpperCase()} · {inferSetType(set.code)}
-              </div>
-            </div>
-            <h1 style={{ margin: '4px 0 6px', fontSize: 'clamp(24px, 4.5vw, 30px)' }}>
-              {set.name}
-            </h1>
-            <p
-              style={{
-                margin: 0,
-                color: 'var(--text-muted)',
-                fontSize: 14,
-                lineHeight: 1.6,
-                display: 'flex',
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <span>{uniqueNames.length.toLocaleString()} unique cards</span>
-              {cards.length !== uniqueNames.length && (
-                <span>{cards.length.toLocaleString()} priced printings</span>
-              )}
-              {market.pricedCount > 0 && (
-                <span>{market.pricedCount.toLocaleString()} with USD retail</span>
-              )}
-              {set.released_at && <span>Released {formatReleased(set.released_at)}</span>}
-            </p>
+      <header className="lc-page-hero" style={{ marginBottom: 20 }}>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div className="label-mono">
+            {set.code.toUpperCase()} · {inferSetType(set.code)}
           </div>
-        </header>
+          <h1 style={{ margin: '4px 0 8px' }}>
+            {set.name}
+          </h1>
+          <div style={{
+            display: 'flex', gap: 18, flexWrap: 'wrap',
+            fontSize: 14, color: 'var(--text-muted)',
+          }}>
+            <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{uniqueNames.length.toLocaleString()}</strong> unique cards</span>
+            <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{cards.length.toLocaleString()}</strong> total variants</span>
+            {market.pricedCount > 0 && (
+              <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{market.pricedCount.toLocaleString()}</strong> with USD retail</span>
+            )}
+            {set.released_at && <span>Released {formatReleased(set.released_at)}</span>}
+          </div>
+        </div>
+      </header>
 
-        {cards.length === 0 ? (
-          <div
-            style={{
-              padding: '32px 24px',
-              background: 'var(--surface)',
-              border: '1px dashed var(--border-strong)',
-              borderRadius: 16,
-              color: 'var(--text-muted)',
-              textAlign: 'center',
-            }}
-          >
-            This set has no cards ingested yet.
+      {cards.length === 0 ? (
+        <div className="lc-panel" style={{
+          textAlign: 'center', color: 'var(--text-muted)',
+          borderStyle: 'dashed', borderColor: 'var(--border-strong)',
+        }}>
+          This set has no cards ingested yet.
+        </div>
+      ) : (
+        <>
+          <SetMarketOverview market={market} setCode={set.code} setName={set.name} />
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))',
+            gap: 16,
+            marginBottom: 24,
+          }}>
+            <RarityDistribution rows={rarityRows} totalCards={cards.length} />
+            <FinishSplitPanel split={finishSplit} />
           </div>
-        ) : (
-          <>
-            <SetMarketOverview market={market} setCode={set.code} setName={set.name} />
-            <SetGridClient entries={entries} />
-          </>
-        )}
-      </div>
+
+          <div style={{ marginBottom: 24 }}>
+            <ChaseCounts counts={rarityCounts} setCode={set.code} />
+          </div>
+
+          <SetGridClient entries={entries} />
+        </>
+      )}
     </div>
   );
 }

@@ -73,7 +73,7 @@ export function AddToCollection({ cardId, printingId, cardName, isSignedIn }: Pr
         style={{
           padding: '9px 14px',
           borderRadius: 10,
-          background: 'var(--gold-600)',
+          background: 'var(--accent-2)',
           color: '#111',
           border: '1px solid var(--gold-600)',
           fontFamily: 'inherit',
@@ -130,7 +130,7 @@ export function AddToCollection({ cardId, printingId, cardName, isSignedIn }: Pr
           type="checkbox"
           checked={isGraded}
           onChange={(e) => setIsGraded(e.target.checked)}
-          style={{ accentColor: 'var(--gold-600)' }}
+          style={{ accentColor: 'var(--accent-2)' }}
         />
         Graded slab
       </label>
@@ -208,7 +208,7 @@ export function AddToCollection({ cardId, printingId, cardName, isSignedIn }: Pr
           style={{
             padding: '9px 14px',
             borderRadius: 10,
-            background: 'var(--gold-600)',
+            background: 'var(--accent-2)',
             color: '#111',
             border: '1px solid var(--gold-600)',
             fontFamily: 'inherit',
@@ -243,7 +243,7 @@ export function AddToCollection({ cardId, printingId, cardName, isSignedIn }: Pr
       </div>
 
       {message && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--gold-600)' }}>{message}</p>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--accent-2)' }}>{message}</p>
       )}
     </form>
   );

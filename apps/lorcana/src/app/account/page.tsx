@@ -27,7 +27,7 @@ export default async function AccountPage() {
   return (
     <main style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 24px 80px' }}>
       <header style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--gold-600)' }}>Account</div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent-2)' }}>Account</div>
         <h1 style={{ margin: '4px 0 4px', fontFamily: 'Outfit, system-ui, sans-serif', fontSize: 28, letterSpacing: '-0.01em' }}>
           {user.email ?? 'Signed in'}
         </h1>
@@ -44,7 +44,7 @@ export default async function AccountPage() {
         }}
       >
         <Link href="/collection" style={tileStyle}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--gold-600)' }}>Collect</div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent-2)' }}>Collect</div>
           <h2 style={tileTitleStyle}>My Lorcana Collection</h2>
           <p style={tileMetaStyle}>
             Track every card you own — raw and graded — with live market value from the same data
@@ -52,7 +52,7 @@ export default async function AccountPage() {
           </p>
         </Link>
         <Link href="/browse" style={tileStyle}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--gold-600)' }}>Browse</div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent-2)' }}>Browse</div>
           <h2 style={tileTitleStyle}>Sets</h2>
           <p style={tileMetaStyle}>
             Every OP, EB and Starter Deck, sorted by release. Set value and top movers on each set page.

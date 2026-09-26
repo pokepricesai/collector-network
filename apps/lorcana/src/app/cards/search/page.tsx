@@ -42,9 +42,9 @@ export default async function SearchPage({ searchParams }: Props) {
   return (
     <div style={{ padding: '32px 24px' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <header className="op-page-hero" style={{ marginBottom: 24 }}>
+        <header className="lc-page-hero" style={{ marginBottom: 24 }}>
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+            <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
               Cards
             </div>
             <h1 style={{ margin: '4px 0 6px', fontSize: 30 }}>
@@ -112,7 +112,7 @@ export default async function SearchPage({ searchParams }: Props) {
                 <Link
                   key={card.id}
                   href={`/card/${encodeURIComponent(slugifyCardName(card.name))}`}
-                  className="card-hover"
+                  className="lc-hover"
                   style={{
                     display: 'grid',
                     gap: 8,

@@ -25,7 +25,7 @@ export default function PriceHistorySpark({ history }: { history: HistoryBundle 
           gap: 8,
         }}
       >
-        <span className="label-mono" style={{ color: 'var(--gold-600)' }}>
+        <span className="label-mono" style={{ color: 'var(--accent-2)' }}>
           Price history
         </span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>

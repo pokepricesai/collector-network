@@ -1,198 +1,111 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { getMovers, type MoverEntry, type MoverWindow } from '@/server/market';
-import { buildPrintingSlug } from '@/lib/lorcana/slug';
-import { formatPrice } from '@/lib/lorcana/format-price';
+import { getPricedTiles } from '@/server/discovery';
+import CardBoard from '@/components/home/CardBoard';
 import { SITE_URL } from '@/lib/site-url';
 
 export const revalidate = 900;
-
-const VALID_WINDOWS: MoverWindow[] = [7, 30, 90];
-
-function parseWindow(v: string | undefined): MoverWindow {
-  if (!v) return 30;
-  const n = Number(v);
-  return (VALID_WINDOWS as number[]).includes(n) ? (n as MoverWindow) : 30;
-}
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Lorcana movers — 7-, 30- and 90-day price change board',
+  title: 'Lorcana market — most valuable cards, Enchanted chase, Iconic overprints',
   description:
-    'Live Disney Lorcana market movers filtered to signal. Risers and fallers by printing across 7, 30 and 90 days.',
+    'Live Disney Lorcana market at a glance. Most valuable cards, Enchanted overprints and Iconic-tier chase, priced individually by cheapest current retail.',
   alternates: { canonical: `${SITE_URL}/market` },
 };
 
-export default async function MarketPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ window?: string }>;
-}) {
-  const { window: rawWindow } = await searchParams;
-  const window = parseWindow(rawWindow);
-  const { risers, fallers } = await getMovers(window, 30);
+// /market: value-first board, no movers. The daily-retail window is
+// only 6 days (see docs/lorcana/data-audit.md §D) so a "biggest
+// mover" panel would be dishonest. We surface honest value-ordered
+// modules instead and disclose the missing history explicitly.
+
+export default async function MarketPage() {
+  const [mostValuable, enchanted, iconic, legendary] = await Promise.all([
+    getPricedTiles({ limit: 18, cardCandidates: 500 }),
+    getPricedTiles({ limit: 12, rarity: 'Enchanted', cardCandidates: 240 }),
+    getPricedTiles({ limit: 8, rarity: 'Iconic', cardCandidates: 30 }),
+    getPricedTiles({ limit: 8, rarity: 'Legendary', cardCandidates: 200 }),
+  ]);
 
   return (
-    <div style={{ padding: '32px 24px' }}>
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <header className="op-page-hero" style={{ marginBottom: 24 }}>
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-              Movers · {window}d window
-            </div>
-            <h1
-              style={{
-                margin: '4px 0 6px',
-                fontSize: 'clamp(24px, 4.5vw, 30px)',
-              }}
-            >
-              Market movers
-            </h1>
-            <p
-              style={{
-                margin: 0,
-                color: 'var(--text-muted)',
-                fontSize: 15,
-                lineHeight: 1.55,
-                maxWidth: 640,
-              }}
-            >
-              Filtered to signal — a mover requires at least three observed days
-              and a headline price of $2 or higher. Prices are always shown in
-              their native currency; nothing is auto-converted.
-            </p>
+    <div className="lc-container lc-section">
+      <header className="lc-page-hero" style={{ marginBottom: 28 }}>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div className="label-mono">Market</div>
+          <h1 style={{ margin: '4px 0 6px' }}>
+            Lorcana at a glance
+          </h1>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.55, maxWidth: 640 }}>
+            Value-ranked, priced individually. Cardmarket EUR and TCGplayer
+            USD refreshed daily. Every card links through to its full
+            treatment map.
+          </p>
+        </div>
+      </header>
 
-            <div
-              style={{ marginTop: 16, display: 'flex', gap: 6, flexWrap: 'wrap' }}
-            >
-              {VALID_WINDOWS.map((w) => (
-                <Link
-                  key={w}
-                  href={`/market?window=${w}`}
-                  className={`sort-btn${w === window ? ' active' : ''}`}
-                  style={{ textDecoration: 'none' }}
-                >
-                  {w} days
-                </Link>
-              ))}
-            </div>
+      <section id="most-valuable" style={{ marginBottom: 36 }}>
+        <header style={{ marginBottom: 14, display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <div>
+            <div className="label-mono">Section</div>
+            <h2 style={{ margin: '4px 0 0' }}>Most valuable cards</h2>
           </div>
         </header>
+        <CardBoard tiles={mostValuable} columns={6} compact />
+      </section>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
-            gap: 20,
-          }}
-        >
-          <Column title="Risers" tone="up" movers={risers} />
-          <Column title="Fallers" tone="down" movers={fallers} />
+      <section id="enchanted" style={{ marginBottom: 36 }}>
+        <div className="lc-chase-panel">
+          <header style={{ marginBottom: 14, display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div>
+              <div className="label-mono">Chase</div>
+              <h2 style={{ margin: '4px 0 0' }}>Enchanted overprints</h2>
+            </div>
+            <Link href="/market/enchanted" className="btn btn-gold btn-sm">See all Enchanted →</Link>
+          </header>
+          <CardBoard tiles={enchanted} columns={6} variant="dark" compact />
         </div>
-      </div>
-    </div>
-  );
-}
+      </section>
 
-function Column({
-  title,
-  tone,
-  movers,
-}: {
-  title: string;
-  tone: 'up' | 'down';
-  movers: MoverEntry[];
-}) {
-  return (
-    <div
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 14,
-        padding: 18,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          marginBottom: 12,
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: tone === 'up' ? 'var(--green)' : 'var(--red)',
-          }}
-        >
-          {tone === 'up' ? '▲' : '▼'} {movers.length}
-        </span>
-      </div>
-      {movers.length === 0 ? (
-        <div
-          style={{
-            padding: '18px 4px',
-            fontSize: 13,
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-          }}
-        >
-          No movers in this window yet.
-        </div>
-      ) : (
-        <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
-          {movers.map((m) => {
-            const slug = buildPrintingSlug(m.printing.collector_number, m.card.name);
-            const setCode = m.set?.code ?? '';
-            const href = `/set/${encodeURIComponent(setCode.toLowerCase())}/card/${encodeURIComponent(slug)}`;
-            return (
-              <li key={m.printing.id}>
-                <Link
-                  href={href}
-                  className="card-hover"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    textDecoration: 'none',
-                    color: 'var(--text)',
-                    background: 'var(--bg-light)',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <span style={{ display: 'grid', gap: 2 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14 }}>
-                      {m.card.name}
-                    </span>
-                    <span className="label-mono">
-                      {setCode.toUpperCase() || 'SET'} · #{m.printing.collector_number ?? '—'}
-                    </span>
-                  </span>
-                  <span style={{ display: 'grid', gap: 2, textAlign: 'right' }}>
-                    <span style={{ fontWeight: 700 }}>
-                      {formatPrice(m.latestPrice, m.currency)}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: tone === 'up' ? 'var(--green)' : 'var(--red)',
-                      }}
-                    >
-                      {tone === 'up' ? '+' : ''}
-                      {(m.changePct * 100).toFixed(1)}%
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ol>
+      {iconic.length > 0 && (
+        <section id="iconic" style={{ marginBottom: 36 }}>
+          <header style={{ marginBottom: 14, display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div>
+              <div className="label-mono">Set 9+</div>
+              <h2 style={{ margin: '4px 0 0' }}>Iconic overprints</h2>
+            </div>
+            <Link href="/market/iconic" className="btn btn-ghost btn-sm">See all Iconic →</Link>
+          </header>
+          <CardBoard tiles={iconic} columns={4} compact />
+        </section>
       )}
+
+      {legendary.length > 0 && (
+        <section id="legendary" style={{ marginBottom: 36 }}>
+          <header style={{ marginBottom: 14 }}>
+            <div className="label-mono">Rarity tier</div>
+            <h2 style={{ margin: '4px 0 0' }}>Top Legendary cards</h2>
+          </header>
+          <CardBoard tiles={legendary} columns={4} compact />
+        </section>
+      )}
+
+      <section style={{ marginBottom: 24 }}>
+        <div className="lc-panel" style={{
+          borderStyle: 'dashed',
+          borderColor: 'var(--border-strong)',
+          background: 'transparent',
+        }}>
+          <div className="label-mono" style={{ marginBottom: 6 }}>Coming soon</div>
+          <h3 style={{ margin: '0 0 6px' }}>7- and 30-day price movers</h3>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
+            Daily retail history has been ingesting since 21 Sep 2026. The
+            movers board unlocks once the observed window crosses 30 days,
+            so a rise-vs-fall comparison is honest rather than a two-day
+            snapshot. Set-value change tracking follows on the same
+            timeline.
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

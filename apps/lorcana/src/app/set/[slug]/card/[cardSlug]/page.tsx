@@ -157,7 +157,7 @@ export default async function PrintingPage({
         />
 
         <div
-          className="op-card-halo op-card-hero-grid"
+          className="lc-halo lc-card-hero-grid"
           style={{
             gap: 28,
             alignItems: 'flex-start',
@@ -181,7 +181,7 @@ export default async function PrintingPage({
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <div className="op-card-empty" aria-hidden>
+              <div className="lc-card-empty" aria-hidden>
                 <span>Art loading</span>
               </div>
             )}
@@ -189,7 +189,7 @@ export default async function PrintingPage({
 
           <div style={{ display: 'grid', gap: 14 }}>
             <div>
-              <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+              <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
                 {canonicalSetLabel} · #{resolved.matched.collector_number ?? '—'} · {anchorCardView.rarity.label}
               </div>
               <h1
@@ -263,7 +263,7 @@ export default async function PrintingPage({
 
         <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
           <header>
-            <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+            <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
               In this set
             </div>
             <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
@@ -338,7 +338,7 @@ export default async function PrintingPage({
                   <li key={printingView.printing.id}>
                     <Link
                       href={href}
-                      className="card-hover"
+                      className="lc-hover"
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',

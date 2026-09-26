@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { isLcInk, LC_INK_LABEL } from '@/lib/lorcana/ink';
+import { isLcInk, LC_INK_LABEL, LC_INK_DESCRIPTOR, type LcInk } from '@/lib/lorcana/ink';
+import { getPricedTiles } from '@/server/discovery';
+import CardBoard from '@/components/home/CardBoard';
 import { canonicalFor } from '@/lib/seo';
 
-// V1 ink landing pages. Static content today; the "cards in this ink"
-// grid arrives once the gamedata.ink index is fully populated at ingest
-// time and we can filter cheaply.
+export const revalidate = 900;
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({
   params,
@@ -14,14 +15,23 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  if (!isLcInk(slug)) return { title: 'Colour not found' };
+  if (!isLcInk(slug)) return { title: 'Ink not found' };
   const label = LC_INK_LABEL[slug];
   return {
-    title: `${label} Lorcana cards — Leaders, chase treatments and top movers`,
-    description: `Every ${label} Disney Lorcana card, grouped by Leaders and chase treatments.`,
+    title: `${label} Lorcana cards — top-value, Enchanted and every printing`,
+    description: `Every ${label} Disney Lorcana card ordered by cheapest current USD retail. Includes ${label} Enchanted, Iconic, Epic, Legendary and base rarities.`,
     alternates: { canonical: canonicalFor(`/inks/${slug}`) },
   };
 }
+
+const INK_STORIES: Record<LcInk, string> = {
+  amber: 'Amber is the ink of healing, community and support — the axis Herald of Harmony, Belle and cleric-leaning strategies live on. Amber decks stall out board pressure with Song plays and Bodyguard characters.',
+  amethyst: 'Amethyst is Lorcana\'s mystical ink — sorcerers, ethereal spellwork and lore engines. Elsa, Merlin and the Enchanted-heavy Snow Queen / Spirit of Winter treatments are Amethyst signatures.',
+  emerald: 'Emerald is the trickster ink — deception, card manipulation and tempo swings. Peter Pan, Genie and Robin Hood characters drive Emerald\'s value both at the table and on the collector market.',
+  ruby: 'Ruby is passion, aggression and glory. Mickey Mouse — Brave Little Tailor anchors Ruby\'s marquee tier, backed by Simba, Hercules and other combat-forward heroes.',
+  sapphire: 'Sapphire is wisdom, invention and artifice — the item-driven, engine-heavy ink. Merlin, Minnie Mouse and Ariel\'s Grotto Location pieces define Sapphire\'s tempo.',
+  steel: 'Steel is resilience, courage and raw force — the ink of Beast, Simba and the big-body defenders. Steel Legendaries anchor most every Set 1–8 chase list.',
+};
 
 export default async function InkDetail({
   params,
@@ -32,81 +42,82 @@ export default async function InkDetail({
   if (!isLcInk(slug)) notFound();
   const label = LC_INK_LABEL[slug];
 
+  const [mostValuable, enchanted, legendary] = await Promise.all([
+    getPricedTiles({ limit: 12, ink: slug, cardCandidates: 500 }),
+    getPricedTiles({ limit: 6, ink: slug, rarity: 'Enchanted', cardCandidates: 260 }),
+    getPricedTiles({ limit: 6, ink: slug, rarity: 'Legendary', cardCandidates: 200 }),
+  ]);
+
   return (
-    <div style={{ padding: '32px 24px' }}>
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <nav
-          aria-label="Breadcrumb"
-          style={{
-            marginBottom: 16,
-            fontSize: 13,
-            color: 'var(--text-muted)',
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-          }}
-        >
-          <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-            Home
-          </Link>
-          <span aria-hidden>›</span>
-          <Link
-            href="/inks"
-            style={{ color: 'var(--text-muted)', textDecoration: 'none' }}
-          >
-            Inks
-          </Link>
-          <span aria-hidden>›</span>
-          <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>
-            {label}
-          </span>
-        </nav>
+    <div className="lc-container lc-section">
+      <nav
+        aria-label="Breadcrumb"
+        style={{ marginBottom: 14, fontSize: 13, color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center' }}
+      >
+        <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Home</Link>
+        <span aria-hidden>›</span>
+        <Link href="/inks" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Inks</Link>
+        <span aria-hidden>›</span>
+        <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{label}</span>
+      </nav>
 
-        <header className="lc-page-hero" style={{ marginBottom: 24 }}>
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <span className={`chip chip-ink chip-ink--${slug}`}>{label}</span>
-            <h1 style={{ margin: '10px 0 6px', fontSize: 30 }}>
-              {label} ink
-            </h1>
-            <p
-              style={{
-                margin: 0,
-                color: 'var(--text-muted)',
-                fontSize: 15,
-                lineHeight: 1.55,
-                maxWidth: 640,
-              }}
-            >
-              Every {label.toLowerCase()} card, top-value Enchanted and
-              Iconic overprints and the latest {label.toLowerCase()} set
-              releases — all on one page. The full grid arrives with the
-              next data update.
-            </p>
+      <header className="lc-page-hero" style={{ marginBottom: 24, position: 'relative' }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: `radial-gradient(60% 80% at 100% 50%, var(--ink-${slug}) 0%, transparent 50%)`,
+          opacity: 0.14,
+          zIndex: 0,
+          pointerEvents: 'none',
+        }} aria-hidden />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+            <span aria-hidden style={{
+              width: 20, height: 20, borderRadius: '50%',
+              background: `var(--ink-${slug})`,
+              boxShadow: 'inset 0 -1px 0 rgba(0,0,0,0.10)',
+            }} />
+            <div className="label-mono">Ink · {LC_INK_DESCRIPTOR[slug]}</div>
           </div>
-        </header>
-
-        <div
-          style={{
-            padding: '32px 24px',
-            background: 'var(--surface)',
-            border: '1px dashed var(--border-strong)',
-            borderRadius: 16,
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-            lineHeight: 1.55,
-          }}
-        >
-          Ink-scoped card grid coming soon. Meanwhile,{' '}
-          <Link href="/cards/search" style={{ fontWeight: 700 }}>
-            search for a card
-          </Link>{' '}
-          or{' '}
-          <Link href="/browse" style={{ fontWeight: 700 }}>
-            browse by set
-          </Link>
-          .
+          <h1 style={{ margin: '4px 0 8px' }}>{label} cards</h1>
+          <p style={{ margin: 0, color: 'var(--text-muted)', maxWidth: 640, fontSize: 15, lineHeight: 1.6 }}>
+            {INK_STORIES[slug]}
+          </p>
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link href={`/card-finder?ink=${slug}`} className="btn btn-primary btn-sm">Filter by {label}</Link>
+            <Link href={`/card-finder?ink=${slug}&rarity=Enchanted`} className="btn btn-gold btn-sm">{label} Enchanted</Link>
+          </div>
         </div>
-      </div>
+      </header>
+
+      <section style={{ marginBottom: 32 }}>
+        <header style={{ marginBottom: 12 }}>
+          <div className="label-mono">Most valuable</div>
+          <h2 style={{ margin: '4px 0 0' }}>Top {label} cards</h2>
+        </header>
+        <CardBoard tiles={mostValuable} columns={6} compact emptyLabel={`No priced ${label} cards yet.`} />
+      </section>
+
+      {enchanted.length > 0 && (
+        <section style={{ marginBottom: 32 }}>
+          <div className="lc-chase-panel">
+            <header style={{ marginBottom: 12 }}>
+              <div className="label-mono">Chase</div>
+              <h2 style={{ margin: '4px 0 0' }}>{label} Enchanted</h2>
+            </header>
+            <CardBoard tiles={enchanted} columns={6} variant="dark" compact />
+          </div>
+        </section>
+      )}
+
+      {legendary.length > 0 && (
+        <section style={{ marginBottom: 32 }}>
+          <header style={{ marginBottom: 12 }}>
+            <div className="label-mono">Tier</div>
+            <h2 style={{ margin: '4px 0 0' }}>{label} Legendary</h2>
+          </header>
+          <CardBoard tiles={legendary} columns={6} compact />
+        </section>
+      )}
     </div>
   );
 }

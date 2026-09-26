@@ -99,7 +99,7 @@ function PriceRow({
       <span
         className="label-mono"
         style={{
-          color: accent === 'gold' ? 'var(--gold-600)' : 'var(--text-muted)',
+          color: accent === 'gold' ? 'var(--accent-2)' : 'var(--text-muted)',
         }}
       >
         {label}

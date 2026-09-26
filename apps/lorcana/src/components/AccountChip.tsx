@@ -62,7 +62,7 @@ export async function AccountChip() {
           width: 26,
           height: 26,
           borderRadius: '50%',
-          background: 'var(--gold-600)',
+          background: 'var(--accent-2)',
           color: '#111',
           fontFamily: 'Outfit, system-ui, sans-serif',
           fontSize: 13,

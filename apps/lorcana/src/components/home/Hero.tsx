@@ -2,86 +2,68 @@ import HomeSearch from '@/components/HomeSearch';
 import Link from 'next/link';
 import { LC_INKS, LC_INK_LABEL } from '@/lib/lorcana/ink';
 
-// Homepage hero. Warm parchment + a shimmer of the six-ink wheel behind.
-// Two primary CTAs: "Browse sets" and "See movers". Below the search
-// input a row of ink chips lets a first-time visitor filter by ink in
-// one click.
+// Homepage hero. Deliberately concise: three-line headline, one search
+// input, six ink chips and three CTAs. Everything else lives in
+// modules below the fold.
 
-export default function Hero({
-  cardCount,
-  setCount,
-}: {
+interface HeroProps {
   cardCount: number;
   setCount: number;
-}) {
+  enchantedCount: number;
+}
+
+export default function Hero({ cardCount, setCount, enchantedCount }: HeroProps) {
   return (
-    <section
-      className="hero-shell lc-hero-shell"
-      style={{ position: 'relative' }}
-    >
+    <section className="lc-hero">
       <div className="lc-ink-wheel" aria-hidden />
       <div className="spark-field" aria-hidden />
 
-      <div
-        style={{
-          maxWidth: 980,
-          margin: '0 auto',
-          position: 'relative',
-          zIndex: 1,
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr)',
-          gap: 26,
-        }}
-      >
-        <div style={{ textAlign: 'center', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 14 }}>
-          <span
-            className="badge-prestige"
-            style={{ margin: '0 auto', animation: 'fadeInUp 0.4s ease-out' }}
-          >
-            Live Lorcana prices · Inks · Enchanted chase
-          </span>
-          <h1
-            className="lc-hero-h1"
-            style={{
-              fontSize: 'clamp(24px, 5.6vw, 46px)',
-              margin: 0,
-              lineHeight: 1.15,
-              letterSpacing: '-0.02em',
-              color: 'var(--text-strong)',
-            }}
-          >
-            Every printing.
-            <br />
-            <span className="gold-text">Every Enchanted.</span>
-            <br />
-            One catalogue.
+      <div className="lc-container" style={{ position: 'relative', zIndex: 1, maxWidth: 900 }}>
+        <div style={{ textAlign: 'center', display: 'grid', gap: 18, gridTemplateColumns: 'minmax(0, 1fr)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <span className="badge-prestige animate-in">
+              Live Lorcana prices · Enchanted · Iconic
+            </span>
+          </div>
+
+          <h1 style={{ letterSpacing: '-0.02em' }}>
+            Every printing.<br />
+            <span className="gold-text">Every Enchanted.</span><br />
+            One collector-grade catalogue.
           </h1>
-          <p className="lc-hero-copy">
-            {cardCount > 0 && setCount > 0 ? (
+
+          <p style={{
+            margin: '0 auto',
+            maxWidth: 640,
+            fontSize: 'var(--step-1)',
+            color: 'var(--text-muted)',
+            lineHeight: 1.55,
+            padding: '0 4px',
+          }}>
+            {cardCount > 0 ? (
               <>
-                Track {formatNumber(cardCount)} cards across{' '}
-                {formatNumber(setCount)} sets.
+                Track {fmt(cardCount)} cards across {fmt(setCount)} sets — including{' '}
+                <span style={{ color: 'var(--amethyst-500)', fontWeight: 700 }}>
+                  {fmt(enchantedCount)} Enchanted
+                </span>{' '}
+                overprints. Foil and nonfoil priced independently.
               </>
             ) : (
-              <>Track every Disney Lorcana card.</>
-            )}{' '}
-            Foil and nonfoil, Enchanted, Iconic, Epic and Promo drops
-            are each priced individually — an Enchanted overprint never
-            gets buried under its base rarity.
+              <>Live Disney Lorcana card prices — Enchanted, Iconic, Epic, Legendary and Promo cards priced individually across foil and nonfoil.</>
+            )}
           </p>
-        </div>
 
-        <div style={{ maxWidth: 620, width: '100%', margin: '0 auto' }}>
-          <HomeSearch />
-          <div
-            style={{
-              display: 'flex',
-              gap: 6,
-              flexWrap: 'wrap',
-              marginTop: 12,
-              justifyContent: 'center',
-            }}
-          >
+          <div style={{ maxWidth: 560, width: '100%', margin: '0 auto' }}>
+            <HomeSearch />
+          </div>
+
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            justifyContent: 'center',
+            padding: '0 4px',
+          }}>
             {LC_INKS.map((ink) => (
               <Link
                 key={ink}
@@ -93,33 +75,30 @@ export default function Hero({
               </Link>
             ))}
           </div>
-        </div>
 
-        <div
-          style={{
+          <div style={{
             display: 'flex',
             gap: 10,
             justifyContent: 'center',
             flexWrap: 'wrap',
-          }}
-        >
-          <Link href="/browse" className="btn btn-primary">
-            Browse sets
-          </Link>
-          <Link href="/market" className="btn btn-gold">
-            See top movers
-          </Link>
-          <Link href="/card-finder" className="btn btn-ghost">
-            Card Finder
-          </Link>
+            padding: '0 4px',
+          }}>
+            <Link href="/browse" className="btn btn-primary">
+              Browse sets
+            </Link>
+            <Link href="/market/enchanted" className="btn btn-gold">
+              Enchanted chase
+            </Link>
+            <Link href="/card-finder" className="btn btn-ghost">
+              Card Finder
+            </Link>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function formatNumber(n: number): string {
-  if (n <= 0) return '—';
-  if (n >= 1000) return new Intl.NumberFormat('en-US').format(n);
-  return String(n);
+function fmt(n: number): string {
+  return new Intl.NumberFormat('en-US').format(n);
 }

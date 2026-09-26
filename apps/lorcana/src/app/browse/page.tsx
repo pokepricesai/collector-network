@@ -19,9 +19,9 @@ export default async function BrowsePage() {
   return (
     <div style={{ padding: '32px 24px' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <header className="op-page-hero" style={{ marginBottom: 24 }}>
+        <header className="lc-page-hero" style={{ marginBottom: 24 }}>
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+            <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
               Sets
             </div>
             <h1 style={{ margin: '4px 0 6px', fontSize: 'clamp(24px, 4.5vw, 30px)' }}>
@@ -63,7 +63,7 @@ export default async function BrowsePage() {
               <Link
                 key={s.set.id}
                 href={`/set/${encodeURIComponent(s.set.code.toLowerCase())}`}
-                className="card-hover card-hover-gold"
+                className="lc-hover lc-hover-gold"
                 style={{
                   display: 'grid',
                   gap: 10,
@@ -101,7 +101,7 @@ export default async function BrowsePage() {
                   {s.variantCount > s.uniqueCardCount && (
                     <span
                       style={{
-                        color: 'var(--gold-600)',
+                        color: 'var(--accent-2)',
                         marginLeft: 8,
                         fontWeight: 600,
                       }}

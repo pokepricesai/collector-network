@@ -41,7 +41,7 @@ export function SetMarketOverview({ market, setCode, setName }: Props) {
         boxShadow: '0 3px 12px rgba(20,33,61,0.04)',
       }}
     >
-      <div className="label-mono" style={{ color: 'var(--gold-600)', marginBottom: 8 }}>
+      <div className="label-mono" style={{ color: 'var(--accent-2)', marginBottom: 8 }}>
         Set market overview
       </div>
 
@@ -153,7 +153,7 @@ function MiniStat({ label, value, sub }: { label: string; value: string; sub?: s
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-light)' }}>
-      <div className="label-mono" style={{ color: 'var(--gold-600)', marginBottom: 8 }}>
+      <div className="label-mono" style={{ color: 'var(--accent-2)', marginBottom: 8 }}>
         {title}
       </div>
       <div style={{ display: 'grid', gap: 8 }}>{children}</div>

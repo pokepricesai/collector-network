@@ -11,7 +11,7 @@ export default function TermsPage() {
   return (
     <article style={{ padding: '48px 24px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto', display: 'grid', gap: 16 }}>
-        <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+        <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
           Terms
         </div>
         <h1 style={{ margin: 0, fontSize: 30 }}>Terms of use</h1>

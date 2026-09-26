@@ -1,83 +1,97 @@
 import 'server-only';
 import { listRecentSetsWithCounts, type LcSetSummary } from './browse';
-import { getMovers, type MoverEntry } from './market';
+import { getPricedTiles, type DiscoveryTile } from './discovery';
 import { getLorcanaClient, getLorcanaGameId } from './client';
 
 // Homepage payload assembly.
 //
-// Every section is fetched in parallel and each degrades to an empty
-// state on failure — the homepage must never crash because one
-// Supabase call returned an error. This mirrors the yugioh homepage
-// pattern.
+// Movers deliberately absent: docs/lorcana/data-audit.md §D shows
+// only 6 days of daily retail history. Any window-over-window "% up"
+// figure would be dishonest, so we defer movers until the window
+// reaches 30 days and instead surface real value-ordered boards:
+//   * most valuable cards network-wide
+//   * Enchanted spotlight
+//   * Iconic spotlight (Sets 9+)
+//
+// Every fetch is Promise.allSettled and degrades to an empty result
+// on failure; the page must never crash because one query 500'd.
 
 export interface HomepageStats {
   cardCount: number;
   setCount: number;
-  priceObservations: number;
+  enchantedCount: number;
 }
 
 export interface HomepagePayload {
   stats: HomepageStats;
   latestSets: LcSetSummary[];
-  risers: MoverEntry[];
-  fallers: MoverEntry[];
+  mostValuable: DiscoveryTile[];
+  enchantedSpotlight: DiscoveryTile[];
+  iconicSpotlight: DiscoveryTile[];
   errors: string[];
 }
 
 export async function getHomepageData(): Promise<HomepagePayload> {
   const errors: string[] = [];
 
-  const [statsResult, latestResult, moversResult] = await Promise.allSettled([
+  const [statsR, setsR, valueR, enchR, iconR] = await Promise.allSettled([
     getHomepageStats(),
-    listRecentSetsWithCounts(8),
-    getMovers(30, 6),
+    listRecentSetsWithCounts(6),
+    getPricedTiles({ limit: 12, cardCandidates: 500 }),
+    getPricedTiles({ limit: 6, rarity: 'Enchanted', cardCandidates: 260 }),
+    getPricedTiles({ limit: 4, rarity: 'Iconic', cardCandidates: 30 }),
   ]);
 
-  const stats: HomepageStats =
-    statsResult.status === 'fulfilled'
-      ? statsResult.value
-      : (errors.push('stats: ' + (statsResult.reason?.message ?? 'unknown')), {
-          cardCount: 0,
-          setCount: 0,
-          priceObservations: 0,
-        });
+  const stats = statsR.status === 'fulfilled'
+    ? statsR.value
+    : (errors.push('stats: ' + describe(statsR.reason)),
+       { cardCount: 0, setCount: 0, enchantedCount: 0 });
 
-  const latestSets =
-    latestResult.status === 'fulfilled'
-      ? latestResult.value
-      : (errors.push('latestSets: ' + (latestResult.reason?.message ?? 'unknown')), []);
+  const latestSets = setsR.status === 'fulfilled'
+    ? setsR.value
+    : (errors.push('latestSets: ' + describe(setsR.reason)), []);
 
-  const movers =
-    moversResult.status === 'fulfilled'
-      ? moversResult.value
-      : (errors.push('movers: ' + (moversResult.reason?.message ?? 'unknown')), {
-          risers: [],
-          fallers: [],
-        });
+  const mostValuable = valueR.status === 'fulfilled'
+    ? valueR.value
+    : (errors.push('mostValuable: ' + describe(valueR.reason)), []);
+
+  const enchantedSpotlight = enchR.status === 'fulfilled'
+    ? enchR.value
+    : (errors.push('enchantedSpotlight: ' + describe(enchR.reason)), []);
+
+  const iconicSpotlight = iconR.status === 'fulfilled'
+    ? iconR.value
+    : (errors.push('iconicSpotlight: ' + describe(iconR.reason)), []);
 
   return {
     stats,
     latestSets,
-    risers: movers.risers,
-    fallers: movers.fallers,
+    mostValuable,
+    enchantedSpotlight,
+    iconicSpotlight,
     errors,
   };
+}
+
+function describe(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 async function getHomepageStats(): Promise<HomepageStats> {
   const supabase = getLorcanaClient();
   const gameId = await getLorcanaGameId(supabase);
 
-  const [cardsCount, setsCount, pricesCount] = await Promise.all([
+  const [cardsCount, setsCount, enchCount] = await Promise.all([
     countRows(supabase, 'tcg_cards', gameId),
     countRows(supabase, 'tcg_sets', gameId),
-    countRows(supabase, 'tcg_market_prices_current', gameId),
+    countRarity(supabase, gameId, 'Enchanted'),
   ]);
 
   return {
     cardCount: cardsCount,
     setCount: setsCount,
-    priceObservations: pricesCount,
+    enchantedCount: enchCount,
   };
 }
 
@@ -86,16 +100,24 @@ async function countRows(
   table: string,
   gameId: string,
 ): Promise<number> {
-  // `game_id` exists on every counted table; `id` does not on the
-  // current-price tables (composite PK). Select the column we actually
-  // filter by so the count works uniformly across tcg_cards / tcg_sets
-  // / tcg_market_prices_current.
   const { count, error } = await supabase
     .from(table)
     .select('game_id', { count: 'exact', head: true })
     .eq('game_id', gameId);
-  if (error) {
-    throw new Error(`[apps/lorcana] countRows(${table}): ${error.message}`);
-  }
+  if (error) throw new Error(`[lorcana] countRows(${table}): ${error.message}`);
+  return count ?? 0;
+}
+
+async function countRarity(
+  supabase: ReturnType<typeof getLorcanaClient>,
+  gameId: string,
+  rarity: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('tcg_cards')
+    .select('game_id', { count: 'exact', head: true })
+    .eq('game_id', gameId)
+    .eq('rarity', rarity);
+  if (error) throw new Error(`[lorcana] countRarity(${rarity}): ${error.message}`);
   return count ?? 0;
 }

@@ -136,7 +136,7 @@ export function SetGridClient({ entries }: Props) {
           <Link
             key={e.href}
             href={e.href}
-            className="card-hover card-hover-gold"
+            className="lc-hover lc-hover-gold"
             style={{
               display: 'grid',
               gap: 8,
@@ -167,7 +167,7 @@ export function SetGridClient({ entries }: Props) {
                 />
               )}
             </div>
-            <div className="op-colour-rail" aria-hidden style={{ marginTop: 2 }}>
+            <div className="lc-ink-rail" aria-hidden style={{ marginTop: 2 }}>
               {INK_OPTIONS.map((hue) => (
                 <span
                   key={hue}

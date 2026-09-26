@@ -181,7 +181,7 @@ export function GradedPricesPanel({ rows, setCode, collectorNumber, finish }: Pr
         }}
       >
         <div>
-          <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+          <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
             Graded market
           </div>
           <h2
