@@ -27,6 +27,11 @@ export interface Brand {
   primaryColor: string;   // hex, used in headline accent
   accentColor: string;    // hex, used on CTA button
   supportUrl: string;     // brand home; safe fallback for unknown redirect targets
+  // Origin under which each brand serves its first-party
+  // /auth/confirm route. Auth CTA URLs are built as
+  // `${confirmBaseUrl}/auth/confirm?...`. Never taken from the
+  // Supabase Send Email Hook payload; only from this registry.
+  confirmBaseUrl: string;
   productBlurb: string;   // used in body copy (e.g. collection, watchlist, decks)
 }
 
@@ -43,6 +48,12 @@ export const NEUTRAL_BRAND: Brand = {
   primaryColor: '#0b0d13',
   accentColor: '#c9a24a',
   supportUrl: 'https://ygoprices.io',
+  // Neutral fallback confirm base: YGO is the first Collector
+  // Network app in production, so unknown-brand auth links land
+  // on the YGO /auth/confirm route. That route verifies the
+  // hash against the shared Supabase project and establishes
+  // the session either way — brand chrome is cosmetic here.
+  confirmBaseUrl: 'https://ygoprices.io',
   productBlurb: 'your Collector Network account',
 };
 
@@ -56,6 +67,7 @@ export const BRANDS: readonly Brand[] = [
     primaryColor: '#0b0d13',
     accentColor: '#c9a24a',
     supportUrl: 'https://ygoprices.io',
+    confirmBaseUrl: 'https://ygoprices.io',
     productBlurb: 'your collection, watchlist and decks',
   },
   {
@@ -67,6 +79,7 @@ export const BRANDS: readonly Brand[] = [
     primaryColor: '#0b0d13',
     accentColor: '#c9a24a',
     supportUrl: 'https://mtgprices.io',
+    confirmBaseUrl: 'https://mtgprices.io',
     productBlurb: 'your MTGPrices account',
   },
   {
@@ -78,6 +91,7 @@ export const BRANDS: readonly Brand[] = [
     primaryColor: '#0b0d13',
     accentColor: '#c9a24a',
     supportUrl: 'https://pokeprices.io',
+    confirmBaseUrl: 'https://pokeprices.io',
     productBlurb: 'your PokePrices account',
   },
   // onepiece + lorcana intentionally omitted from the registry

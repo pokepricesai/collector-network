@@ -9,7 +9,11 @@
 //   4. Pick brand from email_data.redirect_to hostname.
 //   5. Validate redirect target against known Collector Network
 //      hostnames; fall back to brand.supportUrl if unknown.
-//   6. Build action URL(s) using Supabase's verify pattern.
+//   6. Build action URL(s) pointing at the brand's own
+//      first-party /auth/confirm SSR route. Never uses
+//      Supabase's admin /auth/v1/verify endpoint (that endpoint
+//      requires an apikey header and cannot be opened from a
+//      plain email click).
 //   7. Render HTML + text.
 //   8. Send via Resend (one or two emails depending on
 //      email_change + Secure Email Change). Uses an idempotency
@@ -23,7 +27,7 @@
 import { brandForRedirectUrl, isKnownRedirectTarget, NEUTRAL_BRAND, type Brand } from './brand-registry.ts';
 import { renderAuthEmail } from './render-email.ts';
 import { sendViaResend, type FetchLike, type SendInput } from './resend-transport.ts';
-import type { HookEmailData, HookPayload, RuntimeEnv } from './types.ts';
+import type { EmailActionType, HookEmailData, HookPayload, RuntimeEnv } from './types.ts';
 import { verifyStandardWebhook } from './verify-webhook.ts';
 
 export interface HandleInput {
@@ -50,27 +54,87 @@ export interface HandleOutput {
   errorTag?: string;
 }
 
-// Build the Supabase-verify action URL. We use the site_url from
-// the payload (which is Supabase's own project URL, e.g.
-// https://<ref>.supabase.co) plus the token_hash and action type.
-// The redirect_to is only included if it resolves to a known
-// Collector Network hostname; otherwise it falls back to the
-// brand's supportUrl to avoid open-redirect abuse.
+// Explicit mapping from Supabase's `email_action_type` values to
+// the first-party /auth/confirm route's inputs. Two shapes here:
+//
+//   otpType   -> the value we hand to supabase.auth.verifyOtp
+//                inside the SSR route. Must be a value the
+//                installed @supabase/auth-js recognises.
+//   defaultNext -> the safe relative path to land on after the
+//                  session is established, if the payload does
+//                  not supply a valid returnTo.
+//
+// signup → 'email' per current Supabase SSR guidance and per the
+// CN-C provider-switch spec. Recovery → 'recovery' and lands on
+// the password-update page (not /account) so the user can set a
+// new password immediately. Reauthentication is not part of the
+// EmailOtpType union but the SDK types accept arbitrary strings
+// and GoTrue's /verify endpoint recognises the value; we pass it
+// through unchanged. No guessing: every mapping row is anchored
+// to a documented SDK-supported input.
+interface ActionMapping {
+  otpType: string;
+  defaultNext: string;
+}
+const ACTION_MAPPING: Readonly<Record<EmailActionType, ActionMapping>> = {
+  signup: { otpType: 'email', defaultNext: '/account' },
+  recovery: { otpType: 'recovery', defaultNext: '/account/reset-password' },
+  magiclink: { otpType: 'magiclink', defaultNext: '/account' },
+  invite: { otpType: 'invite', defaultNext: '/account' },
+  email_change: { otpType: 'email_change', defaultNext: '/account' },
+  // Reauthentication is technically a numeric OTP flow (Supabase
+  // emails a 6-digit code), not a link-click flow. If a payload
+  // ever arrives with this action we still emit a link that will
+  // attempt reauthentication verification server-side; the SSR
+  // route will report the failure cleanly if GoTrue rejects it.
+  reauthentication: { otpType: 'reauthentication', defaultNext: '/account' },
+};
+
+// Accept only same-origin, absolute-path `next` values so the
+// confirm route never open-redirects. Paths starting with `//`,
+// `/\\` or containing a scheme are rejected. Matches the yugioh
+// app's safeReturnTo semantics.
+function safeNextPath(raw: string | null, fallback: string): string {
+  if (!raw || typeof raw !== 'string') return fallback;
+  if (raw.length > 512) return fallback;
+  if (!raw.startsWith('/')) return fallback;
+  if (raw.startsWith('//') || raw.startsWith('/\\')) return fallback;
+  return raw;
+}
+
+// Build the first-party /auth/confirm URL. Hostname comes from the
+// brand registry only — never from the payload. Any candidate
+// `next` is validated as a same-origin relative path.
 function buildActionUrl(
   emailData: HookEmailData,
   hash: string,
   brand: Brand,
 ): string {
-  const base = emailData.site_url.replace(/\/+$/, '');
-  const safeRedirect = isKnownRedirectTarget(emailData.redirect_to)
-    ? emailData.redirect_to
-    : brand.supportUrl;
+  const mapping = ACTION_MAPPING[emailData.email_action_type];
+  // Extract a candidate `next` from the payload's redirect_to
+  // ONLY when the redirect_to's hostname is in the brand
+  // allowlist. This lets AuthForm.tsx keep passing
+  // `emailRedirectTo=https://<brand>/auth/callback?returnTo=<safe>`
+  // through the hook without giving arbitrary payloads any
+  // influence over the post-verify destination.
+  let candidateNext: string | null = null;
+  if (isKnownRedirectTarget(emailData.redirect_to)) {
+    try {
+      const u = new URL(emailData.redirect_to);
+      const returnTo = u.searchParams.get('returnTo');
+      if (returnTo) {
+        candidateNext = returnTo;
+      }
+    } catch { /* fall through to defaultNext */ }
+  }
+  const next = safeNextPath(candidateNext, mapping.defaultNext);
   const params = new URLSearchParams({
-    token: hash,
-    type: emailData.email_action_type,
-    redirect_to: safeRedirect,
+    token_hash: hash,
+    type: mapping.otpType,
+    next,
   });
-  return `${base}/auth/v1/verify?${params.toString()}`;
+  const base = brand.confirmBaseUrl.replace(/\/+$/, '');
+  return `${base}/auth/confirm?${params.toString()}`;
 }
 
 interface QueuedSend {

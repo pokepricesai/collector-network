@@ -161,6 +161,92 @@ test('YGO hostname → YGO branding', async () => {
     { name: 'brand', value: 'ygo' },
     { name: 'action', value: 'signup' },
   ]);
+  // First-party CTA URL shape: brand-origin /auth/confirm, with
+  // token_hash + type=email (signup mapping) + safe next.
+  assert.ok(calls[0]!.parsed.html.includes('https://ygoprices.io/auth/confirm?'));
+  assert.ok(calls[0]!.parsed.html.includes('token_hash=HASH_MAIN'));
+  assert.ok(calls[0]!.parsed.html.includes('type=email'));
+  assert.ok(calls[0]!.parsed.html.includes('next=%2Faccount'));
+});
+
+test('signup CTA never emits the legacy /auth/v1/verify pattern', async () => {
+  const p = payload({ email_action_type: 'signup' as never });
+  const { rawBody, headers } = await signedPost(JSON.stringify(p));
+  const { fetch, calls } = makeMockFetch();
+  await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+  const bag = calls[0]!.parsed.html + '\n' + calls[0]!.parsed.text;
+  assert.equal(bag.includes('/auth/v1/verify'), false);
+  assert.equal(bag.includes('apikey'), false);
+});
+
+test('signup CTA type maps to "email" (per Supabase SSR guidance)', async () => {
+  const p = payload({ email_action_type: 'signup' as never });
+  const { rawBody, headers } = await signedPost(JSON.stringify(p));
+  const { fetch, calls } = makeMockFetch();
+  await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+  // Not type=signup — that would rely on GoTrue's legacy verify
+  // endpoint semantics. type=email is the current SDK-supported
+  // EmailOtpType for confirmation-link verification.
+  assert.ok(calls[0]!.parsed.html.includes('type=email'));
+  assert.equal(calls[0]!.parsed.html.includes('type=signup'), false);
+});
+
+test('AuthForm-supplied ?returnTo=<safe path> flows through to next', async () => {
+  const p = payload({ email_action_type: 'signup' as never });
+  p.email_data.redirect_to = 'https://ygoprices.io/auth/callback?returnTo=%2Fwatchlist';
+  const { rawBody, headers } = await signedPost(JSON.stringify(p));
+  const { fetch, calls } = makeMockFetch();
+  await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+  assert.ok(calls[0]!.parsed.html.includes('next=%2Fwatchlist'));
+});
+
+test('hostile ?returnTo=<absolute URL> is rejected → falls back to default next', async () => {
+  const p = payload({ email_action_type: 'signup' as never });
+  p.email_data.redirect_to = 'https://ygoprices.io/auth/callback?returnTo=https%3A%2F%2Fevil.example%2Fsteal';
+  const { rawBody, headers } = await signedPost(JSON.stringify(p));
+  const { fetch, calls } = makeMockFetch();
+  await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+  const bag = calls[0]!.parsed.html;
+  assert.equal(bag.includes('evil.example'), false);
+  assert.ok(bag.includes('next=%2Faccount')); // default
+});
+
+test('hostile ?returnTo=//attacker (protocol-relative) is rejected', async () => {
+  const p = payload({ email_action_type: 'signup' as never });
+  p.email_data.redirect_to = 'https://ygoprices.io/auth/callback?returnTo=%2F%2Fattacker.example';
+  const { rawBody, headers } = await signedPost(JSON.stringify(p));
+  const { fetch, calls } = makeMockFetch();
+  await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+  assert.equal(calls[0]!.parsed.html.includes('attacker.example'), false);
+  assert.ok(calls[0]!.parsed.html.includes('next=%2Faccount'));
+});
+
+test('recovery routes to /account/reset-password by default', async () => {
+  const p = payload({ email_action_type: 'recovery' as never });
+  const { rawBody, headers } = await signedPost(JSON.stringify(p));
+  const { fetch, calls } = makeMockFetch();
+  await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+  assert.ok(calls[0]!.parsed.html.includes('type=recovery'));
+  assert.ok(calls[0]!.parsed.html.includes('next=%2Faccount%2Freset-password'));
+  assert.equal(calls[0]!.parsed.html.includes('/auth/v1/verify'), false);
+});
+
+test('magiclink / invite / email_change / reauthentication types pass through unchanged', async () => {
+  for (const [action, expectedType] of [
+    ['magiclink', 'magiclink'],
+    ['invite', 'invite'],
+    ['email_change', 'email_change'],
+    ['reauthentication', 'reauthentication'],
+  ] as const) {
+    const p = payload({ email_action_type: action as never });
+    const { rawBody, headers } = await signedPost(JSON.stringify(p));
+    const { fetch, calls } = makeMockFetch();
+    await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+    assert.ok(
+      calls[0]!.parsed.html.includes(`type=${expectedType}`),
+      `${action} should map to type=${expectedType}`,
+    );
+  }
 });
 
 test('MTG hostname → MTG branding on a recovery flow', async () => {
@@ -302,8 +388,18 @@ test('email_change end-to-end sends TWO branded emails with distinct action URLs
   const toNew = bodies.find((b) => b.to[0] === 'new@ygoprices.io')!;
   assert.match(toCurrent.subject, /Confirm your YGOPrices email change/);
   assert.match(toNew.subject, /Confirm your new YGOPrices email/);
-  assert.ok(toCurrent.html.includes('token=H_CURRENT_TARGET'));
-  assert.ok(toNew.html.includes('token=H_NEW_TARGET'));
+  // Secure Email Change token pairing preserved through the URL:
+  //   current inbox link carries token_hash_new
+  //   new inbox link     carries token_hash
+  assert.ok(toCurrent.html.includes('token_hash=H_CURRENT_TARGET'));
+  assert.ok(toNew.html.includes('token_hash=H_NEW_TARGET'));
+  // Both links point at the brand's own /auth/confirm route,
+  // NOT Supabase's admin /auth/v1/verify.
+  assert.ok(toCurrent.html.includes('https://ygoprices.io/auth/confirm?'));
+  assert.ok(toNew.html.includes('https://ygoprices.io/auth/confirm?'));
+  // email_change maps to type=email_change.
+  assert.ok(toCurrent.html.includes('type=email_change'));
+  assert.ok(toNew.html.includes('type=email_change'));
   // Idempotency keys are (webhook-id, variant), so the two sends
   // for one Supabase event carry distinct provider-side keys.
   const idempCurrent = calls.find((c) => c.parsed.to[0] === 'old@ygoprices.io')!.headers['Idempotency-Key']!;
