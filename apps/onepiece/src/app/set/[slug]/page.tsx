@@ -44,9 +44,9 @@ export default async function SetPage({
 
   const { set, cards } = bundle;
 
-  // Group logical cards by name so parallels / alt-arts / manga rares
-  // sit together (matches how a collector actually thinks about the
-  // set, not how the shared schema stores rows).
+  // Group logical cards by name so parallels / secret / treasure / SP
+  // CARD variants sit together (matches how a collector actually thinks
+  // about the set, not how the shared schema stores rows).
   const byName = new Map<string, TcgCard[]>();
   for (const c of cards) {
     const bucket = byName.get(c.name);
@@ -211,7 +211,7 @@ export default async function SetPage({
                     <span
                       className="chip chip-gold"
                       style={{ width: 'fit-content' }}
-                      title="Multiple treatments — parallel, alt-art, manga rare, or secret rare"
+                      title="Multiple treatments — parallel, secret rare, special card, treasure rare, promo or reprint"
                     >
                       +{treatmentCount - 1} treatments
                     </span>

@@ -79,9 +79,9 @@ export default function Hero({
             ) : (
               <>Track every One Piece Card Game printing.</>
             )}{' '}
-            Standards, parallels, alternate arts, manga rares and secret rares
-            are each priced individually — a chase card never gets buried under
-            a common.
+            Standards, parallels, secret rares, special cards and treasure
+            rares are each priced individually — a chase card never gets
+            buried under a common.
           </p>
         </div>
 

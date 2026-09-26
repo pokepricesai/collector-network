@@ -30,9 +30,9 @@ export default async function SearchPage({ searchParams }: Props) {
   const query = (q ?? '').trim();
   const results = query.length >= 2 ? await searchCards(query, 60) : [];
 
-  // De-duplicate by name so alt-art / parallel treatments collapse in the
-  // list. Each result links to the logical card page where all
-  // treatments are shown.
+  // De-duplicate by name so all treatments of a card collapse into one
+  // result row. Each result links to the logical card page where every
+  // treatment is shown priced individually.
   const byName = new Map<string, (typeof results)[number]>();
   for (const r of results) {
     if (!byName.has(r.name)) byName.set(r.name, r);

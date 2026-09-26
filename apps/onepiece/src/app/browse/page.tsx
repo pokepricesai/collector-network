@@ -39,8 +39,8 @@ export default async function BrowsePage() {
               {sets.length > 0 ? (
                 <>
                   {sets.length} set{sets.length === 1 ? '' : 's'}, newest first.
-                  Treatment counts include parallels, alternate arts, manga
-                  rares and secret rares.
+                  Treatment counts include parallels, secret rares, special
+                  cards and treasure rares.
                 </>
               ) : (
                 <>Sets are on their way — every main product, starter deck and promo pack.</>

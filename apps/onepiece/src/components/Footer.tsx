@@ -13,9 +13,10 @@ const cardsLinks = [
 ];
 
 const marketLinks = [
-  { label: 'Market movers', href: '/market' },
-  { label: 'Chase cards',   href: '/market#chase' },
-  { label: 'Manga rares',   href: '/market#manga-rares' },
+  { label: 'Market movers',  href: '/market' },
+  { label: 'Chase cards',    href: '/market#chase' },
+  { label: 'Secret rares',   href: '/market#secret-rares' },
+  { label: 'Treasure rares', href: '/market#treasure-rares' },
 ];
 
 const insightLinks = [
@@ -100,9 +101,10 @@ export default function Footer() {
                 margin: 0,
               }}
             >
-              Live One Piece Card Game prices and treatments. Every parallel, alternate
-              art, manga rare and secret rare listed as its own priced entity, alongside
-              a complete set catalogue and market-movers board.
+              Live One Piece Card Game prices and treatments. Every parallel,
+              secret rare, special card and treasure rare listed as its own
+              priced entity, alongside a complete set catalogue and
+              market-movers board.
             </p>
           </div>
 

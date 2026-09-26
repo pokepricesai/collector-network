@@ -104,10 +104,9 @@ export default function CardFinderPage() {
 
           <FacetGroup
             title="Language"
-            description="Cards are printed in Japanese first — English printings usually follow a set behind."
+            description="English printings only for now."
           >
             <span className="chip">EN</span>
-            <span className="chip">JP</span>
           </FacetGroup>
 
           <div

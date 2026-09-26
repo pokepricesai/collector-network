@@ -506,6 +506,103 @@ Changed the count projection to `game_id`, which every table carries.
   `[Blocker]`) renders as a single paragraph today; a per-block breakout
   is a small polish item and hasn't been done.
 
+## 14b. Launch-readiness pass (2026-09-26 evening)
+
+### Data freshness — the P1 finding
+
+Every OP retail price row in `tcg_market_prices_current` shares a
+**batch-identical `updated_at`** per source:
+- `tcggraph.tcgplayer` (4,655 rows) — all `2026-09-21T22:30:37.899+00:00`
+- `tcggraph.cardmarket` (4,638 rows) — all `2026-09-22T08:17:58.737+00:00`
+
+`tcg_graded_prices_current` (8,025 rows) all sit at
+`2026-09-21T10:05:10.215+00:00`. The daily tables extend
+**2026-09-20 → 2026-09-22** for retail and `2026-09-21 → 2026-09-22`
+for graded.
+
+The cron is defined in `mtgprices-web/vercel.json`:
+
+```json
+{ "path": "/api/cron/tcggraph-refresh?game=one-piece", "schedule": "45 6 * * *" }
+```
+
+Endpoint: `mtgprices-web/src/app/api/cron/tcggraph-refresh/route.ts`.
+Guardrails: `CRON_SECRET` bearer auth, `TCGGRAPH_CRON_ENABLED` kill
+switch, `SCHEDULED_ALLOWLIST` game gate (`one-piece` is listed).
+Runtime: nodejs, maxDuration 900.
+
+**Why it's stalled** (evidence, in order):
+1. Latest `mtgprices-web` production deployment: `2026-09-22 09:33 UTC`
+   (commit `c4390d6d`) — the same day OP data last refreshed.
+2. No deployment has landed since.
+3. The Vercel project object shows `live: false`.
+4. `tcg_ingest_runs` is not readable via the anon key, so we can't
+   see whether cron *fires* and errors, or *never fires*.
+5. Runtime-logs API returns HTTP 403 on the current OAuth scope — we
+   can't confirm cron execution history from this session either.
+6. The account is on the **Hobby** Vercel plan (`billing.plan: hobby`
+   on `get_auth_user`). `mtgprices-web/vercel.json` currently declares
+   **12 cron entries**. Hobby plans permit 2 cron jobs and once-daily
+   granularity only — the plan quota is almost certainly why the OP
+   cron is not scheduled.
+
+**What needs to happen outside this repo:**
+1. In `mtgprices-web` on Vercel: upgrade the project owner to Vercel
+   **Pro** (Hobby caps at 2 crons, and Pro lifts the deployment `live`
+   gate). This is the single blocker on ingest cadence.
+2. Confirm `CRON_SECRET`, `TCGGRAPH_CRON_ENABLED` and the shared
+   Supabase creds are set on `mtgprices-web` production. (`CRON_SECRET`
+   is already present per the env inventory.)
+3. Redeploy `mtgprices-web`. Verify the `2026-09-27 06:45 UTC` cron
+   fires by watching either the deployment cron dashboard or the
+   `tcg_market_prices_current.updated_at` header on OP rows the
+   following morning.
+4. Optional: add a `tcg_ingest_runs` read policy for anon so future
+   `apps/onepiece/scripts/probe-freshness.mts` runs can surface run
+   history without special access.
+
+**We are not rewriting ingest inside `apps/onepiece`.** The shared
+network's TCGGraph refresh is the correct owner and it already handles
+five games. The site is ready to serve fresh data the moment the
+external cron resumes.
+
+### Public-copy scrub for treatment claims
+
+The user's launch constraints forbid the site from labelling any
+`_p*` printing as "Manga Rare" or "Alternate Art" without a reliable
+production signal. `treatment.inferTreatment` already refuses to do
+so, but marketing copy still leaked these words. Cleaned in this pass:
+
+- `layout.tsx` `SITE_DESCRIPTION` — now names *parallels, secret rares,
+  special cards, treasure rares and promos.*
+- `page.tsx`, `browse/page.tsx`, `card/[slug]/page.tsx`,
+  `set/[slug]/card/[cardSlug]/page.tsx`, `opengraph-image.tsx`,
+  `leaders/page.tsx` — same treatment vocabulary.
+- `Hero.tsx`, `Footer.tsx`, `Navbar.tsx`, `LatestSets.tsx`,
+  `set/[slug]/page.tsx` tooltip, `card/[slug]/page.tsx` chip title —
+  same.
+- Navbar and Footer "Manga rares" menu items → "Secret rares" and
+  "Treasure rares".
+- `card-finder` Language facet — dropped the JP chip and dropped
+  claims of future JP support. Now says "English printings only for
+  now." Keeps our promise not to advertise JP data we do not have.
+
+### Analytics + IndexNow
+
+- `@vercel/analytics/next` mounted in `layout.tsx` (matches YGO
+  pattern). No env var required; auto-enabled on Vercel production.
+- IndexNow helper (`src/lib/indexnow.ts`) is env-gated. `.env.example`
+  updated with `INDEXNOW_ENABLED` + `INDEXNOW_KEY` guidance. No public
+  route to serve `{key}.txt` yet — a one-file addition when we're
+  ready.
+
+### Vercel Pro / cron future — not this pass
+
+We deliberately do NOT add cron entries to `apps/onepiece/vercel.json`.
+Ingest is owned by `mtgprices-web`; a duplicate OP cron here would
+race the ingest and burn TCGGraph credits. The OnePiecePrices Vercel
+project only needs static-generation + ISR support once it exists.
+
 ## 15. Bottom line
 
 Real One Piece data is **already in the shared DB** as of five days

@@ -36,8 +36,9 @@ export default function LeadersPage() {
             >
               Leaders anchor deck construction and headline every printing.
               Browse by colour pairing to discover what a colour actually plays
-              like at the deck level. Chase treatments (alternate art, secret
-              rare) are always priced separately from the standard Leader.
+              like at the deck level. Chase treatments (parallel, secret rare,
+              treasure rare) are always priced separately from the standard
+              Leader.
             </p>
           </div>
         </header>

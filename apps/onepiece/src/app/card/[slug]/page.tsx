@@ -45,7 +45,7 @@ export async function generateMetadata({
   if (!resolvedName) return { title: 'Card not found' };
   return {
     title: `${resolvedName} — every printing, treatment and price`,
-    description: `${resolvedName} across every One Piece Card Game set. Standard, parallel, alternate art, manga rare and secret rare treatments priced individually.`,
+    description: `${resolvedName} across every One Piece Card Game set. Standard, parallel, secret rare, special card and treasure rare treatments priced individually.`,
     alternates: { canonical: canonicalFor(`/card/${slugifyCardName(resolvedName)}`) },
   };
 }
@@ -62,12 +62,15 @@ export default async function LogicalCardPage({
   if (!bundle) notFound();
 
   // Flatten all treatment printings from every rarity row, then group by
-  // treatment code so the page reads like:
-  //   Alternate Art (2) — panel per printing
-  //   Manga Rare (1)
-  //   Secret Rare (1)
-  //   Parallel (2)
+  // treatment code so the page reads chase-first:
+  //   Treasure Rare (1) — panel per printing
+  //   Secret Rare (2)
+  //   Special Card (1)
+  //   Parallel (3)
+  //   Leader (2)
+  //   Promo (1)
   //   Standard (12)
+  //   Reprint (1)
   const flat: Array<{ cardView: OpCardView; printingView: OpPrintingView }> = [];
   for (const c of bundle.cards) {
     for (const p of c.printings) flat.push({ cardView: c, printingView: p });
@@ -152,7 +155,7 @@ export default async function LogicalCardPage({
                     {OP_COLOUR_LABEL[c]}
                   </span>
                 ))}
-                <span className="chip chip-gold" title="Standard, parallel, alternate art, manga rare, secret rare and promo treatments">
+                <span className="chip chip-gold" title="Standard, parallel, reprint, secret rare, special card, treasure rare, promo and leader treatments">
                   {treatmentOrder.length} treatment{treatmentOrder.length === 1 ? '' : 's'} · {flat.length} printing{flat.length === 1 ? '' : 's'}
                 </span>
               </div>

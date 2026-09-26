@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -8,8 +9,12 @@ import { SITE_LAUNCHED, SITE_URL } from '@/lib/site-url';
 
 const SITE_NAME = 'OnePiecePrices';
 const SITE_TAGLINE = 'Live One Piece Card Game prices, sets and treatments';
+// Marketing copy only names treatments we can back with production
+// data — see docs/onepiece/data-audit.md §7. Manga Rare and Alternate
+// Art are not distinguishable from the generic "_p*" Parallel slot in
+// the current ingest, so we do not claim them here.
 const SITE_DESCRIPTION =
-  'OnePiecePrices. Live One Piece Card Game card prices, printings and treatments — parallels, alternate arts, manga rares and secret rares. Set catalogue, market movers and collector-grade price history. Free, no login required.';
+  'OnePiecePrices. Live One Piece Card Game card prices, printings and treatments — parallels, secret rares, special cards, treasure rares and promos priced individually. Set catalogue, market movers and collector-grade price history. Free, no login required.';
 
 const LAUNCHED_ROBOTS: NonNullable<Metadata['robots']> = {
   index: true,
@@ -94,6 +99,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Navbar />
         <main className="flex-1">{children}</main>
         <Footer />
+        {/* Vercel Web Analytics — anonymous page-view counts + the
+            track() API for custom events. Only records data on
+            production deployments; a no-op on dev + preview. Same
+            wiring as apps/yugioh. Add Google Analytics 4 later via
+            a small client component if the network standardises on
+            it. */}
+        <Analytics />
       </body>
     </html>
   );

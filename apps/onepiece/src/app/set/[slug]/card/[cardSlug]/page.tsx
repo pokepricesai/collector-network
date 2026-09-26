@@ -80,7 +80,7 @@ export async function generateMetadata({
   if (!bundle) return { title: 'Card not found' };
   return {
     title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '—'} — priced treatments`,
-    description: `${bundle.name} from ${slug.toUpperCase()}. Every treatment (standard, parallel, alternate art, manga rare, secret rare) with live prices.`,
+    description: `${bundle.name} from ${slug.toUpperCase()}. Every treatment (standard, parallel, secret rare, special card, treasure rare) with live prices.`,
     alternates: {
       canonical: canonicalFor(
         `/set/${encodeURIComponent(slug.toLowerCase())}/card/${encodeURIComponent(cardSlug)}`,

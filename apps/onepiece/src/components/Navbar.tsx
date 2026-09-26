@@ -30,9 +30,9 @@ const PRIMARY_LINKS_MEDIUM: NavItem[] = [
 ];
 
 const TOOLS_LINKS: NavItem[] = [
-  { label: 'Chase cards', href: '/market#chase' },
-  { label: 'Alternate arts', href: '/colours' },
-  { label: 'Manga rares',    href: '/market#manga-rares' },
+  { label: 'Chase cards',    href: '/market#chase' },
+  { label: 'Secret rares',   href: '/market#secret-rares' },
+  { label: 'Treasure rares', href: '/market#treasure-rares' },
 ];
 
 const MEDIUM_TOOLS_LINKS: NavItem[] = [
@@ -56,9 +56,10 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Market',
     items: [
-      { label: 'Movers',       href: '/market' },
-      { label: 'Chase cards',  href: '/market#chase' },
-      { label: 'Manga rares',  href: '/market#manga-rares' },
+      { label: 'Movers',         href: '/market' },
+      { label: 'Chase cards',    href: '/market#chase' },
+      { label: 'Secret rares',   href: '/market#secret-rares' },
+      { label: 'Treasure rares', href: '/market#treasure-rares' },
     ],
   },
   {

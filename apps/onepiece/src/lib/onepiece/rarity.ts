@@ -1,6 +1,6 @@
 // One Piece card rarity vocabulary. Different from MTG or YGO — chase
-// treatments (SEC, alt-art, manga rare, special rare) are the biggest
-// collector distinctions in this game.
+// treatments (SEC, SP CARD, TR, plus the collector-number _p*/_r*
+// variants) are the biggest collector distinctions in this game.
 //
 // The shared tcg_cards table stores rarity as a free-text string. We
 // map the observed values onto a small canonical set the UI can style

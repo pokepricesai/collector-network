@@ -95,7 +95,7 @@ export default async function OGImage() {
               display: 'flex',
             }}
           >
-            Live One Piece Card Game prices — parallels, alternate arts, manga rares and secret rares priced individually.
+            Live One Piece Card Game prices — parallels, secret rares, special cards and treasure rares priced individually.
           </div>
         </div>
       </div>

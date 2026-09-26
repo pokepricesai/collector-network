@@ -77,7 +77,7 @@ export default function LatestSets({ sets }: { sets: OpSetSummary[] }) {
                           marginLeft: 6,
                           fontWeight: 600,
                         }}
-                        title="Treatments (parallel / alt-art / manga rare / etc.)"
+                        title="Treatments (parallel / secret / special card / treasure / etc.)"
                       >
                         +{s.variantCount - s.uniqueCardCount} treatments
                       </span>
