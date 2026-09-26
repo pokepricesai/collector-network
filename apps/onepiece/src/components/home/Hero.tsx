@@ -24,8 +24,8 @@ export default function Hero({
 }) {
   return (
     <section
-      className="hero-shell"
-      style={{ padding: '48px 24px 40px', position: 'relative' }}
+      className="hero-shell op-hero-shell"
+      style={{ position: 'relative' }}
     >
       <div className="op-colour-crest" aria-hidden />
       <div className="spark-field" aria-hidden />
@@ -49,15 +49,17 @@ export default function Hero({
           </span>
           <h1
             style={{
-              fontSize: 'clamp(30px, 5vw, 44px)',
+              fontSize: 'clamp(22px, 4.6vw, 46px)',
               margin: 0,
-              lineHeight: 1.1,
+              lineHeight: 1.15,
               letterSpacing: '-0.02em',
               color: 'var(--text-strong)',
             }}
           >
-            Every printing.{' '}
-            <span className="gold-text">Every treatment.</span>{' '}
+            Every printing.
+            <br />
+            <span className="gold-text">Every treatment.</span>
+            <br />
             One collector-grade catalogue.
           </h1>
           <p
@@ -69,10 +71,17 @@ export default function Hero({
               lineHeight: 1.55,
             }}
           >
-            OnePiecePrices tracks the {formatNumber(cardCount)} cards across{' '}
-            {formatNumber(setCount)} sets — priced as standards, parallels,
-            alternate arts, manga rares and secret rares. Each treatment is its
-            own priced entity so a chase card never gets buried under a common.
+            {cardCount > 0 && setCount > 0 ? (
+              <>
+                Track {formatNumber(cardCount)} cards across{' '}
+                {formatNumber(setCount)} sets.
+              </>
+            ) : (
+              <>Track every One Piece Card Game printing.</>
+            )}{' '}
+            Standards, parallels, alternate arts, manga rares and secret rares
+            are each priced individually — a chase card never gets buried under
+            a common.
           </p>
         </div>
 

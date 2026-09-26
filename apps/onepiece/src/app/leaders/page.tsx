@@ -53,11 +53,10 @@ export default function LeadersPage() {
             lineHeight: 1.55,
           }}
         >
-          Leader directory grid arrives with the next data slice — once
-          gamedata.type is reliably indexed we can render every Leader with
-          top price and chase treatments in one grid. Meanwhile,{' '}
+          The Leader directory is coming soon — every Leader listed with top
+          price, chase treatments and colour pairing at a glance. Meanwhile,{' '}
           <Link href="/browse" style={{ fontWeight: 700 }}>
-            open the sets directory
+            browse by set
           </Link>{' '}
           or{' '}
           <Link href="/cards/search" style={{ fontWeight: 700 }}>

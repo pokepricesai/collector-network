@@ -151,13 +151,11 @@ export default async function PrintingPage({
         />
 
         <div
+          className="op-card-halo op-card-hero-grid"
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 320px) 1fr',
             gap: 28,
             alignItems: 'flex-start',
           }}
-          className="op-card-halo"
         >
           <div
             style={{
@@ -177,19 +175,8 @@ export default async function PrintingPage({
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <div
-                aria-hidden
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: 'var(--text-muted)',
-                  fontFamily: "'Outfit', sans-serif",
-                  letterSpacing: '0.1em',
-                }}
-              >
-                NO ART
+              <div className="op-card-empty" aria-hidden>
+                <span>Art loading</span>
               </div>
             )}
           </div>
@@ -199,7 +186,13 @@ export default async function PrintingPage({
               <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
                 {canonicalSetLabel} · #{resolved.matched.collector_number ?? '—'} · {anchorCardView.rarity.label}
               </div>
-              <h1 style={{ margin: '4px 0 10px', fontSize: 30, lineHeight: 1.15 }}>
+              <h1
+                style={{
+                  margin: '4px 0 10px',
+                  fontSize: 'clamp(24px, 4.5vw, 32px)',
+                  lineHeight: 1.15,
+                }}
+              >
                 {bundle.name}
               </h1>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -256,7 +249,7 @@ export default async function PrintingPage({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
               gap: 12,
             }}
           >

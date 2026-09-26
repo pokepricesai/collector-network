@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import Navbar from '@/components/Navbar';
@@ -59,6 +59,16 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: SITE_URL },
   robots: SITE_LAUNCHED ? LAUNCHED_ROBOTS : PRE_LAUNCH_ROBOTS,
+};
+
+// Next 15 pulls viewport out of metadata; without this every page ships
+// without the device-width viewport meta tag and mobile browsers zoom
+// out to 980px. That was the root cause of the mobile overflow in the
+// first QA pass.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#FBF5E6',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

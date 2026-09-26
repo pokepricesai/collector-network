@@ -24,7 +24,7 @@ export default async function BrowsePage() {
             <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
               Sets
             </div>
-            <h1 style={{ margin: '4px 0 6px', fontSize: 30 }}>
+            <h1 style={{ margin: '4px 0 6px', fontSize: 'clamp(24px, 4.5vw, 30px)' }}>
               Every One Piece set
             </h1>
             <p
@@ -36,11 +36,15 @@ export default async function BrowsePage() {
                 lineHeight: 1.55,
               }}
             >
-              {sets.length > 0
-                ? `${sets.length} set${sets.length === 1 ? '' : 's'} in the catalogue.`
-                : 'Set catalogue arrives with the ingest pipeline.'}
-              {' '}Ordered by release date. Treatment counts include parallels,
-              alternate arts, manga rares and secret rares.
+              {sets.length > 0 ? (
+                <>
+                  {sets.length} set{sets.length === 1 ? '' : 's'}, newest first.
+                  Treatment counts include parallels, alternate arts, manga
+                  rares and secret rares.
+                </>
+              ) : (
+                <>Sets are on their way — every main product, starter deck and promo pack.</>
+              )}
             </p>
           </div>
         </header>
@@ -51,7 +55,7 @@ export default async function BrowsePage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
               gap: 14,
             }}
           >
@@ -127,8 +131,8 @@ function EmptyState() {
         textAlign: 'center',
       }}
     >
-      No sets in the catalogue yet. When ingest lands, every main product,
-      starter deck and promo will appear here.
+      Sets are on their way. When they arrive, every main product, starter
+      deck and promo will appear here.
     </div>
   );
 }

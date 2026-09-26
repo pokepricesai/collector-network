@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCardBundleByName } from '@/server/read';
+import { searchCards } from '@/server/search';
 import { canonicalFor } from '@/lib/seo';
 import { slugifyCardName } from '@/lib/onepiece/slug';
 import { pickCardImage } from '@/lib/onepiece/image';
@@ -20,15 +21,17 @@ export const dynamic = 'force-dynamic';
 
 // Best-effort reverse lookup: turn the slug back into a plausible
 // name. Names contain dots, ellipses and non-ASCII characters that
-// we can't fully round-trip; we compensate with a name-search fallback
-// after the exact match miss.
+// we can't fully round-trip. If the naive spaced-out slug misses, we
+// fall back to a name search and pick the exact slug match.
 async function resolveCardName(slug: string): Promise<string | null> {
   const naive = slug.replace(/-/g, ' ');
   const bundle = await getCardBundleByName(naive);
   if (bundle) return bundle.name;
-  // TODO: fallback prefix / trigram search when slug ↔ name drift is
-  // material; for now the direct-name path covers the common case.
-  return null;
+  // Fallback: fuzzy search + slug re-match. Handles names with dots
+  // ("Monkey D. Luffy"), apostrophes and other characters the slug drops.
+  const candidates = await searchCards(naive.slice(0, 40), 40);
+  const hit = candidates.find((c) => slugifyCardName(c.name) === slug);
+  return hit?.name ?? null;
 }
 
 export async function generateMetadata({
@@ -113,13 +116,11 @@ export default async function LogicalCardPage({
         <Breadcrumbs name={bundle.name} />
 
         <div
+          className="op-card-halo op-card-hero-grid"
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 320px) 1fr',
             gap: 28,
             alignItems: 'flex-start',
           }}
-          className="op-card-halo"
         >
           <div
             style={{
@@ -139,19 +140,8 @@ export default async function LogicalCardPage({
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <div
-                aria-hidden
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: 'var(--text-muted)',
-                  fontFamily: "'Outfit', sans-serif",
-                  letterSpacing: '0.1em',
-                }}
-              >
-                NO ART
+              <div className="op-card-empty" aria-hidden>
+                <span>Art loading</span>
               </div>
             )}
           </div>
@@ -170,11 +160,8 @@ export default async function LogicalCardPage({
                     {OP_COLOUR_LABEL[c]}
                   </span>
                 ))}
-                <span className="chip" title="Number of distinct treatment rows">
-                  {flat.length} printing{flat.length === 1 ? '' : 's'}
-                </span>
-                <span className="chip chip-gold">
-                  {treatmentOrder.length} treatment{treatmentOrder.length === 1 ? '' : 's'}
+                <span className="chip chip-gold" title="Standard, parallel, alternate art, manga rare, secret rare and promo treatments">
+                  {treatmentOrder.length} treatment{treatmentOrder.length === 1 ? '' : 's'} · {flat.length} printing{flat.length === 1 ? '' : 's'}
                 </span>
               </div>
             </div>
@@ -259,7 +246,7 @@ export default async function LogicalCardPage({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
                   gap: 12,
                 }}
               >

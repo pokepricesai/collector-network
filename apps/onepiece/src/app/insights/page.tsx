@@ -35,8 +35,8 @@ export default function InsightsIndex() {
               }}
             >
               Set-by-set breakdowns of treatment premiums, chase-card tracking
-              across languages, and launch-window analysis. First articles
-              arrive with the next content slice.
+              across languages, and launch-window analysis. First articles are
+              on the way.
             </p>
           </div>
         </header>
@@ -52,7 +52,7 @@ export default function InsightsIndex() {
             lineHeight: 1.55,
           }}
         >
-          Editorial articles arrive next slice. In the meantime,{' '}
+          Editorial articles are on their way. In the meantime,{' '}
           <Link href="/market" style={{ fontWeight: 700 }}>
             watch the movers board
           </Link>{' '}

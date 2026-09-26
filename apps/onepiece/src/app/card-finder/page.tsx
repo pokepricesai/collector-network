@@ -121,10 +121,9 @@ export default function CardFinderPage() {
               lineHeight: 1.55,
             }}
           >
-            Interactive filtering is queued for the next data slice. In the
-            meantime the sets browser exposes every card in every set —{' '}
+            Interactive filtering is coming soon. In the meantime{' '}
             <Link href="/browse" style={{ fontWeight: 700 }}>
-              open the sets directory
+              browse by set
             </Link>{' '}
             or{' '}
             <Link href="/cards/search" style={{ fontWeight: 700 }}>

@@ -39,7 +39,14 @@ export default async function MarketPage({
             <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
               Movers · {window}d window
             </div>
-            <h1 style={{ margin: '4px 0 6px', fontSize: 30 }}>Market movers</h1>
+            <h1
+              style={{
+                margin: '4px 0 6px',
+                fontSize: 'clamp(24px, 4.5vw, 30px)',
+              }}
+            >
+              Market movers
+            </h1>
             <p
               style={{
                 margin: 0,
@@ -74,7 +81,7 @@ export default async function MarketPage({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
             gap: 20,
           }}
         >

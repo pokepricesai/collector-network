@@ -23,7 +23,7 @@ export default function LatestSets({ sets }: { sets: OpSetSummary[] }) {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(220px, 100%), 1fr))',
               gap: 14,
             }}
           >
@@ -105,7 +105,7 @@ function EmptyState() {
         textAlign: 'center',
       }}
     >
-      No sets loaded yet. Set catalogue arrives with the ingest pipeline.
+      Sets appear here as soon as the catalogue is ready.
     </div>
   );
 }

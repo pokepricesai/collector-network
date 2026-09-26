@@ -81,7 +81,7 @@ export default async function SetPage({
             <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
               {set.code.toUpperCase()} · Set
             </div>
-            <h1 style={{ margin: '4px 0 6px', fontSize: 30 }}>{set.name}</h1>
+            <h1 style={{ margin: '4px 0 6px', fontSize: 'clamp(24px, 4.5vw, 30px)' }}>{set.name}</h1>
             <p
               style={{
                 margin: 0,
@@ -94,7 +94,7 @@ export default async function SetPage({
               {cards.length !== uniqueNames.length && (
                 <>
                   {' · '}
-                  {cards.length - uniqueNames.length} additional treatment rows
+                  {cards.length} priced printings
                 </>
               )}
               {set.released_at && (
@@ -123,7 +123,7 @@ export default async function SetPage({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))',
               gap: 14,
             }}
           >
@@ -180,21 +180,8 @@ export default async function SetPage({
                         }}
                       />
                     ) : (
-                      <div
-                        aria-hidden
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          display: 'grid',
-                          placeItems: 'center',
-                          fontFamily: "'Outfit', sans-serif",
-                          fontWeight: 700,
-                          fontSize: 12,
-                          color: 'var(--text-muted)',
-                          letterSpacing: '0.1em',
-                        }}
-                      >
-                        NO ART
+                      <div className="op-card-empty" aria-hidden>
+                        <span>Art loading</span>
                       </div>
                     )}
                   </div>

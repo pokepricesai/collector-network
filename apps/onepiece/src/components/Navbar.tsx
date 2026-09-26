@@ -143,6 +143,7 @@ export default function Navbar() {
           OP
         </div>
         <span
+          className="op-wordmark"
           style={{
             fontFamily: "'Outfit', sans-serif",
             fontWeight: 800,
@@ -150,10 +151,12 @@ export default function Navbar() {
             color: 'var(--text-strong)',
             letterSpacing: '-0.02em',
             lineHeight: 1,
+            whiteSpace: 'nowrap',
           }}
         >
           OnePiecePrices
           <span
+            className="op-wordmark-tld"
             style={{
               color: 'var(--gold-500)',
               fontSize: 11,
@@ -353,6 +356,14 @@ export default function Navbar() {
           .desktop-nav-medium { display: none !important; }
           .nav-search { display: none !important; }
           .mobile-menu-btn { display: inline-flex !important; }
+        }
+        /* Below 480px, the wordmark is the biggest thing on the top bar
+           and can shove the hamburger off-screen. Shrink the wordmark
+           and hide the .io monospace tag so the primary lockup stays
+           within the viewport. */
+        @media (max-width: 480px) {
+          :global(.op-wordmark) { font-size: 15.5px !important; }
+          :global(.op-wordmark-tld) { display: none !important; }
         }
       `}</style>
     </nav>

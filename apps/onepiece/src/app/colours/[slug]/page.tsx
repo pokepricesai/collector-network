@@ -77,10 +77,9 @@ export default async function ColourDetail({
                 maxWidth: 640,
               }}
             >
-              Colour-scoped card browse. Once the ingest pipeline finishes
-              populating the colour index on every card, this page will list
-              every {label.toLowerCase()} Leader, top chase treatments, and the
-              latest {label.toLowerCase()} set releases.
+              Every {label.toLowerCase()} Leader, top chase treatments and the
+              latest {label.toLowerCase()} set releases — all on one page. The
+              full grid arrives with the next data update.
             </p>
           </div>
         </header>
@@ -96,7 +95,7 @@ export default async function ColourDetail({
             lineHeight: 1.55,
           }}
         >
-          Colour-scoped card grid arrives with the next data slice. Meanwhile,{' '}
+          Colour-scoped card grid coming soon. Meanwhile,{' '}
           <Link href="/cards/search" style={{ fontWeight: 700 }}>
             search for a card
           </Link>{' '}
