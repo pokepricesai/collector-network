@@ -1,0 +1,16 @@
+# Local-development Supabase config for reference. The production
+# project (preflightluke) is configured via the Supabase dashboard;
+# this file lets `supabase functions deploy` know which functions
+# ship without a JWT verification layer.
+#
+# We deliberately do NOT check in the project ref, DB password, or
+# any secret. Set the project ref via:
+#   supabase link --project-ref egidpsrkqvymvioidatc
+
+project_id = "collector-network-local"
+
+# Send Email Hook: signed with Standard Webhooks. NOT signed with a
+# Bearer JWT. Deploy with --no-verify-jwt or the CLI will reject
+# unauthenticated hook calls.
+[functions.auth-email]
+verify_jwt = false
