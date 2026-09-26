@@ -16,7 +16,14 @@ https://ygoprices.io → email received from Resend with the
 YGOPrices display name → clicking the CTA lands on
 `/account` with a live session.
 
-## 2. Password recovery — **PENDING**
+## 2. Password recovery — **PASS** (2026-09-26)
+
+Verified end-to-end by preflightluke: `resetPasswordForEmail`
+triggered from https://ygoprices.io, email received with the
+YGOPrices display name, CTA landed on `/account/reset-password`
+with a live recovery session, new password set + confirmed,
+final URL landed on `/account` with the token params stripped
+and the new password worked on the next sign-in.
 
 **Do:**
 1. On https://ygoprices.io/sign-in, use the "Forgot password"
