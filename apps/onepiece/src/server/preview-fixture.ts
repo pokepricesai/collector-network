@@ -6,14 +6,25 @@ import 'server-only';
 // Production has real env vars, so the stub — and this fixture — never
 // run there.
 //
-// The fixture exists purely so QA against the intended designed states
-// isn't blocked on data. Numbers, prices and treatments are illustrative.
+// Shape rules — verified against production 2026-09-26 in
+// docs/onepiece/data-audit.md:
+//   * game_id is the literal string "onepiece"
+//   * tcg_cards.id shape: `onepiece:card:op_{set}_{cn}[_pN|_rN]`
+//   * tcg_printings.id shape: `onepiece:print:op_{set}_{cn}:{key}:{lang}`
+//   * tcg_printings.edition is always null
+//   * tcg_printings.finish is 'nonfoil' or 'foil'
+//   * language is 'en'
+//   * Treatments live in collector_number suffixes (`_p1`/`_p2`/`_p3`,
+//     `_r1`) — not in edition or finish.
+//
+// The fixture keeps 5 sets, ~10 cards, ~20 printings so the site's every
+// section has something to render.
 
-const OP_GAME_ID = 'op';
+const OP_GAME_ID = 'onepiece';
 
 const SETS = [
   {
-    id: 'set-op01',
+    id: 'onepiece:set:op01',
     game_id: OP_GAME_ID,
     code: 'op01',
     name: 'Romance Dawn',
@@ -23,7 +34,7 @@ const SETS = [
     updated_at: '2025-08-01T00:00:00Z',
   },
   {
-    id: 'set-op02',
+    id: 'onepiece:set:op02',
     game_id: OP_GAME_ID,
     code: 'op02',
     name: 'Paramount War',
@@ -33,7 +44,7 @@ const SETS = [
     updated_at: '2025-08-01T00:00:00Z',
   },
   {
-    id: 'set-op03',
+    id: 'onepiece:set:op03',
     game_id: OP_GAME_ID,
     code: 'op03',
     name: 'Pillars of Strength',
@@ -43,17 +54,17 @@ const SETS = [
     updated_at: '2025-08-01T00:00:00Z',
   },
   {
-    id: 'set-op04',
+    id: 'onepiece:set:eb02',
     game_id: OP_GAME_ID,
-    code: 'op04',
-    name: 'Kingdoms of Intrigue',
-    released_at: '2025-05-30',
+    code: 'eb02',
+    name: 'Anime 25th Collection',
+    released_at: '2025-06-20',
     tcggraph_meta: null,
-    created_at: '2025-04-01T00:00:00Z',
+    created_at: '2025-05-01T00:00:00Z',
     updated_at: '2025-08-01T00:00:00Z',
   },
   {
-    id: 'set-op05',
+    id: 'onepiece:set:op05',
     game_id: OP_GAME_ID,
     code: 'op05',
     name: 'Awakening of the New Era',
@@ -64,208 +75,275 @@ const SETS = [
   },
 ];
 
-// Card rows. Same logical card can appear multiple times (per-rarity),
-// mirroring how the real schema stores treatments as distinct rows.
-// The `gamedata` shape matches src/lib/onepiece/gamedata.ts.
+// One card row per (set × collector_number × rarity). Treatment variants
+// use the `_p#` / `_r#` suffix on collector_number — matches production
+// shape exactly.
 const CARDS = [
-  // — Monkey D. Luffy family (OP01) — five treatments
+  // Monkey D. Luffy — Leader with three parallels
   {
-    id: 'card-luffy-op01-l',
+    id: 'onepiece:card:op_eb02_010',
     game_id: OP_GAME_ID,
     tcggraph_card_id: null,
-    name: 'Monkey D. Luffy',
-    english_id: 'OP01-001',
+    name: 'Monkey.D.Luffy',
+    english_id: 'EB02-010',
     language: 'en',
     rarity: 'L',
     artist: 'Eiichiro Oda',
-    rules_text: null,
+    rules_text:
+      "[Activate: Main] [Once Per Turn] Give up to 1 of your Characters +1000 power during this turn.",
     images: null,
     gamedata: {
-      type: 'Leader',
-      colours: ['red'],
+      cardType: 'LEADER',
+      colors: ['Red'],
       life: 5,
       power: 5000,
       attribute: 'Strike',
       types: ['Straw Hat Crew', 'Supernovas'],
-      language: 'en',
-      effect_text:
-        "Activate: Main [Once Per Turn] Give up to 1 of your Characters +1000 power during this turn.",
+      counter: null,
+      trigger: null,
+      cost: null,
     },
-    set_id: 'set-op01',
-    collector_number: 'OP01-001',
-    created_at: '2024-06-01T00:00:00Z',
-    updated_at: '2025-08-01T00:00:00Z',
+    set_id: 'onepiece:set:eb02',
+    collector_number: 'EB02-010',
+    created_at: '2025-05-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
   },
   {
-    id: 'card-luffy-op01-sr',
+    id: 'onepiece:card:op_eb02_010_p1',
     game_id: OP_GAME_ID,
     tcggraph_card_id: null,
-    name: 'Monkey D. Luffy',
-    english_id: 'OP01-025',
-    language: 'en',
-    rarity: 'SR',
-    artist: 'Eiichiro Oda',
-    rules_text: null,
-    images: null,
-    gamedata: {
-      type: 'Character',
-      colours: ['red'],
-      cost: 5,
-      power: 6000,
-      counter: 1000,
-      attribute: 'Strike',
-      types: ['Straw Hat Crew', 'Supernovas'],
-      language: 'en',
-      effect_text:
-        "When Attacking: You may rest 1 of your Characters. If you do, this Character gains +2000 power during this turn.",
-      trigger: 'Yes',
-      trigger_text: 'Play up to 1 Character card with a cost of 4 or less from your hand.',
-    },
-    set_id: 'set-op01',
-    collector_number: 'OP01-025',
-    created_at: '2024-06-01T00:00:00Z',
-    updated_at: '2025-08-01T00:00:00Z',
-  },
-  {
-    id: 'card-luffy-op01-sec',
-    game_id: OP_GAME_ID,
-    tcggraph_card_id: null,
-    name: 'Monkey D. Luffy',
-    english_id: 'OP01-121',
-    language: 'en',
-    rarity: 'SEC',
-    artist: 'Studio Colorido',
-    rules_text: null,
-    images: null,
-    gamedata: {
-      type: 'Character',
-      colours: ['red'],
-      cost: 5,
-      power: 6000,
-      counter: 1000,
-      attribute: 'Strike',
-      types: ['Straw Hat Crew', 'Supernovas'],
-      language: 'en',
-    },
-    set_id: 'set-op01',
-    collector_number: 'OP01-121',
-    created_at: '2024-06-01T00:00:00Z',
-    updated_at: '2025-08-01T00:00:00Z',
-  },
-
-  // Roronoa Zoro — Leader
-  {
-    id: 'card-zoro-op01-l',
-    game_id: OP_GAME_ID,
-    tcggraph_card_id: null,
-    name: 'Roronoa Zoro',
-    english_id: 'OP01-002',
+    name: 'Monkey.D.Luffy',
+    english_id: 'EB02-010_p1',
     language: 'en',
     rarity: 'L',
-    artist: 'Eiichiro Oda',
-    rules_text: null,
+    artist: 'Studio Straw Hat',
+    rules_text:
+      "[Activate: Main] [Once Per Turn] Give up to 1 of your Characters +1000 power during this turn.",
     images: null,
     gamedata: {
-      type: 'Leader',
-      colours: ['green'],
-      life: 5,
-      power: 5000,
-      attribute: 'Slash',
-      types: ['Straw Hat Crew'],
-      language: 'en',
-      effect_text:
-        'Activate: Main [Once Per Turn] Give up to 1 of your Characters +1000 power during this turn.',
+      cardType: 'LEADER', colors: ['Red'], life: 5, power: 5000,
+      attribute: 'Strike', types: ['Straw Hat Crew', 'Supernovas'],
+      counter: null, trigger: null, cost: null,
     },
-    set_id: 'set-op01',
-    collector_number: 'OP01-002',
-    created_at: '2024-06-01T00:00:00Z',
-    updated_at: '2025-08-01T00:00:00Z',
+    set_id: 'onepiece:set:eb02',
+    collector_number: 'EB02-010_p1',
+    created_at: '2025-05-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
   },
   {
-    id: 'card-zoro-op01-sr',
+    id: 'onepiece:card:op_eb02_010_p2',
     game_id: OP_GAME_ID,
     tcggraph_card_id: null,
-    name: 'Roronoa Zoro',
-    english_id: 'OP01-025z',
+    name: 'Monkey.D.Luffy',
+    english_id: 'EB02-010_p2',
     language: 'en',
-    rarity: 'SR',
-    artist: 'Eiichiro Oda',
-    rules_text: null,
+    rarity: 'L',
+    artist: 'Studio Straw Hat',
+    rules_text:
+      "[Activate: Main] [Once Per Turn] Give up to 1 of your Characters +1000 power during this turn.",
     images: null,
     gamedata: {
-      type: 'Character',
-      colours: ['green'],
-      cost: 4,
-      power: 5000,
-      counter: 1000,
-      attribute: 'Slash',
-      types: ['Straw Hat Crew'],
-      language: 'en',
+      cardType: 'LEADER', colors: ['Red'], life: 5, power: 5000,
+      attribute: 'Strike', types: ['Straw Hat Crew', 'Supernovas'],
+      counter: null, trigger: null, cost: null,
     },
-    set_id: 'set-op01',
-    collector_number: 'OP01-025z',
-    created_at: '2024-06-01T00:00:00Z',
-    updated_at: '2025-08-01T00:00:00Z',
+    set_id: 'onepiece:set:eb02',
+    collector_number: 'EB02-010_p2',
+    created_at: '2025-05-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
+  },
+  {
+    id: 'onepiece:card:op_eb02_010_p3',
+    game_id: OP_GAME_ID,
+    tcggraph_card_id: null,
+    name: 'Monkey.D.Luffy',
+    english_id: 'EB02-010_p3',
+    language: 'en',
+    rarity: 'L',
+    artist: 'Studio Straw Hat',
+    rules_text:
+      "[Activate: Main] [Once Per Turn] Give up to 1 of your Characters +1000 power during this turn.",
+    images: null,
+    gamedata: {
+      cardType: 'LEADER', colors: ['Red'], life: 5, power: 5000,
+      attribute: 'Strike', types: ['Straw Hat Crew', 'Supernovas'],
+      counter: null, trigger: null, cost: null,
+    },
+    set_id: 'onepiece:set:eb02',
+    collector_number: 'EB02-010_p3',
+    created_at: '2025-05-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
   },
 
-  // Yamato — Blue
+  // Edward Weevil — Character SP CARD + Rare
   {
-    id: 'card-yamato-op02-sr',
+    id: 'onepiece:card:op_eb01_023_p1',
     game_id: OP_GAME_ID,
     tcggraph_card_id: null,
-    name: 'Yamato',
-    english_id: 'OP02-018',
+    name: 'Edward Weevil',
+    english_id: 'EB01-023_p1',
     language: 'en',
-    rarity: 'SR',
-    artist: 'Eiichiro Oda',
-    rules_text: null,
+    rarity: 'SP CARD',
+    artist: 'Studio Warlords',
+    rules_text: '[On Play] Draw 1 card.',
     images: null,
     gamedata: {
-      type: 'Character',
-      colours: ['blue'],
-      cost: 4,
-      power: 5000,
-      counter: 1000,
-      attribute: 'Special',
-      types: ['Land of Wano', 'Kozuki Clan'],
-      language: 'en',
+      cardType: 'CHARACTER', colors: ['Blue'], cost: 4, power: 8000,
+      counter: 1000, attribute: 'Slash',
+      types: ['The Seven Warlords of the Sea'],
+      trigger: null, life: null,
     },
-    set_id: 'set-op02',
-    collector_number: 'OP02-018',
+    set_id: 'onepiece:set:op02',
+    collector_number: 'EB01-023_p1',
+    created_at: '2024-09-01T00:00:00Z',
+    updated_at: '2025-08-01T00:00:00Z',
+  },
+  {
+    id: 'onepiece:card:op_eb01_023_p2',
+    game_id: OP_GAME_ID,
+    tcggraph_card_id: null,
+    name: 'Edward Weevil',
+    english_id: 'EB01-023_p2',
+    language: 'en',
+    rarity: 'R',
+    artist: 'Studio Warlords',
+    rules_text: '[On Play] Draw 1 card.',
+    images: null,
+    gamedata: {
+      cardType: 'CHARACTER', colors: ['Blue'], cost: 4, power: 6000,
+      counter: null, attribute: 'Slash',
+      types: ['The Seven Warlords of the Sea'],
+      trigger: null, life: null,
+    },
+    set_id: 'onepiece:set:op02',
+    collector_number: 'EB01-023_p2',
     created_at: '2024-09-01T00:00:00Z',
     updated_at: '2025-08-01T00:00:00Z',
   },
 
-  // Kaido — Purple leader
+  // Warlord chase — SEC base + reprint + parallels
   {
-    id: 'card-kaido-op03-l',
+    id: 'onepiece:card:op_eb02_061',
     game_id: OP_GAME_ID,
     tcggraph_card_id: null,
-    name: 'Kaido',
-    english_id: 'OP03-001',
+    name: 'Boa Hancock',
+    english_id: 'EB02-061',
     language: 'en',
-    rarity: 'L',
+    rarity: 'SEC',
     artist: 'Eiichiro Oda',
-    rules_text: null,
+    rules_text:
+      '[Trigger] Look at 5 cards from the top of your deck; reveal up to 1 Character card of your colour and add it to your hand.',
     images: null,
     gamedata: {
-      type: 'Leader',
-      colours: ['purple', 'yellow'],
-      life: 4,
-      power: 5000,
-      attribute: 'Strike',
-      types: ['Four Emperors', 'Animal Kingdom Pirates'],
-      language: 'en',
+      cardType: 'CHARACTER', colors: ['Purple'], cost: 8, power: 9000,
+      counter: null, attribute: 'Wisdom',
+      types: ['The Seven Warlords of the Sea', 'Kuja Pirates'],
+      trigger: 'Yes', life: null,
     },
-    set_id: 'set-op03',
-    collector_number: 'OP03-001',
+    set_id: 'onepiece:set:eb02',
+    collector_number: 'EB02-061',
+    created_at: '2025-05-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
+  },
+  {
+    id: 'onepiece:card:op_eb02_061_r1',
+    game_id: OP_GAME_ID,
+    tcggraph_card_id: null,
+    name: 'Boa Hancock',
+    english_id: 'EB02-061_r1',
+    language: 'en',
+    rarity: 'SEC',
+    artist: 'Eiichiro Oda',
+    rules_text:
+      '[Trigger] Look at 5 cards from the top of your deck; reveal up to 1 Character card of your colour and add it to your hand.',
+    images: null,
+    gamedata: {
+      cardType: 'CHARACTER', colors: ['Purple'], cost: 8, power: 9000,
+      counter: null, attribute: 'Wisdom',
+      types: ['The Seven Warlords of the Sea', 'Kuja Pirates'],
+      trigger: 'Yes', life: null,
+    },
+    set_id: 'onepiece:set:eb02',
+    collector_number: 'EB02-061_r1',
+    created_at: '2025-05-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
+  },
+  {
+    id: 'onepiece:card:op_eb02_061_p3',
+    game_id: OP_GAME_ID,
+    tcggraph_card_id: null,
+    name: 'Boa Hancock',
+    english_id: 'EB02-061_p3',
+    language: 'en',
+    rarity: 'SP CARD',
+    artist: 'Studio Kuja',
+    rules_text:
+      '[Trigger] Look at 5 cards from the top of your deck; reveal up to 1 Character card of your colour and add it to your hand.',
+    images: null,
+    gamedata: {
+      cardType: 'CHARACTER', colors: ['Purple'], cost: 8, power: 9000,
+      counter: null, attribute: 'Wisdom',
+      types: ['The Seven Warlords of the Sea', 'Kuja Pirates'],
+      trigger: 'Yes', life: null,
+    },
+    set_id: 'onepiece:set:eb02',
+    collector_number: 'EB02-061_p3',
+    created_at: '2025-05-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
+  },
+
+  // Treasure Rare — very limited chase
+  {
+    id: 'onepiece:card:op_op05_119',
+    game_id: OP_GAME_ID,
+    tcggraph_card_id: null,
+    name: 'Charlotte Katakuri',
+    english_id: 'OP05-119',
+    language: 'en',
+    rarity: 'TR',
+    artist: 'Eiichiro Oda',
+    rules_text:
+      '[Activate: Main] [Once Per Turn] K.O. up to 1 of your opponent’s Characters with a power of 4000 or less.',
+    images: null,
+    gamedata: {
+      cardType: 'CHARACTER', colors: ['Purple'], cost: 8, power: 10000,
+      counter: 1000, attribute: 'Special',
+      types: ['Big Mom Pirates', 'Charlotte Family'],
+      trigger: null, life: null,
+    },
+    set_id: 'onepiece:set:op05',
+    collector_number: 'OP05-119',
+    created_at: '2025-07-01T00:00:00Z',
+    updated_at: '2025-09-01T00:00:00Z',
+  },
+
+  // Promo
+  {
+    id: 'onepiece:card:op_p_001',
+    game_id: OP_GAME_ID,
+    tcggraph_card_id: null,
+    name: 'Roronoa Zoro',
+    english_id: 'P-001',
+    language: 'en',
+    rarity: 'P',
+    artist: 'Eiichiro Oda',
+    rules_text: '[When Attacking] Give up to 1 of your Characters +1000 power during this turn.',
+    images: null,
+    gamedata: {
+      cardType: 'CHARACTER', colors: ['Green'], cost: 4, power: 5000,
+      counter: 1000, attribute: 'Slash',
+      types: ['Straw Hat Crew'],
+      trigger: null, life: null,
+    },
+    set_id: 'onepiece:set:op03',
+    collector_number: 'P-001',
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-08-01T00:00:00Z',
   },
 
-  // Nami — support event
+  // Standard character
   {
-    id: 'card-nami-op02-r',
+    id: 'onepiece:card:op_op02_042',
     game_id: OP_GAME_ID,
     tcggraph_card_id: null,
     name: 'Nami',
@@ -273,53 +351,55 @@ const CARDS = [
     language: 'en',
     rarity: 'R',
     artist: 'Eiichiro Oda',
-    rules_text: null,
+    rules_text: '[On Play] Look at 5 cards from the top of your deck and rearrange them in any order.',
     images: null,
     gamedata: {
-      type: 'Character',
-      colours: ['blue'],
-      cost: 3,
-      power: 4000,
-      counter: 1000,
-      attribute: 'Special',
+      cardType: 'CHARACTER', colors: ['Blue'], cost: 3, power: 4000,
+      counter: 1000, attribute: 'Special',
       types: ['Straw Hat Crew'],
-      language: 'en',
+      trigger: null, life: null,
     },
-    set_id: 'set-op02',
+    set_id: 'onepiece:set:op02',
     collector_number: 'OP02-042',
     created_at: '2024-09-01T00:00:00Z',
     updated_at: '2025-08-01T00:00:00Z',
   },
+
+  // Standard leader — Zoro
+  {
+    id: 'onepiece:card:op_op01_002',
+    game_id: OP_GAME_ID,
+    tcggraph_card_id: null,
+    name: 'Roronoa Zoro',
+    english_id: 'OP01-002',
+    language: 'en',
+    rarity: 'L',
+    artist: 'Eiichiro Oda',
+    rules_text: '[Activate: Main] [Once Per Turn] Give up to 1 of your Characters +1000 power during this turn.',
+    images: null,
+    gamedata: {
+      cardType: 'LEADER', colors: ['Green'], life: 5, power: 5000,
+      attribute: 'Slash', types: ['Straw Hat Crew'],
+      counter: null, trigger: null, cost: null,
+    },
+    set_id: 'onepiece:set:op01',
+    collector_number: 'OP01-002',
+    created_at: '2024-06-01T00:00:00Z',
+    updated_at: '2025-08-01T00:00:00Z',
+  },
 ];
 
-// Printings — the priced physical layer. Each card row usually has one
-// or two printing rows (base + parallel + alt-art).
-const PRINTINGS = [
-  { card: 'card-luffy-op01-l', treatment: 'standard' },
-  { card: 'card-luffy-op01-l', treatment: 'parallel' },
-  { card: 'card-luffy-op01-l', treatment: 'alt-art' },
-  { card: 'card-luffy-op01-sr', treatment: 'standard' },
-  { card: 'card-luffy-op01-sr', treatment: 'manga-rare' },
-  { card: 'card-luffy-op01-sec', treatment: 'sec' },
-  { card: 'card-zoro-op01-l', treatment: 'standard' },
-  { card: 'card-zoro-op01-l', treatment: 'alt-art' },
-  { card: 'card-zoro-op01-sr', treatment: 'standard' },
-  { card: 'card-yamato-op02-sr', treatment: 'standard' },
-  { card: 'card-yamato-op02-sr', treatment: 'parallel' },
-  { card: 'card-kaido-op03-l', treatment: 'standard' },
-  { card: 'card-kaido-op03-l', treatment: 'special-rare' },
-  { card: 'card-nami-op02-r', treatment: 'standard' },
-];
-
+// Printings — each card exists as nonfoil (key='normal') and, for chase
+// treatments, foil (key='foil') too. Matches production reality.
 interface FixturePrinting {
   id: string;
   game_id: string;
   tcg_card_id: string;
   set_id: string;
   tcggraph_card_id: null;
-  tcggraph_printing_key: null;
-  finish: string | null;
-  edition: string | null;
+  tcggraph_printing_key: string;
+  finish: string;
+  edition: null;
   language: string;
   collector_number: string | null;
   mtg_printings_id: null;
@@ -330,27 +410,16 @@ interface FixturePrinting {
   updated_at: string;
 }
 
-// Expand into full printing rows.
-const PRINTING_ROWS: FixturePrinting[] = PRINTINGS.map((p, idx) => {
-  const card = CARDS.find((c) => c.id === p.card)!;
-  const editionByTreatment: Record<string, string | null> = {
-    standard: null,
-    parallel: 'parallel',
-    'alt-art': 'alternate art',
-    'manga-rare': 'manga',
-    'special-rare': 'special',
-    promo: 'promo',
-    sec: 'sec',
-  };
-  return {
-    id: `printing-${idx + 1}`,
+function printingsFor(card: (typeof CARDS)[number], keys: Array<'normal' | 'foil'>): FixturePrinting[] {
+  return keys.map((key) => ({
+    id: `onepiece:print:${card.id.replace('onepiece:card:', '')}:${key}:en`,
     game_id: OP_GAME_ID,
     tcg_card_id: card.id,
     set_id: card.set_id,
     tcggraph_card_id: null,
-    tcggraph_printing_key: null,
-    finish: 'holo',
-    edition: editionByTreatment[p.treatment] ?? null,
+    tcggraph_printing_key: key,
+    finish: key === 'foil' ? 'foil' : 'nonfoil',
+    edition: null,
     language: 'en',
     collector_number: card.collector_number,
     mtg_printings_id: null,
@@ -359,82 +428,170 @@ const PRINTING_ROWS: FixturePrinting[] = PRINTINGS.map((p, idx) => {
     mapping_confidence: null,
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-09-01T00:00:00Z',
-  };
-});
+  }));
+}
 
-// Retail-price rows. Prices roughly reflect treatment premium: sec /
-// alt-art dominate the standard printing.
-const PRICE_BY_TREATMENT: Record<string, number> = {
-  standard: 3,
-  parallel: 18,
-  'alt-art': 220,
-  'manga-rare': 340,
-  'special-rare': 95,
-  promo: 12,
-  sec: 480,
+// Prices (illustrative — approximate real market for the given treatment).
+// Prices assigned per (card_id, finish).
+const PRICE_TABLE: Record<string, { usd: number; eur: number }> = {
+  // Base Luffy Leader — cheap
+  'onepiece:card:op_eb02_010|nonfoil':    { usd: 0.47, eur: 0.14 },
+  'onepiece:card:op_eb02_010|foil':       { usd: 0.85, eur: 0.32 },
+  // Luffy _p1 — mid parallel
+  'onepiece:card:op_eb02_010_p1|nonfoil': { usd: 950,  eur: 977 },
+  'onepiece:card:op_eb02_010_p1|foil':    { usd: 1006, eur: 1050 },
+  // Luffy _p2 — chase parallel
+  'onepiece:card:op_eb02_010_p2|nonfoil': { usd: 380,  eur: 398 },
+  'onepiece:card:op_eb02_010_p2|foil':    { usd: 1427, eur: 1550 },
+  // Luffy _p3 — highest parallel
+  'onepiece:card:op_eb02_010_p3|foil':    { usd: 710,  eur: 760 },
+  // Weevil SP CARD
+  'onepiece:card:op_eb01_023_p1|nonfoil': { usd: 42,   eur: 39 },
+  'onepiece:card:op_eb01_023_p1|foil':    { usd: 78,   eur: 74 },
+  // Weevil Rare parallel
+  'onepiece:card:op_eb01_023_p2|nonfoil': { usd: 0.35, eur: 0.28 },
+  // Boa SEC base
+  'onepiece:card:op_eb02_061|nonfoil':    { usd: 6.20, eur: 5.93 },
+  'onepiece:card:op_eb02_061|foil':       { usd: 13.05, eur: 11.90 },
+  // Boa SEC reprint — same tier as base
+  'onepiece:card:op_eb02_061_r1|nonfoil': { usd: 6.80, eur: 7.47 },
+  'onepiece:card:op_eb02_061_r1|foil':    { usd: 13.21, eur: 12.50 },
+  // Boa SP CARD
+  'onepiece:card:op_eb02_061_p3|nonfoil': { usd: 380,  eur: 394 },
+  'onepiece:card:op_eb02_061_p3|foil':    { usd: 478,  eur: 460 },
+  // Katakuri TR
+  'onepiece:card:op_op05_119|nonfoil':    { usd: 1150, eur: 1080 },
+  'onepiece:card:op_op05_119|foil':       { usd: 1450, eur: 1360 },
+  // Zoro promo
+  'onepiece:card:op_p_001|nonfoil':       { usd: 6.90, eur: 5.80 },
+  // Nami standard
+  'onepiece:card:op_op02_042|nonfoil':    { usd: 0.28, eur: 0.22 },
+  'onepiece:card:op_op02_042|foil':       { usd: 0.85, eur: 0.72 },
+  // Zoro Leader
+  'onepiece:card:op_op01_002|nonfoil':    { usd: 1.20, eur: 0.95 },
+  'onepiece:card:op_op01_002|foil':       { usd: 2.10, eur: 1.85 },
 };
 
-const RETAIL_ROWS = PRINTING_ROWS.map((row, idx) => {
-  const seed = PRINTINGS[idx]!;
-  const price = PRICE_BY_TREATMENT[seed.treatment] ?? 5;
-  return {
-    tcg_printing_id: row.id,
-    game_id: OP_GAME_ID,
-    source: 'tcgplayer',
-    list_type: 'market',
-    region: 'us',
-    currency: 'USD',
-    finish: 'holo',
-    price,
-    price_low: Math.max(0.5, price * 0.7),
-    price_trend: price * 1.02,
-    avg_1d: price,
-    avg_7d: price * 0.98,
-    avg_30d: price * 0.9,
-    updated_at: '2025-09-15T00:00:00Z',
-    ingested_at: '2025-09-15T00:00:00Z',
-    source_run_id: null,
-  };
-});
+// Choose finishes per card. Base Luffy Leader p3 only has foil in prod.
+const CARD_FINISHES: Record<string, Array<'normal' | 'foil'>> = {
+  'onepiece:card:op_eb02_010':    ['normal', 'foil'],
+  'onepiece:card:op_eb02_010_p1': ['normal', 'foil'],
+  'onepiece:card:op_eb02_010_p2': ['normal', 'foil'],
+  'onepiece:card:op_eb02_010_p3': ['foil'],
+  'onepiece:card:op_eb01_023_p1': ['normal', 'foil'],
+  'onepiece:card:op_eb01_023_p2': ['normal'],
+  'onepiece:card:op_eb02_061':    ['normal', 'foil'],
+  'onepiece:card:op_eb02_061_r1': ['normal', 'foil'],
+  'onepiece:card:op_eb02_061_p3': ['normal', 'foil'],
+  'onepiece:card:op_op05_119':    ['normal', 'foil'],
+  'onepiece:card:op_p_001':       ['normal'],
+  'onepiece:card:op_op02_042':    ['normal', 'foil'],
+  'onepiece:card:op_op01_002':    ['normal', 'foil'],
+};
 
-// Daily rows spanning the last 40 days so 30d movers pop up.
+const PRINTING_ROWS: FixturePrinting[] = [];
+for (const card of CARDS) {
+  const keys = CARD_FINISHES[card.id] ?? ['normal'];
+  PRINTING_ROWS.push(...printingsFor(card, keys));
+}
+
+const RETAIL_ROWS: any[] = [];
+for (const p of PRINTING_ROWS) {
+  const priceKey = `${p.tcg_card_id}|${p.finish}`;
+  const prices = PRICE_TABLE[priceKey];
+  if (!prices) continue;
+  // TCGplayer USD
+  RETAIL_ROWS.push({
+    tcg_printing_id: p.id,
+    game_id: OP_GAME_ID,
+    source: 'tcggraph.tcgplayer',
+    list_type: 'retail',
+    region: 'NA',
+    currency: 'USD',
+    finish: p.finish,
+    price: prices.usd,
+    price_low: prices.usd * 0.85,
+    price_trend: prices.usd * 1.02,
+    avg_1d: prices.usd,
+    avg_7d: prices.usd * 0.98,
+    avg_30d: prices.usd * 0.94,
+    updated_at: '2026-09-22T00:00:00Z',
+    ingested_at: '2026-09-22T00:00:00Z',
+    source_run_id: null,
+  });
+  // Cardmarket EUR
+  RETAIL_ROWS.push({
+    tcg_printing_id: p.id,
+    game_id: OP_GAME_ID,
+    source: 'tcggraph.cardmarket',
+    list_type: 'retail',
+    region: 'EU',
+    currency: 'EUR',
+    finish: p.finish,
+    price: prices.eur,
+    price_low: prices.eur * 0.75,
+    price_trend: prices.eur,
+    avg_1d: prices.eur,
+    avg_7d: prices.eur * 0.97,
+    avg_30d: prices.eur * 0.9,
+    updated_at: '2026-09-22T00:00:00Z',
+    ingested_at: '2026-09-22T00:00:00Z',
+    source_run_id: null,
+  });
+}
+
+// Daily rows — three days per (printing × source × currency) so the
+// spark shows a small trend and the movers board has enough observations.
 const now = Date.now();
 const day = 1000 * 60 * 60 * 24;
 const DAILY_ROWS: Array<{
   tcg_printing_id: string;
   game_id: string;
+  source: string;
   currency: string;
+  finish: string | null;
   price: number;
   observed_on: string;
 }> = [];
 
 for (let i = 0; i < PRINTING_ROWS.length; i++) {
   const row = PRINTING_ROWS[i]!;
-  const treatment = PRINTINGS[i]!.treatment;
-  const finalPrice = PRICE_BY_TREATMENT[treatment] ?? 5;
-  // Half rise, half fall so both columns fill.
+  const priceKey = `${row.tcg_card_id}|${row.finish}`;
+  const prices = PRICE_TABLE[priceKey];
+  if (!prices) continue;
+  // Half rise, half fall so the movers board has both columns populated.
   const direction = i % 2 === 0 ? 1 : -1;
-  const startPrice =
-    direction > 0
-      ? Math.max(1, finalPrice * 0.65)
-      : Math.max(1, finalPrice * 1.35);
-  for (let d = 40; d >= 0; d--) {
-    const t = (40 - d) / 40;
-    const p = startPrice + (finalPrice - startPrice) * t;
+  const finalUsd = prices.usd;
+  const finalEur = prices.eur;
+  const startUsd = Math.max(1, finalUsd * (direction > 0 ? 0.7 : 1.4));
+  const startEur = Math.max(1, finalEur * (direction > 0 ? 0.7 : 1.4));
+  for (let d = 30; d >= 0; d--) {
+    const t = (30 - d) / 30;
+    const usd = startUsd + (finalUsd - startUsd) * t;
+    const eur = startEur + (finalEur - startEur) * t;
+    const observed = new Date(now - d * day).toISOString().slice(0, 10);
     DAILY_ROWS.push({
       tcg_printing_id: row.id,
       game_id: OP_GAME_ID,
+      source: 'tcggraph.tcgplayer',
       currency: 'USD',
-      price: Number(p.toFixed(2)),
-      observed_on: new Date(now - d * day).toISOString().slice(0, 10),
+      finish: row.finish,
+      price: Number(usd.toFixed(2)),
+      observed_on: observed,
+    });
+    DAILY_ROWS.push({
+      tcg_printing_id: row.id,
+      game_id: OP_GAME_ID,
+      source: 'tcggraph.cardmarket',
+      currency: 'EUR',
+      finish: row.finish,
+      price: Number(eur.toFixed(2)),
+      observed_on: observed,
     });
   }
 }
 
-/**
- * Public accessor used by the stub Supabase client. Returns the fixture
- * rows for a given table + game_id combination.
- */
+/** Public accessor used by the stub Supabase client. */
 export function getFixtureRows(
   table: string,
   filters: Record<string, unknown>,
@@ -443,7 +600,13 @@ export function getFixtureRows(
   if (gameId && gameId !== OP_GAME_ID) return [];
   switch (table) {
     case 'tcg_games':
-      return [{ id: OP_GAME_ID, slug: 'onepiece', name: 'One Piece Card Game', active: true, created_at: '2024-01-01T00:00:00Z' }];
+      return [{
+        id: OP_GAME_ID,
+        slug: 'one-piece',
+        name: 'One Piece Card Game',
+        active: true,
+        created_at: '2026-09-21T15:48:10.749388+00:00',
+      }];
     case 'tcg_sets':
       return applyIdFilters(SETS, filters);
     case 'tcg_cards':
@@ -506,9 +669,6 @@ function applyIdFilters<T extends { id?: string; tcg_printing_id?: string }>(
   }
   const nameLike = filters['name_like'];
   if (typeof nameLike === 'string') {
-    // Postgres ILIKE `%foo%bar%` → treat each `%`-separated segment as
-    // a substring that must appear in order. Matches the shape of the
-    // `searchCardsByName` helper.
     const parts = nameLike
       .toLowerCase()
       .split('%')

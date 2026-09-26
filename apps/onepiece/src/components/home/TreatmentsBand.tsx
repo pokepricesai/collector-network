@@ -5,13 +5,16 @@ import { OP_TREATMENTS, type OpTreatment } from '@/lib/onepiece/treatment';
 // treatment axis. Static content: gives new visitors an anchor for the
 // vocabulary they'll see across the site.
 
+// Treatments to feature on the homepage explainer band. Kept to six so
+// the grid reads at a glance; ordered chase-first so the marquee card
+// is the highest-tier treatment.
 const ORDER: OpTreatment[] = [
-  'alt-art',
-  'manga-rare',
-  'sec',
+  'treasure-rare',
+  'secret-rare',
+  'special-card',
   'parallel',
-  'special-rare',
   'promo',
+  'reprint',
 ];
 
 export default function TreatmentsBand() {
@@ -35,9 +38,9 @@ export default function TreatmentsBand() {
             }}
           >
             Card number is a gameplay identifier — not a collector one. Every
-            parallel, alternate art, manga rare and secret rare is its own priced
-            entity on OnePiecePrices, so a chase card is never buried under its
-            base printing.
+            parallel, secret rare, special card, treasure rare and promo is its
+            own priced entity on OnePiecePrices, so a chase card is never
+            buried under its base printing.
           </p>
         </div>
 

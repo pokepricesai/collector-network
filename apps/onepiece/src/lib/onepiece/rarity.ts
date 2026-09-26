@@ -43,6 +43,10 @@ const CANONICAL: Record<string, { code: OpRarityCode; label: string }> = {
   promo: { code: 'P', label: 'Promo' },
   sp: { code: 'SP', label: 'Special Card' },
   'special card': { code: 'SP', label: 'Special Card' },
+  // Production writes the literal string "SP CARD" (with a space, uppercased);
+  // see docs/onepiece/data-audit.md §5. Normalise it explicitly so lookup
+  // is O(1) instead of falling through to the "unknown" branch.
+  'sp card': { code: 'SP', label: 'Special Card' },
   tr: { code: 'TR', label: 'Treasure Rare' },
   'treasure rare': { code: 'TR', label: 'Treasure Rare' },
 };

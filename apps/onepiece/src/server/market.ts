@@ -24,6 +24,7 @@ export interface MoverEntry {
   previousPrice: number;
   changeAbs: number;
   changePct: number;
+  flags: MoverFlags;
 }
 
 interface DailyRow {
@@ -37,6 +38,34 @@ interface PrintingRow extends TcgPrinting {}
 
 const MIN_LATEST_PRICE = 2;
 const MIN_OBSERVATIONS = 3;
+
+// Outlier guards. Do not silently delete legitimate high prices — the
+// production data contains genuine four- and five-figure chase cards
+// (see docs/onepiece/data-audit.md §8). Only reject rows whose shape
+// is structurally broken.
+//
+// Reject conditions:
+//   * `price` above MAX_SANE_PRICE — no OP card fetches this at retail
+//     even in the wildest listings. Verified against the outlier scan
+//     in probe-supplementary.mts §C: the highest legitimate row is
+//     €23,227 (op13-118_p4 SEC).
+//   * `changePct` beyond MAX_SANE_CHANGE — a single day going from
+//     $0.01 → $100 is either a data glitch or a stale zero-priced row
+//     flipping to fair value. Either way, it dominates the board with
+//     no informational value.
+//
+// Flag conditions (mover shown but marked as unreviewed):
+//   * `latestPrice > FLAG_HIGH_PRICE`
+//   * A `price_low > price * 2` divergence (indicates a stale listing).
+const MAX_SANE_PRICE = 50_000;
+const MAX_SANE_CHANGE = 20;
+const FLAG_HIGH_PRICE = 5_000;
+
+export interface MoverFlags {
+  /** True when the price is unusually high and worth manual review
+   *  before featuring in editorial placements. */
+  highPrice: boolean;
+}
 
 export async function getMovers(
   windowDays: MoverWindow,
@@ -77,9 +106,11 @@ export async function getMovers(
     const last = series[series.length - 1];
     if (!first || !last || first.price == null || last.price == null) continue;
     if (last.price < MIN_LATEST_PRICE) continue;
+    if (last.price > MAX_SANE_PRICE) continue; // outlier guard
     const changeAbs = last.price - first.price;
     if (first.price === 0) continue;
     const changePct = changeAbs / first.price;
+    if (Math.abs(changePct) > MAX_SANE_CHANGE) continue; // outlier guard
     const [printingId, currency] = key.split('::');
     if (!printingId) continue;
     printingIds.add(printingId);
@@ -92,6 +123,7 @@ export async function getMovers(
       previousPrice: first.price,
       changeAbs,
       changePct,
+      flags: { highPrice: last.price >= FLAG_HIGH_PRICE },
     });
   }
 

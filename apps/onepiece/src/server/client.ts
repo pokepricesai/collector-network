@@ -141,12 +141,12 @@ function createStubClient(): SupabaseClient {
 
 // Canonical identifiers.
 //
-// Slug (`onepiece`) is the value used by the cross-site
-// @collector-network/network-config vocabulary. Game id (`op`) is the
-// value stored in tcg_games.id and referenced by every tcg_*.game_id
-// column. Both are cached at first lookup so we don't repeat the tcg_games
-// round trip per request.
-export const ONEPIECE_GAME_SLUG = 'onepiece' as const;
+// The cross-site `@collector-network/network-config` vocabulary calls
+// this game "onepiece" (unhyphenated) — that's the URL / routing token.
+// The production tcg_games row uses id="onepiece" and slug="one-piece"
+// (hyphenated). Verified 2026-09-26 via apps/onepiece/scripts/probe-games.mts.
+// Every downstream tcg_*.game_id column is "onepiece" without the hyphen.
+export const ONEPIECE_GAME_SLUG = 'one-piece' as const;
 
 let cachedGameId: string | null = null;
 
@@ -168,11 +168,13 @@ export async function getOnepieceGameId(
     );
   }
 
-  // If the shared DB has not yet been seeded for One Piece, we fall
-  // back to the abbreviation convention (matches how yugioh uses "ygo"
-  // in tcg_games.id). Never crash the app — return the abbreviation
-  // and let downstream queries return empty result sets.
-  const resolved = (data as { id?: string } | null)?.id ?? 'op';
+  // OP's canonical tcg_games row uses id="onepiece" and slug="onepiece"
+  // (unlike Yu-Gi-Oh, whose slug is "yugioh" but id is the abbreviation
+  // "ygo"). Verified against production in docs/onepiece/data-audit.md
+  // and cross-referenced from docs/yugioh/data-audit.md §3. If the row
+  // is missing (unlikely — the row is present in prod), fall through to
+  // the same value so downstream queries return empty rather than crash.
+  const resolved = (data as { id?: string } | null)?.id ?? 'onepiece';
   cachedGameId = resolved;
   return resolved;
 }

@@ -525,13 +525,17 @@ button.nav-link, button.btn, button.chip {
   border: 1px solid transparent;
   white-space: nowrap;
 }
-.treatment-badge--standard    { background: rgba(94,107,133,0.10); color: #4A5470; border-color: rgba(94,107,133,0.28); }
-.treatment-badge--parallel    { background: rgba(31,101,166,0.14); color: #124E85; border-color: rgba(31,101,166,0.35); }
-.treatment-badge--alt-art     { background: rgba(200,140,26,0.16); color: #66450A; border-color: rgba(200,140,26,0.38); }
-.treatment-badge--manga-rare  { background: rgba(122,69,192,0.14); color: #4C2088; border-color: rgba(122,69,192,0.34); }
-.treatment-badge--special-rare{ background: rgba(232,90,44,0.14);  color: #7A2410; border-color: rgba(232,90,44,0.34); }
-.treatment-badge--promo       { background: rgba(50,156,95,0.14);  color: #185234; border-color: rgba(50,156,95,0.32); }
-.treatment-badge--sec         { background: rgba(200,140,26,0.20); color: #4A360A; border-color: rgba(200,140,26,0.44); }
+/* Treatment badges. Named after the production treatment vocabulary
+   derived from tcg_cards.collector_number suffix + rarity.
+   See src/lib/onepiece/treatment.ts + docs/onepiece/data-audit.md §7. */
+.treatment-badge--standard      { background: rgba(94,107,133,0.10); color: #4A5470; border-color: rgba(94,107,133,0.28); }
+.treatment-badge--reprint       { background: rgba(94,107,133,0.10); color: #4A5470; border-color: rgba(94,107,133,0.28); }
+.treatment-badge--parallel      { background: rgba(31,101,166,0.14); color: #124E85; border-color: rgba(31,101,166,0.35); }
+.treatment-badge--special-card  { background: rgba(232,90,44,0.14);  color: #7A2410; border-color: rgba(232,90,44,0.34); }
+.treatment-badge--secret-rare   { background: rgba(200,140,26,0.20); color: #4A360A; border-color: rgba(200,140,26,0.44); }
+.treatment-badge--treasure-rare { background: rgba(122,69,192,0.16); color: #4C2088; border-color: rgba(122,69,192,0.38); }
+.treatment-badge--promo         { background: rgba(50,156,95,0.14);  color: #185234; border-color: rgba(50,156,95,0.32); }
+.treatment-badge--leader        { background: rgba(214,58,58,0.14);  color: #6E1414; border-color: rgba(214,58,58,0.32); }
 
 /* Printing fingerprint — compact monospace pill listing set + card no.
    + edition. Makes a specific physical printing legible at a glance. */

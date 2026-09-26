@@ -86,9 +86,13 @@ async function countRows(
   table: string,
   gameId: string,
 ): Promise<number> {
+  // `game_id` exists on every counted table; `id` does not on the
+  // current-price tables (composite PK). Select the column we actually
+  // filter by so the count works uniformly across tcg_cards / tcg_sets
+  // / tcg_market_prices_current.
   const { count, error } = await supabase
     .from(table)
-    .select('id', { count: 'exact', head: true })
+    .select('game_id', { count: 'exact', head: true })
     .eq('game_id', gameId);
   if (error) {
     throw new Error(`[apps/onepiece] countRows(${table}): ${error.message}`);

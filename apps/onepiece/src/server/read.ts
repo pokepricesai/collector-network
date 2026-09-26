@@ -16,7 +16,11 @@ import {
 } from '@collector-network/market-data';
 import { getOnepieceClient, getOnepieceGameId } from './client';
 import { toOpGamedata, type OpGamedata } from '../lib/onepiece/gamedata';
-import { inferTreatment, treatmentInfo, type OpTreatmentInfo } from '../lib/onepiece/treatment';
+import {
+  inferTreatment,
+  treatmentInfo,
+  type OpTreatmentInfo,
+} from '../lib/onepiece/treatment';
 import { normaliseRarity, type OpRarity } from '../lib/onepiece/rarity';
 
 // One Piece server-only composition layer.
@@ -30,6 +34,9 @@ export interface OpPrintingView {
   printing: TcgPrinting;
   set: TcgSet | null;
   treatment: OpTreatmentInfo;
+  /** For parallels / reprints: the numeric index (`1` for `_p1`, etc.).
+   *  Null on non-suffixed treatments. Rendered on the printing fingerprint. */
+  variantIndex: number | null;
   pricing: PrintingPricing;
   imageUrl: string | null;
 }
@@ -107,25 +114,25 @@ export async function getPrintingBundle(
     pricingMap.get(printing.id) ??
     ({ printingId: printing.id, market: [], raw: [], graded: [] } as PrintingPricing);
 
-  const treatment = treatmentInfo(
-    inferTreatment({
-      edition: printing.edition,
-      finish: printing.finish,
-      rarity: card.rarity,
-    }),
-  );
+  const trace = inferTreatment({
+    collectorNumber: card.collector_number,
+    rarity: card.rarity,
+    edition: printing.edition,
+    finish: printing.finish,
+  });
 
   return {
     card: {
       card,
       set: setsById.get(card.set_id) ?? null,
       rarity: normaliseRarity(card.rarity),
-      gamedata: toOpGamedata(card.gamedata),
+      gamedata: opGamedataFromCard(card),
       printings: [
         {
           printing,
           set: setsById.get(card.set_id) ?? null,
-          treatment,
+          treatment: treatmentInfo(trace.treatment),
+          variantIndex: trace.variantIndex,
           pricing,
           imageUrl: null,
         },
@@ -155,17 +162,17 @@ async function composeBundle(
   const cardViews: OpCardView[] = cards.map((card) => {
     const cardPrintings = printingsByCard.get(card.id) ?? [];
     const printingViews: OpPrintingView[] = cardPrintings.map((printing) => {
-      const treatment = treatmentInfo(
-        inferTreatment({
-          edition: printing.edition,
-          finish: printing.finish,
-          rarity: card.rarity,
-        }),
-      );
+      const trace = inferTreatment({
+        collectorNumber: card.collector_number,
+        rarity: card.rarity,
+        edition: printing.edition,
+        finish: printing.finish,
+      });
       return {
         printing,
         set: setsById.get(printing.set_id) ?? setsById.get(card.set_id) ?? null,
-        treatment,
+        treatment: treatmentInfo(trace.treatment),
+        variantIndex: trace.variantIndex,
         pricing:
           pricingMap.get(printing.id) ??
           ({
@@ -181,12 +188,34 @@ async function composeBundle(
       card,
       set: setsById.get(card.set_id) ?? null,
       rarity: normaliseRarity(card.rarity),
-      gamedata: toOpGamedata(card.gamedata),
+      gamedata: opGamedataFromCard(card),
       printings: printingViews,
     };
   });
 
   return { name, cards: cardViews };
+}
+
+/** Build the OpGamedata view for a card, lifting `tcg_cards.rules_text`
+ *  into `effectText` when the JSON `gamedata` doesn't carry it.
+ *
+ *  Production reality (see docs/onepiece/data-audit.md §10):
+ *    * `tcg_cards.gamedata` never includes effect text for OP.
+ *    * `tcg_cards.rules_text` is populated on 91.8% of OP rows and
+ *      carries the effect line (e.g. `[On Play] Draw 1 card.`).
+ *
+ *  This is done here rather than inside `toOpGamedata` because the
+ *  gamedata parser is shape-only — it doesn't know about the top-level
+ *  card columns. Keeping the merge in the composition layer means the
+ *  parser stays a pure function of the JSON blob.
+ */
+function opGamedataFromCard(card: TcgCard): OpGamedata {
+  const parsed = toOpGamedata(card.gamedata);
+  const rulesText = (card.rules_text ?? '').trim();
+  if (rulesText.length > 0 && !parsed.effectText) {
+    return { ...parsed, effectText: rulesText };
+  }
+  return parsed;
 }
 
 function groupBy<T, K>(items: readonly T[], key: (item: T) => K): Map<K, T[]> {

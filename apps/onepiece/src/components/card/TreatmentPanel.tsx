@@ -18,19 +18,29 @@ export default function TreatmentPanel({
   printingView: OpPrintingView;
   linkToPrinting: boolean;
 }) {
-  const { treatment, pricing, printing, set } = printingView;
+  const { treatment, pricing, printing, set, variantIndex } = printingView;
   const setLabel = set?.code?.toUpperCase() ?? '—';
+  const finishLabel = printing.finish?.toUpperCase() ?? null;
+  // The variant index (`_p2` → 2) is the collector-relevant fingerprint
+  // when it exists. Chase treatments (SEC / SP CARD / TR) don't have it.
+  const treatmentToken =
+    variantIndex != null ? `${treatment.short}${variantIndex}` : treatment.short;
   const fingerprint = [
     setLabel,
     printing.collector_number ?? '—',
-    treatment.short,
+    treatmentToken,
+    ...(finishLabel ? [finishLabel] : []),
     printing.language?.toUpperCase() ?? 'EN',
   ];
 
+  const ebayTreatmentLabel =
+    variantIndex != null
+      ? `${treatment.label} #${variantIndex}`
+      : treatment.label;
   const ebay = buildEbaySearchUrl({
     cardName: cardView.card.name,
     setName: set?.name,
-    treatmentLabel: treatment.label,
+    treatmentLabel: ebayTreatmentLabel,
     language: printing.language,
   });
 
@@ -56,6 +66,7 @@ export default function TreatmentPanel({
             style={{ width: 'fit-content' }}
           >
             {treatment.label}
+            {variantIndex != null && ` #${variantIndex}`}
           </span>
           <span
             className="op-fingerprint"

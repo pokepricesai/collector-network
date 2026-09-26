@@ -7,6 +7,7 @@ import { canonicalFor } from '@/lib/seo';
 import { slugifyCardName } from '@/lib/onepiece/slug';
 import { pickCardImage } from '@/lib/onepiece/image';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
+import { TREATMENT_DISPLAY_ORDER } from '@/lib/onepiece/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import type { OpCardView, OpPrintingView } from '@/server/read';
@@ -82,16 +83,7 @@ export default async function LogicalCardPage({
     code: (typeof flat)[number]['printingView']['treatment']['code'];
     entries: typeof flat;
   }> = [];
-  const ORDER: Array<(typeof flat)[number]['printingView']['treatment']['code']> = [
-    'sec',
-    'alt-art',
-    'manga-rare',
-    'special-rare',
-    'parallel',
-    'promo',
-    'standard',
-  ];
-  for (const code of ORDER) {
+  for (const code of TREATMENT_DISPLAY_ORDER) {
     const entries = grouped.get(code);
     if (!entries || entries.length === 0) continue;
     treatmentOrder.push({ label: entries[0]!.printingView.treatment.label, code, entries });

@@ -9,6 +9,8 @@ import { pickCardImage } from '@/lib/onepiece/image';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
+import PriceHistorySpark from '@/components/card/PriceHistorySpark';
+import { getPrintingHistory } from '@/server/history';
 import type { OpCardView, OpPrintingView } from '@/server/read';
 import type { TcgCard } from '@collector-network/database';
 
@@ -277,6 +279,10 @@ export default async function PrintingPage({
               ))
             )}
           </div>
+
+          {inThisSet[0] && (
+            <PriceHistoryBlock printingId={inThisSet[0].printingView.printing.id} />
+          )}
         </section>
 
         {otherSets.length > 0 && (
@@ -347,6 +353,29 @@ export default async function PrintingPage({
         )}
       </div>
     </div>
+  );
+}
+
+async function PriceHistoryBlock({ printingId }: { printingId: string }) {
+  let history;
+  try {
+    history = await getPrintingHistory(printingId);
+  } catch {
+    return null;
+  }
+  if (history.series.length === 0) return null;
+  return (
+    <section
+      style={{
+        marginTop: 20,
+        padding: 18,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+      }}
+    >
+      <PriceHistorySpark history={history} />
+    </section>
   );
 }
 
