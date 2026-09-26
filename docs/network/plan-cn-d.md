@@ -682,43 +682,43 @@ curl -s -H "Authorization: Bearer $POKE_RESEND_KEY" \
      https://api.resend.com/domains
 ```
 
-**Findings slot** (leave PENDING; fill in during audit):
+**Findings (PASS, 2026-09-26):**
 
 | Question | Finding |
 |---|---|
-| Same Resend account/workspace as CN-C `RESEND_API_KEY`? | PENDING |
-| Existing Audiences (legacy)? Count + names | PENDING |
-| Existing Segments? Count + names + ids | PENDING |
-| Existing Topics? Count + names + ids | PENDING |
-| Existing Contacts? Approximate count + any `unsubscribed=true` populated | PENDING |
-| Existing Broadcasts? Any marketing sends already historical? | PENDING |
-| Recent Emails: transactional / marketing / both? | PENDING |
-| Verified domains? Overlap with CN-C `send.collector.network` sender? | PENDING |
-| Any suppression list entries we must preserve? | PENDING |
+| Same Resend account/workspace as CN-C `RESEND_API_KEY`? | **Yes** — `/emails` contains both PokePrices sends and Collector Network / YGOPrices sends |
+| Existing Audiences (legacy)? Count + names | 1 — `General`, id `d2a83a27-1b52-48d5-a57b-723ff9b26369` (legacy `/audiences` returns the same object as `/segments`) |
+| Existing Segments? Count + names + ids | 1 — `General` (same id as above) |
+| Existing Topics? Count + names + ids | **0** |
+| Existing Contacts? Approximate count + any `unsubscribed=true` populated | **0** |
+| Existing Broadcasts? Any marketing sends already historical? | 2 untargeted drafts, both named `Untitled` — preserve untouched |
+| Recent Emails: transactional / marketing / both? | Transactional/lifecycle only (PokePrices) + CN-C auth email. No marketing broadcasts have shipped. |
+| Verified domains? Overlap with CN-C `send.collector.network` sender? | Existing PokePrices domains + CN-C `send.collector.network` all verified in the same workspace. Preserve. |
+| Any suppression list entries we must preserve? | None material — no marketing state to migrate |
 
-**Coexistence decisions to record after audit:**
+**Coexistence decisions (recorded 2026-09-26):**
 
-1. If same account → CN-D creates the `Collector Network
-   Contacts` segment alongside any PokePrices marketing state;
-   both live in the same workspace. Add a topic naming rule:
-   PokePrices legacy topics stay untouched, CN-D uses the
-   `site:*` / `network` namespace.
-2. If different account → CN-D operates against a NEW
-   dedicated Collector Network Resend workspace; PokePrices
-   integration continues in its own account and consumes the
-   shared Supabase consent tables via CN-D's read APIs if it
-   wants to align (out of scope for CN-D1).
-3. Any existing PokePrices Contact with `unsubscribed=true`
-   MUST be preserved — CN-D never resets `unsubscribed` from
-   forward sync (already true in the design; note it
-   explicitly).
-4. Any existing PokePrices Segment we could reuse as
-   "Collector Network Contacts"? If yes, capture its id
-   instead of creating a new one.
-5. Existing Broadcasts / templates: untouched.
+1. **Same account confirmed** → CN-D creates the
+   `Collector Network Contacts` segment alongside PokePrices'
+   `General` segment. Both live in the same workspace.
+2. **Do NOT reuse or rename `General`.** CN-D creates its
+   own segment. Rationale: `General` is PokePrices' legacy
+   container; renaming or repurposing risks confusion during
+   the incremental site rollout.
+3. **Preserve everything currently in the workspace**:
+   `General` segment, both `Untitled` broadcast drafts,
+   existing PokePrices verified domains, and PokePrices'
+   ongoing lifecycle/transactional sending behaviour.
+4. **PokePrices Contacts / Topics state to migrate: none.**
+   Workspace has 0 contacts and 0 topics — CN-D1 starts from
+   a clean marketing-state slate.
+5. **Naming discipline for CN-D-owned resources**:
+   - Segment: `Collector Network Contacts`
+   - Topics: `site:ygo`, `network` (CN-D1 scope). Future:
+     `site:mtg`, `site:pokemon`, `site:onepiece`,
+     `site:lorcana` as each launches.
 
-**Audit status:** PENDING. Do not proceed to Gate B or CN-D1
-until every row above has a value.
+**Audit status:** PASS.
 
 ### Gate B — PATCH /contacts topics semantics (experimental)
 
@@ -745,22 +745,44 @@ doesn't forbid it; otherwise use a scratch account):
      **replace-all**.
 5. Delete the test contact.
 
-**Result slot** (leave PENDING; fill in during experiment):
+**Results (PASS, 2026-09-26):**
+
+Live experiment run against the shared Resend workspace using
+throwaway topics `cn-gate-b-topic-a/b/c` (all default opt_out)
+and throwaway contact `cn-gate-b-throwaway@example.com`. Every
+temporary resource deleted afterwards; workspace verified back
+to 0 topics / 0 contacts.
 
 | Question | Finding |
 |---|---|
-| PATCH `topics` behaviour | PENDING (additive / replace-all) |
-| Empty `topics: []` on PATCH — clears everything, or no-op? | PENDING |
-| PATCH with unknown topic id — 400, or silent ignore? | PENDING |
+| PATCH `topics` behaviour | **Additive / merge** |
+| Retrieval endpoint | `GET /contacts/{id}/topics` returns `data: [{id, name, description, subscription}]` — the correct observability channel (`GET /contacts/{id}` does not carry topics) |
+| Update endpoint | `PATCH /contacts/{id}/topics` — dedicated sub-resource, body is a bare array of `{id, subscription}` |
 
-Regardless of finding, CN-D's forward sync sends the full
-current topics vector on every PATCH (defensive). The
-experiment result determines only whether the reverse-sync
-`contact.updated` diff can rely on Resend returning the full
-vector on `GET` (it does; verified via the List Contacts
-response shape).
+**Observed timeline:**
+- After creating contact with `[A opt_in, B opt_in]`, GET
+  returned `A opt_in, B opt_in, C opt_out` (C's default surfaced
+  even though never explicitly set on the contact).
+- After `PATCH /contacts/{id}/topics [{C: opt_in}]`, GET
+  returned `A opt_in, B opt_in, C opt_in`.
+- **A and B were untouched by the PATCH.**
 
-**Experiment status:** PENDING.
+**Design consequence (folded into the reconciliation algorithm
+below):**
+
+- Forward sync sends the **smallest corrective PATCH**: only
+  the topics whose target state differs from Resend's current
+  observed state. Reduces API traffic and avoids sending
+  no-op subscription updates.
+- Supabase remains the source of truth. Reconciliation must
+  still READ current Resend + Supabase truth each cycle and
+  repair drift, rather than blindly replaying event history.
+- No-preference-in-Supabase = **do not PATCH** that topic.
+  Absence remains absence — CN-D never fabricates consent by
+  writing `opt_out` to a topic the user has never expressed a
+  preference on.
+
+**Experiment status:** PASS.
 
 ## Slice breakdown
 
