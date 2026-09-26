@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleHookRequest, planSends } from './handle-request.ts';
+import { buildResponse, handleHookRequest, planSends } from './handle-request.ts';
 import type { FetchLike } from './resend-transport.ts';
 import type { HookPayload, RuntimeEnv } from './types.ts';
 
@@ -356,4 +356,73 @@ test('no tokens, hashes or api-key appear in response body or observability summ
   }
   // But `sent` DOES carry a domain-only recipient tag for ops:
   assert.equal(out.sent[0]!.toDomain, 'example.com');
+});
+
+// -- buildResponse: null-body statuses ----------------------------
+//
+// Regression: the first live CN-C deploy landed emails through
+// Resend, then crashed on the return path with
+// `TypeError: Response with null body status cannot have body`
+// because 204 is a null-body status per the Fetch spec and we
+// were passing an empty string. These tests fence off that path.
+
+test('buildResponse: 204 success carries null body (no TypeError)', () => {
+  const res = buildResponse({
+    status: 204,
+    body: '', // handler still returns empty string; entry MUST NOT forward it
+    sent: [{ brand: 'ygo', action: 'signup', variant: 'default', toDomain: 'me.com' }],
+  });
+  assert.equal(res.status, 204);
+  assert.equal(res.body, null);
+});
+
+test('buildResponse: 205 / 304 also null-bodied', () => {
+  for (const status of [205, 304]) {
+    const res = buildResponse({ status, body: 'anything', sent: [] });
+    assert.equal(res.body, null);
+    assert.equal(res.status, status);
+  }
+});
+
+test('buildResponse: 401 signature failure keeps diagnostic body', async () => {
+  const res = buildResponse({
+    status: 401,
+    body: 'invalid signature',
+    sent: [],
+    errorTag: 'verify:signature-mismatch',
+  });
+  assert.equal(res.status, 401);
+  assert.equal(await res.text(), 'invalid signature');
+  assert.equal(res.headers.get('content-type'), 'text/plain');
+});
+
+test('buildResponse: 400 parse failure keeps diagnostic body', async () => {
+  const res = buildResponse({ status: 400, body: 'bad json', sent: [], errorTag: 'parse-json' });
+  assert.equal(res.status, 400);
+  assert.equal(await res.text(), 'bad json');
+});
+
+test('buildResponse: 502 Resend failure keeps diagnostic body (Supabase retries)', async () => {
+  const res = buildResponse({
+    status: 502,
+    body: 'delivery failed',
+    sent: [],
+    errorTag: 'resend-500',
+  });
+  assert.equal(res.status, 502);
+  assert.equal(await res.text(), 'delivery failed');
+});
+
+test('end-to-end: successful signup returns 204 + null body + exactly one Resend send', async () => {
+  const p = payload({ email_action_type: 'signup' as never });
+  const { rawBody, headers } = await signedPost(JSON.stringify(p));
+  const { fetch, calls } = makeMockFetch();
+  const out = await handleHookRequest({ rawBody, headers, env: ENV, doFetch: fetch, nowSeconds: () => NOW });
+  assert.equal(out.status, 204);
+  assert.equal(out.body, '');
+  assert.equal(calls.length, 1); // exactly-once dispatch
+  // And the entry-layer Response is null-bodied:
+  const res = buildResponse(out);
+  assert.equal(res.status, 204);
+  assert.equal(res.body, null);
 });

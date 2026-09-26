@@ -12,7 +12,7 @@
 //   AUTH_EMAIL_FROM_ADDRESS
 //   SEND_EMAIL_HOOK_SECRET     (base64 `v1,whsec_...` value)
 
-import { handleHookRequest } from '../_shared/handle-request.ts';
+import { buildResponse, handleHookRequest } from '../_shared/handle-request.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const Deno: any;
@@ -44,8 +44,5 @@ Deno.serve(async (req: Request) => {
     ...(out.errorTag ? { errorTag: out.errorTag } : {}),
   };
   console.log(JSON.stringify(brief));
-  return new Response(out.body, {
-    status: out.status,
-    headers: { 'content-type': 'text/plain' },
-  });
+  return buildResponse(out);
 });

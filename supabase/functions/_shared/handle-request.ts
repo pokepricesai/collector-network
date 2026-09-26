@@ -230,3 +230,27 @@ export async function handleHookRequest(input: HandleInput): Promise<HandleOutpu
 // Exported for tests that want to inspect brand fallback logic
 // without going through the full request handler.
 export { NEUTRAL_BRAND };
+
+// Map a HandleOutput to a Fetch Response. Extracted so both the
+// Deno entry and Node tests exercise the same code path.
+//
+// The 204 (No Content) status is a "null body status" per RFC 9110
+// and the Fetch spec: the Response constructor throws
+// `TypeError: Response with null body status cannot have body` if
+// you pass ANY body value including an empty string. Success on
+// this hook always returns 204, so callers that mistakenly pass
+// `out.body` (an empty string) crash the Edge Function.
+export function buildResponse(out: HandleOutput): Response {
+  if (isNullBodyStatus(out.status)) {
+    return new Response(null, { status: out.status });
+  }
+  return new Response(out.body, {
+    status: out.status,
+    headers: { 'content-type': 'text/plain' },
+  });
+}
+
+function isNullBodyStatus(status: number): boolean {
+  // Statuses that MUST NOT have a response body per the Fetch spec.
+  return status === 101 || status === 103 || status === 204 || status === 205 || status === 304;
+}
