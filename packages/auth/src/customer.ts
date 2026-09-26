@@ -161,51 +161,136 @@ export async function getMarketingConsentEvents(
 }
 
 // ── Marketing preference writes (RPC) ────────────────────────────
+//
+// CN-B: consent versions are DB-owned. The RPCs no longer accept
+// a caller-supplied text_version; they read the current version
+// from collector_consent_versions and stamp it onto the row +
+// event. Sources are still restricted to settings / preference_center
+// at the DB layer for these two RPCs.
 
-// Upsert site-scoped preference and append the corresponding event
-// atomically. The DB rejects sources other than
-// signup / settings / preference_center and requires a non-blank
-// text version.
 export async function setSiteMarketingPreference(
   supabase: SupabaseClient,
   input: {
     siteCode: SiteCode;
     optIn: boolean;
     source: UserConsentSource;
-    textVersion: string;
   },
 ): Promise<CustomerResult<null>> {
   const { error } = await supabase.rpc('set_site_marketing_preference', {
     p_site_code: input.siteCode,
     p_opt_in: input.optIn,
     p_source: input.source,
-    p_text_version: input.textVersion,
   });
   if (error) return fail(error);
   return { ok: true, value: null };
 }
 
-// Upsert network-scoped preference and append event. Same source
-// and version rules as the site variant.
 export async function setNetworkMarketingPreference(
   supabase: SupabaseClient,
   input: {
     optIn: boolean;
     source: UserConsentSource;
-    textVersion: string;
   },
 ): Promise<CustomerResult<null>> {
   const { error } = await supabase.rpc('set_network_marketing_preference', {
     p_opt_in: input.optIn,
     p_source: input.source,
-    p_text_version: input.textVersion,
   });
   if (error) return fail(error);
   return { ok: true, value: null };
 }
 
-// ── Signup-metadata constant ─────────────────────────────────────
+// ── Signup-consent application (RPC, no args) ────────────────────
 //
-// Site frontends pass this key into supabase.auth.signUp options.data
-// so record_origin_from_signup() can read it back later.
+// Reads intent + version + origin site from the caller's own
+// immutable snapshot (collector_signup_context) and writes
+// preference + event only if no existing preference row for that
+// scope exists. Idempotent. Missing snapshot = safe no-op.
+// The auth callback fires this once after session establishment.
+export async function applySignupMarketingConsent(
+  supabase: SupabaseClient,
+): Promise<CustomerResult<null>> {
+  const { error } = await supabase.rpc('apply_signup_marketing_consent');
+  if (error) return fail(error);
+  return { ok: true, value: null };
+}
+
+// ── Signup context read (RLS, own only) ──────────────────────────
+//
+// Returns the immutable snapshot captured by the auth.users
+// AFTER INSERT trigger, or null if the row does not exist (legacy
+// pre-CN-B accounts).
+export interface SignupContext {
+  user_id: string;
+  origin_site_code: SiteCode | null;
+  site_marketing_intent: boolean | null;
+  network_marketing_intent: boolean | null;
+  consent_text_version: string;
+  captured_at: string;
+}
+
+export async function getSignupContext(
+  supabase: SupabaseClient,
+): Promise<CustomerResult<SignupContext | null>> {
+  const { data, error } = await supabase
+    .from('collector_signup_context')
+    .select('*')
+    .maybeSingle();
+  if (error) return fail(error);
+  return { ok: true, value: (data as SignupContext | null) ?? null };
+}
+
+// ── Consent-version registry read ────────────────────────────────
+//
+// Publicly readable. Useful for the signup form to display the
+// exact version text it is asking the user to consent to.
+export async function getCurrentConsentVersion(
+  supabase: SupabaseClient,
+  id: 'signup' = 'signup',
+): Promise<CustomerResult<string | null>> {
+  const { data, error } = await supabase
+    .from('collector_consent_versions')
+    .select('version')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) return fail(error);
+  return { ok: true, value: (data as { version: string } | null)?.version ?? null };
+}
+
+// ── Signup-metadata constants ────────────────────────────────────
+//
+// Site frontends pass these keys into supabase.auth.signUp
+// options.data. The auth.users AFTER INSERT trigger snapshots
+// them into collector_signup_context.
+//
+// Convention: unchecked checkbox = OMIT the key entirely. Do NOT
+// send `false` for an untouched optional opt-in. This preserves
+// the tri-state model (no preference recorded / opted in /
+// explicitly opted out). Explicit opt-out only comes from
+// Settings / Preference Centre via set_*_marketing_preference.
 export const COLLECTOR_ORIGIN_SITE_KEY = 'collector_origin_site';
+export const COLLECTOR_SITE_MARKETING_OPT_IN_KEY =
+  'collector_site_marketing_opt_in';
+export const COLLECTOR_NETWORK_MARKETING_OPT_IN_KEY =
+  'collector_network_marketing_opt_in';
+
+// Build the options.data payload for supabase.auth.signUp. Passing
+// `undefined` for the site/network opt-in produces a key-omitted
+// payload (tri-state safe); passing `true` records the intent.
+// The signup UI must never pass `false` here.
+export function buildSignupMetadata(input: {
+  originSite: SiteCode;
+  siteMarketingOptIn?: true;
+  networkMarketingOptIn?: true;
+}): Record<string, string | boolean> {
+  const out: Record<string, string | boolean> = {
+    [COLLECTOR_ORIGIN_SITE_KEY]: input.originSite,
+  };
+  if (input.siteMarketingOptIn === true) {
+    out[COLLECTOR_SITE_MARKETING_OPT_IN_KEY] = true;
+  }
+  if (input.networkMarketingOptIn === true) {
+    out[COLLECTOR_NETWORK_MARKETING_OPT_IN_KEY] = true;
+  }
+  return out;
+}

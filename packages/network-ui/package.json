@@ -1,0 +1,28 @@
+{
+  "name": "@collector-network/network-ui",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "echo \"(network-ui) lint placeholder\" && exit 0",
+    "typecheck": "tsc --noEmit",
+    "build": "echo \"(network-ui) build placeholder\" && exit 0"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "react": "^19.0.0"
+  },
+  "dependencies": {
+    "@collector-network/auth": "workspace:*",
+    "@collector-network/network-config": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "typescript": "^5.6.3"
+  }
+}

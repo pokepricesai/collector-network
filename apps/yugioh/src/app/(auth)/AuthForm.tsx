@@ -3,27 +3,36 @@
 // Shared client form used by both /sign-in and /sign-up. Handles
 // email/password submission + Google OAuth start. Errors show
 // inline; success navigates to the caller-supplied return path.
+//
+// CN-B: signup form carries two optional opt-in checkboxes.
+// Unchecked = OMITTED metadata key (never `false`) so the
+// tri-state model at the DB layer stays honest.
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  COLLECTOR_ORIGIN_SITE_KEY,
+  applySignupMarketingConsent,
+  buildSignupMetadata,
   createBrowserSupabase,
   recordOriginFromSignup,
   recordSiteAuthentication,
 } from '@collector-network/auth';
+import {
+  NETWORK_CONSENT_COPY,
+  SHARED_ACCOUNT_EXPLANATION,
+  SITE_CONSENT_COPY,
+} from '@collector-network/network-config';
 import { safeReturnTo } from '../../lib/return-to';
 import { analytics } from '../../lib/analytics';
 import styles from './Auth.module.css';
 
 // This site's Collector Network code, per collector_sites.code.
-// Baked into signup metadata so record_origin_from_signup() can
-// attribute the account once confirmation completes.
 const YGO_SITE_CODE = 'ygo';
+const ygoCopy = SITE_CONSENT_COPY.ygo;
 
 // Fire an auxiliary Supabase RPC but never let its failure block
-// the auth flow. CN-A membership writes are important but
+// the auth flow. Membership + consent writes are important but
 // idempotent; the next auth event will retry.
 async function bestEffort<T>(p: Promise<T>): Promise<void> {
   try {
@@ -42,6 +51,8 @@ export function AuthForm({ mode }: Props) {
   const params = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [siteOpt, setSiteOpt] = useState(false);
+  const [networkOpt, setNetworkOpt] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -56,18 +67,20 @@ export function AuthForm({ mode }: Props) {
     try {
       const supabase = createBrowserSupabase();
       if (mode === 'sign-up') {
+        // buildSignupMetadata omits any unchecked opt-in from
+        // options.data — never sends `false`. The AFTER INSERT
+        // trigger on auth.users snapshots what actually arrives.
+        const metadata = buildSignupMetadata({
+          originSite: YGO_SITE_CODE,
+          siteMarketingOptIn: siteOpt ? true : undefined,
+          networkMarketingOptIn: networkOpt ? true : undefined,
+        });
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            // Email link → /auth/callback picks up the session and
-            // forwards to returnTo.
             emailRedirectTo: `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(returnTo)}`,
-            // CN-A: bake the origin site code into signup metadata
-            // so record_origin_from_signup() can attribute the
-            // account after email confirmation. The DB refuses
-            // unknown site codes silently — no attack surface.
-            data: { [COLLECTOR_ORIGIN_SITE_KEY]: YGO_SITE_CODE },
+            data: metadata,
           },
         });
         if (error) throw error;
@@ -77,10 +90,10 @@ export function AuthForm({ mode }: Props) {
             'Check your email to confirm your account. You can close this tab and click the link from your inbox.',
           );
         } else {
-          // Rare path (email confirmation disabled): session is
-          // established immediately at signup. Fire the CN-A RPCs
-          // client-side; failure never blocks the redirect.
+          // Rare path (email confirmation disabled): session live
+          // immediately. Apply origin + consent + membership.
           await bestEffort(recordOriginFromSignup(supabase));
+          await bestEffort(applySignupMarketingConsent(supabase));
           await bestEffort(recordSiteAuthentication(supabase, YGO_SITE_CODE));
           router.push(returnTo);
           router.refresh();
@@ -91,14 +104,10 @@ export function AuthForm({ mode }: Props) {
           password,
         });
         if (error) throw error;
-        // Password sign-in never visits /auth/callback, so we fire
-        // the CN-A membership RPCs here. record_origin_from_signup
-        // is idempotent - if the user has no origin yet AND their
-        // signup metadata carries collector_origin_site='ygo' (i.e.
-        // they originally signed up on YGO before CN-A shipped and
-        // we backfill metadata some other way, or they signed up
-        // post-CN-A), origin gets attributed. Otherwise no-op.
+        // Password sign-in never visits /auth/callback. All three
+        // RPCs are idempotent replay-safe.
         await bestEffort(recordOriginFromSignup(supabase));
+        await bestEffort(applySignupMarketingConsent(supabase));
         await bestEffort(recordSiteAuthentication(supabase, YGO_SITE_CODE));
         router.push(returnTo);
         router.refresh();
@@ -115,6 +124,16 @@ export function AuthForm({ mode }: Props) {
     setPending(true);
     try {
       const supabase = createBrowserSupabase();
+      // Google OAuth also carries signup metadata for first-time
+      // users. The Supabase pattern for OAuth signup is to bake
+      // options.data into the flow via the query state; simplest
+      // Supabase OAuth options do not accept `data` the way signUp
+      // does, and the auth.users AFTER INSERT trigger has already
+      // fired by the time we could call updateUser({data:...}) to
+      // populate metadata. Accept for CN-B first cut that OAuth
+      // signups have empty snapshots: origin stays null, signup
+      // consent is not captured. OAuth users can still opt in
+      // later via /settings or /email-preferences.
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -141,7 +160,7 @@ export function AuthForm({ mode }: Props) {
       <p className={styles.subtitle}>
         {mode === 'sign-in'
           ? 'One YGOPrices account across collections, watchlists and decks. Browse without signing in whenever you want.'
-          : 'One YGOPrices account across collections, watchlists and decks. Free - no card required.'}
+          : SHARED_ACCOUNT_EXPLANATION}
       </p>
 
       <button
@@ -206,6 +225,41 @@ export function AuthForm({ mode }: Props) {
             className={styles.input}
           />
         </label>
+
+        {/* CN-B: two OPTIONAL opt-in checkboxes on signup only.
+            Both unchecked by default. Leaving them unchecked
+            omits the metadata key (never sends false) so the DB
+            snapshot records "no preference" not "opted out". */}
+        {mode === 'sign-up' && (
+          <fieldset className={styles.consentGroup}>
+            <legend className={styles.consentLegend}>Email preferences (optional)</legend>
+            <label className={styles.consentRow}>
+              <input
+                type="checkbox"
+                checked={siteOpt}
+                onChange={(e) => setSiteOpt(e.target.checked)}
+                className={styles.consentCheckbox}
+              />
+              <span>
+                <span className={styles.consentLabel}>{ygoCopy.label}</span>
+                <span className={styles.consentDesc}>{ygoCopy.description}</span>
+              </span>
+            </label>
+            <label className={styles.consentRow}>
+              <input
+                type="checkbox"
+                checked={networkOpt}
+                onChange={(e) => setNetworkOpt(e.target.checked)}
+                className={styles.consentCheckbox}
+              />
+              <span>
+                <span className={styles.consentLabel}>{NETWORK_CONSENT_COPY.label}</span>
+                <span className={styles.consentDesc}>{NETWORK_CONSENT_COPY.description}</span>
+              </span>
+            </label>
+          </fieldset>
+        )}
+
         {error && <p className={styles.error}>{error}</p>}
         {info && <p className={styles.info}>{info}</p>}
         <button type="submit" className={styles.submit} disabled={pending}>

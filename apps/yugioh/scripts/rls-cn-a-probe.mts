@@ -283,41 +283,27 @@ async function main() {
 
   // ── RPC boundary: reject admin/migration/brevo_webhook ─
   console.log('\nStep 6 — user-facing consent RPC rejects trusted-only sources');
-  for (const bad of ['admin', 'migration', 'brevo_webhook']) {
+  // CN-B tightened: 'signup' is also rejected because signup consent
+  // now flows through the dedicated apply_signup_marketing_consent
+  // RPC. 'admin' / 'migration' / 'brevo_webhook' remain valid at the
+  // table CHECK for future trusted callers but are rejected here.
+  for (const bad of ['signup', 'admin', 'migration', 'brevo_webhook']) {
     const { error } = await A.sb.rpc('set_site_marketing_preference', {
       p_site_code: 'ygo',
       p_opt_in: true,
       p_source: bad,
-      p_text_version: 'v1',
     });
     check(`source='${bad}' rejected on site preference`, !!error, error?.message ?? '(no error)');
     const { error: ne } = await A.sb.rpc('set_network_marketing_preference', {
       p_opt_in: true,
       p_source: bad,
-      p_text_version: 'v1',
     });
     check(`source='${bad}' rejected on network preference`, !!ne, ne?.message ?? '(no error)');
   }
 
-  // ── Blank text version rejected ──────────────────────
-  console.log('\nStep 7 — blank consent_text_version rejected');
-  {
-    for (const bad of [null, '', '   ']) {
-      const { error } = await A.sb.rpc('set_site_marketing_preference', {
-        p_site_code: 'ygo',
-        p_opt_in: true,
-        p_source: 'signup',
-        p_text_version: bad as string | null,
-      });
-      check(`site: text_version=${JSON.stringify(bad)} rejected`, !!error);
-      const { error: ne } = await A.sb.rpc('set_network_marketing_preference', {
-        p_opt_in: true,
-        p_source: 'signup',
-        p_text_version: bad as string | null,
-      });
-      check(`network: text_version=${JSON.stringify(bad)} rejected`, !!ne);
-    }
-  }
+  // Step 7 (blank text_version) removed - CN-B RPCs no longer
+  // accept a caller-supplied consent version. The version is
+  // sourced from collector_consent_versions inside the RPC.
 
   // ── Site and network consent independent ─────────────
   console.log('\nStep 8 — site and network consent stay independent');
@@ -327,7 +313,6 @@ async function main() {
       p_site_code: 'ygo',
       p_opt_in: true,
       p_source: 'settings',
-      p_text_version: 'ygo-v1',
     });
     check('A site opt-in succeeds', !siteOpt, siteOpt?.message);
 
@@ -342,7 +327,6 @@ async function main() {
     const { error: netOpt } = await A.sb.rpc('set_network_marketing_preference', {
       p_opt_in: true,
       p_source: 'settings',
-      p_text_version: 'network-v1',
     });
     check('A network opt-in succeeds', !netOpt, netOpt?.message);
 
@@ -358,7 +342,6 @@ async function main() {
       p_site_code: 'ygo',
       p_opt_in: false,
       p_source: 'preference_center',
-      p_text_version: 'ygo-v1',
     });
     check('A site opt-out succeeds', !siteOut, siteOut?.message);
 

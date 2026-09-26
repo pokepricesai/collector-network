@@ -4,7 +4,9 @@ import { Footer } from '../../components/Footer';
 import { Header } from '../../components/Header';
 import { readYgoProfile } from '../../lib/user-profile';
 import styles from '../account/Account.module.css';
+import { ChangeEmailForm } from './ChangeEmailForm';
 import { DangerZone } from './DangerZone';
+import { EmailPreferencesMount } from './EmailPreferencesMount';
 import { SettingsForm } from './SettingsForm';
 
 export const metadata: Metadata = {
@@ -33,26 +35,21 @@ export default async function SettingsPage() {
         </section>
 
         <section className={styles.section}>
+          <EmailPreferencesMount siteCode="ygo" source="settings" />
+        </section>
+
+        <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Account</h2>
-          <div className={styles.form}>
-            <div className={styles.field}>
-              <span className={styles.label}>Email</span>
-              <span
-                style={{
-                  fontFamily: 'var(--ygo-font-mono)',
-                  fontSize: 13,
-                  color: 'var(--ygo-text-muted)',
-                }}
-              >
-                {user.email ?? '(no email on file)'}
-              </span>
-            </div>
-            <form method="post" action="/auth/sign-out">
-              <button type="submit" className={styles.submit}>
-                Sign out
-              </button>
-            </form>
-          </div>
+          <ChangeEmailForm currentEmail={user.email ?? null} />
+          <form
+            method="post"
+            action="/auth/sign-out"
+            style={{ marginTop: 'var(--ygo-size-base)' }}
+          >
+            <button type="submit" className={styles.submit}>
+              Sign out
+            </button>
+          </form>
         </section>
 
         <section className={styles.section}>

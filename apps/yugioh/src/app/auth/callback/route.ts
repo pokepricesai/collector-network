@@ -17,6 +17,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import {
+  applySignupMarketingConsent,
   createServerSupabase,
   recordOriginFromSignup,
   recordSiteAuthentication,
@@ -45,15 +46,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(failUrl);
     }
 
-    // CN-A membership + origin. Idempotent: the origin RPC only
-    // acts if the user has no origin yet AND signup metadata
-    // carries a known collector_origin_site. Both calls tolerate
-    // failure without breaking the auth flow.
+    // CN-A + CN-B membership + origin + signup consent. All three
+    // RPCs are idempotent replay-safe. Failure of any single call
+    // never breaks the auth flow - the next auth event retries.
+    //   • record_origin_from_signup: sets originated_here only
+    //     if the immutable snapshot carries a known origin site
+    //     AND no origin row exists yet.
+    //   • apply_signup_marketing_consent: writes site/network
+    //     preference + event ONLY if intent captured at signup
+    //     AND no preference row for that scope exists.
+    //   • record_site_authentication: creates/refreshes the YGO
+    //     membership row for this shared user.
     try {
       await recordOriginFromSignup(supabase);
+      await applySignupMarketingConsent(supabase);
       await recordSiteAuthentication(supabase, YGO_SITE_CODE);
     } catch (err) {
-      console.error('[yugioh/auth-callback] CN-A membership rpc failed', err);
+      console.error('[yugioh/auth-callback] CN membership rpc failed', err);
     }
   }
   return NextResponse.redirect(dest);
