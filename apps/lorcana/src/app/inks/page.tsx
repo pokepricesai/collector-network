@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LC_INKS, LC_INK_LABEL, LC_INK_DESCRIPTOR } from '@/lib/lorcana/ink';
 import { canonicalFor } from '@/lib/seo';
+import Faq from '@/components/Faq';
+import { INKS_FAQ } from '@/lib/faq-content';
 
 export const metadata: Metadata = {
   title: 'Lorcana ink colours — Amber, Amethyst, Emerald, Ruby, Sapphire, Steel',
@@ -98,6 +100,8 @@ export default function InksIndex() {
             </Link>
           ))}
         </div>
+
+        <Faq title="About Lorcana inks" entries={INKS_FAQ} />
       </div>
     </div>
   );

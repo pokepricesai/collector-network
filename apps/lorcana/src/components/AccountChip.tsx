@@ -2,31 +2,46 @@ import Link from 'next/link';
 import { getCurrentUser } from '@collector-network/auth';
 
 // Auth chip rendered inside the Navbar. Server component so we can
-// read the session cookie on every request. Signed-out state = a
-// simple "Sign in" link; signed-in state = a chip that links to
-// /account (avatar UI stays minimal until we build a mini-dropdown).
+// read the session cookie on every request.
+//
+// Signed-out state:  Sign in (secondary link) + Create account (primary CTA).
+// Signed-in state:   User chip → /account.
 
 export async function AccountChip() {
   const user = await getCurrentUser();
   if (!user) {
     return (
-      <Link
-        href="/sign-in"
-        className="nav-link"
-        style={{
-          flexShrink: 0,
-          padding: '7px 14px',
-          borderRadius: 10,
-          background: 'var(--surface)',
-          border: '1px solid var(--border-strong, var(--border))',
-          color: 'var(--text)',
-          textDecoration: 'none',
-          fontSize: 13.5,
-          fontWeight: 600,
-        }}
-      >
-        Sign in
-      </Link>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <Link
+          href="/sign-in"
+          className="nav-link"
+          style={{
+            padding: '7px 12px',
+            borderRadius: 10,
+            color: 'var(--text)',
+            textDecoration: 'none',
+            fontSize: 13.5,
+            fontWeight: 600,
+          }}
+        >
+          Sign in
+        </Link>
+        <Link
+          href="/sign-up"
+          style={{
+            padding: '8px 14px',
+            borderRadius: 10,
+            background: 'var(--primary, #6A43BE)',
+            color: '#fff',
+            textDecoration: 'none',
+            fontSize: 13.5,
+            fontWeight: 700,
+            border: '1px solid transparent',
+          }}
+        >
+          Sign up
+        </Link>
+      </div>
     );
   }
   const initial =
@@ -43,7 +58,7 @@ export async function AccountChip() {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 8,
-        padding: '5px 10px 5px 5px',
+        padding: '5px 12px 5px 5px',
         borderRadius: 999,
         background: 'var(--surface)',
         border: '1px solid var(--border-strong, var(--border))',

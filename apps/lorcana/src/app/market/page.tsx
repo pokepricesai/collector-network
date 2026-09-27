@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getPricedTiles } from '@/server/discovery';
 import CardBoard from '@/components/home/CardBoard';
+import Faq from '@/components/Faq';
+import { MARKET_FAQ } from '@/lib/faq-content';
 import { SITE_URL } from '@/lib/site-url';
 
 export const revalidate = 900;
@@ -106,6 +108,8 @@ export default async function MarketPage() {
           </p>
         </div>
       </section>
+
+      <Faq title="Understanding the market" entries={MARKET_FAQ} />
     </div>
   );
 }

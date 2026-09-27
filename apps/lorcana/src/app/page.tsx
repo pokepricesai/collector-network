@@ -4,6 +4,8 @@ import LatestSets from '@/components/home/LatestSets';
 import MostValuable from '@/components/home/MostValuable';
 import EnchantedSpotlight from '@/components/home/EnchantedSpotlight';
 import InksExplorer from '@/components/home/InksExplorer';
+import Faq from '@/components/Faq';
+import { HOMEPAGE_FAQ } from '@/lib/faq-content';
 import { getHomepageData } from '@/server/homepage';
 import { SITE_URL } from '@/lib/site-url';
 
@@ -37,6 +39,13 @@ export default async function HomePage() {
       <MostValuable tiles={payload.mostValuable} />
       <LatestSets sets={payload.latestSets} />
       <InksExplorer />
+      <div className="lc-container" style={{ maxWidth: 900 }}>
+        <Faq
+          title="Frequently asked questions"
+          intro="Everything a Lorcana collector usually wants to know before signing up. Skip straight to the pages you need — every answer links out."
+          entries={HOMEPAGE_FAQ}
+        />
+      </div>
     </>
   );
 }

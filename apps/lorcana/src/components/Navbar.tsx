@@ -32,34 +32,31 @@ const PRIMARY_LINKS_MEDIUM: NavItem[] = [
 ];
 
 const TOOLS_LINKS: NavItem[] = [
-  { label: 'Enchanted chase', href: '/market#enchanted' },
-  { label: 'Iconic overprints', href: '/market#iconic' },
-  { label: 'Most valuable',   href: '/market#most-valuable' },
+  { label: 'Iconic tier',      href: '/market/iconic' },
+  { label: 'Most valuable',    href: '/market#most-valuable' },
 ];
 
 const MEDIUM_TOOLS_LINKS: NavItem[] = [
-  { label: 'Inks',        href: '/inks' },
-  { label: 'Card Finder', href: '/card-finder' },
+  { label: 'Enchanted',    href: '/market/enchanted' },
+  { label: 'Inks',         href: '/inks' },
   ...TOOLS_LINKS,
 ];
 
 const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
   {
-    title: 'Cards & Sets',
+    title: 'Find cards',
     items: [
-      { label: 'Search cards', href: '/cards/search' },
+      { label: 'Card Finder',  href: '/card-finder' },
       { label: 'Browse sets',  href: '/browse' },
       { label: 'Inks',         href: '/inks' },
-      { label: 'Card Finder',  href: '/card-finder' },
     ],
   },
   {
     title: 'Market',
     items: [
       { label: 'Movers',           href: '/market' },
-      { label: 'Enchanted chase',  href: '/market#enchanted' },
-      { label: 'Iconic overprints', href: '/market#iconic' },
-      { label: 'Most valuable',    href: '/market#most-valuable' },
+      { label: 'Enchanted cards',  href: '/market/enchanted' },
+      { label: 'Iconic tier',      href: '/market/iconic' },
     ],
   },
   {
@@ -72,8 +69,10 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Account',
     items: [
       { label: 'My Collection', href: '/collection' },
-      { label: 'Account', href: '/account' },
-      { label: 'Sign in', href: '/sign-in' },
+      { label: 'Account',       href: '/account' },
+      { label: 'Settings',      href: '/settings' },
+      { label: 'Sign in',       href: '/sign-in' },
+      { label: 'Create account', href: '/sign-up' },
     ],
   },
 ];

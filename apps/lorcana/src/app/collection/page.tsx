@@ -6,6 +6,8 @@ import { CollectionRowActions } from './CollectionRowActions';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug } from '@/lib/lorcana/slug';
 import { pickCardImage } from '@/lib/lorcana/image';
+import Faq from '@/components/Faq';
+import { COLLECTION_FAQ } from '@/lib/faq-content';
 
 export const metadata: Metadata = {
   title: 'My Lorcana Collection',
@@ -243,6 +245,8 @@ export default async function CollectionPage() {
           })}
         </section>
       )}
+
+      <Faq title="About the collection tracker" entries={COLLECTION_FAQ} />
     </main>
   );
 }

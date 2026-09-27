@@ -11,7 +11,11 @@ import { TREATMENT_DISPLAY_ORDER } from '@/lib/lorcana/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import EffectText from '@/components/card/EffectText';
-import EbayFindButton from '@/components/EbayFindButton';
+import EbayFindButton, { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
+import { CollectionPromptStrip } from '@/components/card/CollectionPromptStrip';
+import AskLorcanaPanel from '@/components/card/AskLorcanaPanel';
+import Faq from '@/components/Faq';
+import { buildCardFaq } from '@/server/faq-card';
 import type { LcCardView, LcPrintingView } from '@/server/read';
 
 // Logical / gameplay card page. Shows every printing across every set
@@ -79,6 +83,35 @@ export default async function LogicalCardPage({
     if (!entries || entries.length === 0) continue;
     treatmentOrder.push({ label: entries[0]!.printingView.treatment.label, code, entries });
   }
+
+  // Compute deterministic FAQ from the bundle. Prices pulled from the
+  // printings' known retail (`market`) rows.
+  const allPrices: Array<{ amount: number; currency: string }> = [];
+  for (const { printingView } of flat) {
+    const p = printingView.pricing?.market;
+    if (p && p.length > 0) {
+      for (const q of p) {
+        if (q.price != null && q.currency) allPrices.push({ amount: q.price, currency: q.currency });
+      }
+    }
+  }
+  // Rank strictly within the dominant currency.
+  const currCounts = new Map<string, number>();
+  for (const p of allPrices) currCounts.set(p.currency, (currCounts.get(p.currency) ?? 0) + 1);
+  const dominant = Array.from(currCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const inCurrency = dominant ? allPrices.filter((p) => p.currency === dominant) : [];
+  const cheapestPrice = inCurrency.length
+    ? { amount: Math.min(...inCurrency.map((p) => p.amount)), currency: dominant! } : null;
+  const dearestPrice = inCurrency.length
+    ? { amount: Math.max(...inCurrency.map((p) => p.amount)), currency: dominant! } : null;
+  const cardFaqEntries = buildCardFaq({
+    name: bundle.name,
+    cards: bundle.cards,
+    flatPrintings: flat,
+    hero: heroCard,
+    cheapestPrice,
+    dearestPrice,
+  });
 
   const canonical = canonicalFor(`/card/${slugifyCardName(bundle.name)}`);
   const breadcrumbLd = {
@@ -166,11 +199,16 @@ export default async function LogicalCardPage({
             </div>
           </div>
 
-          {/* Prominent affiliate CTA — buy this card. Sits high, near
-              the title / info chips, above the stat grid so the
-              purchase intent is obvious. Uses the shared @collector-
-              network/affiliate builder with the LorcanaPrices EPN
-              campaign id. */}
+          {/* Prominent collection prompt — signed-out: sign-in/sign-up
+              CTAs; signed-in: soft nudge to the treatments panel below.
+              This is the dominant post-title action per the launch brief. */}
+          <CollectionPromptStrip
+            cardName={bundle.name}
+            returnPath={`/card/${slugifyCardName(bundle.name)}`}
+          />
+
+          {/* Smaller, secondary affiliate CTA. Long disclosure lives at
+              the bottom of the page (EbayAffiliateDisclosure). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <EbayFindButton
               cardName={bundle.name}
@@ -178,9 +216,8 @@ export default async function LogicalCardPage({
               setCode={heroCard.set?.code ?? null}
               collectorNumber={heroCard.card.collector_number ?? null}
               source="lorcana-card"
-              size="lg"
+              size="sm"
               label={`Find ${bundle.name} on eBay`}
-              disclose
             />
           </div>
 
@@ -236,6 +273,36 @@ export default async function LogicalCardPage({
           </div>
         ))}
       </section>
+
+      <AskLorcanaPanel
+        cardId={heroCard.card.id}
+        cardName={bundle.name}
+        contextSummary={[
+          `Name: ${bundle.name}`,
+          heroCard.set?.name ? `Set: ${heroCard.set.name} (${heroCard.set.code?.toUpperCase() ?? ''})` : '',
+          `Rarity: ${heroCard.rarity.label}`,
+          heroCard.gamedata.inks.length ? `Ink${heroCard.gamedata.inks.length === 1 ? '' : 's'}: ${heroCard.gamedata.inks.join(', ')}` : '',
+          typeof heroCard.gamedata.inkCost === 'number' ? `Ink cost: ${heroCard.gamedata.inkCost}` : '',
+          typeof heroCard.gamedata.strength === 'number' ? `Strength: ${heroCard.gamedata.strength}` : '',
+          typeof heroCard.gamedata.willpower === 'number' ? `Willpower: ${heroCard.gamedata.willpower}` : '',
+          typeof heroCard.gamedata.lore === 'number' ? `Lore: ${heroCard.gamedata.lore}` : '',
+          heroCard.gamedata.classifications?.length ? `Classifications: ${heroCard.gamedata.classifications.join(', ')}` : '',
+          `Treatments: ${treatmentOrder.map((t) => t.label).join(', ')}`,
+          `Total printings tracked: ${flat.length}`,
+          cheapestPrice ? `Cheapest current retail: ${cheapestPrice.amount} ${cheapestPrice.currency}` : 'No live retail row.',
+          dearestPrice && dearestPrice.amount !== cheapestPrice?.amount ? `Dearest current retail: ${dearestPrice.amount} ${dearestPrice.currency}` : '',
+          heroCard.gamedata.effectText ? `Rules text: ${heroCard.gamedata.effectText}` : '',
+        ].filter(Boolean).join('\n')}
+        suggestions={[
+          `What makes ${bundle.name} collectible?`,
+          `What printings of ${bundle.name} exist?`,
+          `How does ${bundle.name}'s current price compare with its other printings?`,
+        ]}
+      />
+
+      <Faq title={`FAQ — ${bundle.name}`} entries={cardFaqEntries} />
+
+      <EbayAffiliateDisclosure />
     </div>
   );
 }

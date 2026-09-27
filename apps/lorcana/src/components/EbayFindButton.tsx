@@ -40,42 +40,60 @@ export default function EbayFindButton(props: EbayFindButtonProps) {
     finishOrTreatment: props.finishOrTreatment ?? null,
     source: props.source,
   });
-  const size = SIZES[props.size ?? 'md'];
-  const label = props.label ?? (props.sealedSearchTerm
+  // Default to 'sm' — the previous 'lg' was visually overpowering
+  // the primary Add-to-Collection action. Callers who want a bigger
+  // treatment can still request it.
+  const size = SIZES[props.size ?? 'sm'];
+  const baseLabel = props.label ?? (props.sealedSearchTerm
     ? `Find sealed ${props.setName ?? 'Lorcana'} on eBay`
     : (props.finishOrTreatment ? `Find ${props.finishOrTreatment} copies on eBay` : `Find on eBay`));
+  // Single asterisk footnote marker per launch brief. Long disclosure
+  // now lives in the page footer (EbayAffiliateDisclosure component).
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      <a
-        href={link.href}
-        target="_blank"
-        rel="sponsored nofollow noopener noreferrer"
-        data-affiliate={link.affiliate ? '1' : '0'}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: size.padding,
-          borderRadius: size.borderRadius,
-          background: 'linear-gradient(180deg, #f5c518 0%, #e0b21b 100%)',
-          color: '#1a1a1a',
-          fontWeight: 700,
-          fontSize: size.fontSize,
-          letterSpacing: '0.02em',
-          textDecoration: 'none',
-          border: '1px solid rgba(0, 0, 0, 0.15)',
-          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <span>{label}</span>
-        <span aria-hidden style={{ fontSize: '0.85em', opacity: 0.7 }}>↗</span>
-      </a>
-      {props.disclose && (
-        <span style={{ fontSize: 11, color: 'var(--text-muted, #6a5a41)' }}>
-          Affiliate. We may earn a commission from qualifying eBay purchases.
-        </span>
-      )}
-    </span>
+    <a
+      href={link.href}
+      target="_blank"
+      rel="sponsored nofollow noopener noreferrer"
+      data-affiliate={link.affiliate ? '1' : '0'}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: size.padding,
+        borderRadius: size.borderRadius,
+        background: 'linear-gradient(180deg, #f5c518 0%, #e0b21b 100%)',
+        color: '#1a1a1a',
+        fontWeight: 700,
+        fontSize: size.fontSize,
+        letterSpacing: '0.01em',
+        textDecoration: 'none',
+        border: '1px solid rgba(0, 0, 0, 0.15)',
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span>{baseLabel}<sup style={{ fontSize: '0.8em', marginLeft: 2 }}>*</sup></span>
+      <span aria-hidden style={{ fontSize: '0.85em', opacity: 0.7 }}>↗</span>
+    </a>
+  );
+}
+
+/** Small unobtrusive affiliate disclosure. Reused on card + set + any
+ *  page that renders an EbayFindButton. */
+export function EbayAffiliateDisclosure() {
+  return (
+    <p
+      style={{
+        marginTop: 32,
+        marginBottom: 0,
+        fontSize: 11,
+        lineHeight: 1.55,
+        color: 'var(--text-subtle, #7a6a4a)',
+        textAlign: 'center',
+      }}
+    >
+      * Affiliate link. LorcanaPrices may earn a commission from
+      qualifying purchases at no additional cost to you.
+    </p>
   );
 }

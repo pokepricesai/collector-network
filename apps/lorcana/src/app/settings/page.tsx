@@ -1,71 +1,64 @@
+// apps/lorcana/src/app/settings/page.tsx
+//
+// Editable user settings. Modelled on MTGPrices' /settings layout with
+// sections stacked vertically:
+//   Account     email + sign-out
+//   Password    reset-password link
+//   Danger zone delete-account (soft — signs out + advisory)
+//
+// Reuses the shared @collector-network/auth pipeline. No per-app auth.
+
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { requireUser } from '@collector-network/auth';
-
-// Settings surface. Deliberately minimal because auth is shared with
-// the rest of the Collector Network — profile-level changes (password,
-// email) will land network-wide, not per-app. This page currently
-// gives the user a landing they can bookmark plus the "manage" hooks
-// that already work (session sign-out).
-
-export const metadata: Metadata = {
-  title: 'Settings',
-  robots: { index: false, follow: true },
-};
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@collector-network/auth';
+import { canonicalFor } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata: Metadata = {
+  title: 'Settings',
+  description: 'LorcanaPrices settings.',
+  alternates: { canonical: canonicalFor('/settings') },
+  robots: { index: false, follow: false },
+};
+
 export default async function SettingsPage() {
-  const user = await requireUser('/settings');
+  const user = await getCurrentUser();
+  if (!user) redirect('/sign-in?next=/settings');
 
   return (
-    <main style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px 80px' }}>
-      <header style={{ marginBottom: 22 }}>
-        <div className="label-mono" style={{ color: 'var(--accent-2)' }}>Settings</div>
-        <h1 style={{ margin: '4px 0 4px', fontFamily: 'Outfit, system-ui, sans-serif', fontSize: 28 }}>
-          Manage your account
-        </h1>
-        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
-          One Collector Network login covers YGO, One Piece and Lorcana.
-          Changes made here apply everywhere.
+    <div style={{ maxWidth: 780, margin: '40px auto', padding: '0 24px 80px' }}>
+      <div className="label-mono">Settings</div>
+      <h1 style={{ margin: '6px 0 0', fontSize: 28, color: 'var(--text-strong)' }}>Settings</h1>
+      <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 6, lineHeight: 1.55 }}>
+        Manage your LorcanaPrices account and identity. One Collector
+        Network login covers Yu-Gi-Oh, One Piece and Lorcana — changes
+        apply everywhere.
+      </p>
+
+      {/* Account identity */}
+      <section id="account" style={{
+        marginTop: 22, padding: 22, background: 'var(--surface)',
+        border: '1px solid var(--border)', borderRadius: 14,
+      }}>
+        <div className="label-mono" style={{ marginBottom: 8, color: 'var(--ink-amethyst-ink, #2A1462)' }}>Account</div>
+        <h2 style={{ margin: 0, fontSize: 20, color: 'var(--text-strong)' }}>Sign in and identity</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6, lineHeight: 1.55 }}>
+          Your sign in identity is shared with the wider Collector Network.
+          Changing your email or password here applies everywhere.
         </p>
-      </header>
-
-      <div style={{ display: 'grid', gap: 16 }}>
-        <section style={panel}>
-          <div className="label-mono" style={{ marginBottom: 6 }}>Profile</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, fontSize: 14 }}>
-            <div style={{ color: 'var(--text-muted)' }}>Email</div>
-            <div style={{ color: 'var(--text-strong)' }}>{user.email ?? '—'}</div>
-            <div style={{ color: 'var(--text-muted)' }}>Signed up</div>
-            <div style={{ color: 'var(--text-strong)' }}>
-              {user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', {
-                year: 'numeric', month: 'long', day: 'numeric',
-              }) : '—'}
-            </div>
-          </div>
-        </section>
-
-        <section style={panel}>
-          <div className="label-mono" style={{ marginBottom: 6 }}>Collection</div>
-          <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
-            Manage the cards you own. Add or edit raw and graded holdings
-            with live valuation.
-          </p>
-          <Link href="/collection" className="btn btn-primary btn-sm">
-            Open my collection →
-          </Link>
-        </section>
-
-        <section style={panel}>
-          <div className="label-mono" style={{ marginBottom: 6 }}>Session</div>
-          <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
-            End your session on this device. Your account, collection and
-            preferences remain intact.
-          </p>
+        <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13 }}>
+          <div><strong>Email</strong> {user.email ?? 'no email on file'}</div>
+          {user.created_at && (
+            <div style={{ marginTop: 4 }}><strong>Joined</strong> {new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+          )}
+        </div>
+        <div style={{ marginTop: 14 }}>
           <form action="/auth/sign-out" method="post">
             <button
               type="submit"
+              className="btn btn-sm btn-ghost"
               style={{
                 padding: '9px 14px',
                 borderRadius: 8,
@@ -81,15 +74,61 @@ export default async function SettingsPage() {
               Sign out
             </button>
           </form>
-        </section>
-      </div>
-    </main>
+        </div>
+      </section>
+
+      {/* Password */}
+      <section id="password" style={{
+        marginTop: 18, padding: 22, background: 'var(--surface)',
+        border: '1px solid var(--border)', borderRadius: 14,
+      }}>
+        <div className="label-mono" style={{ marginBottom: 8, color: 'var(--ink-amethyst-ink, #2A1462)' }}>Password</div>
+        <h2 style={{ margin: 0, fontSize: 20, color: 'var(--text-strong)' }}>Change password</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6, lineHeight: 1.55 }}>
+          Password reset is delivered by email through the shared
+          Collector Network auth pipeline.
+        </p>
+        <div style={{ marginTop: 12 }}>
+          <Link href="/account/reset-password" className="btn btn-sm btn-primary">Reset password</Link>
+        </div>
+      </section>
+
+      {/* Danger zone */}
+      <section id="danger" style={{
+        marginTop: 18, padding: 22, background: 'var(--surface)',
+        border: '1px solid rgba(193,56,73,0.35)', borderRadius: 14,
+      }}>
+        <div className="label-mono" style={{ marginBottom: 8, color: '#C13849' }}>Danger zone</div>
+        <h2 style={{ margin: 0, fontSize: 20, color: 'var(--text-strong)' }}>Delete account</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6, lineHeight: 1.55 }}>
+          Deletes your LorcanaPrices collection holdings and revokes this
+          account&apos;s access to the shared Collector Network. If your
+          identity is shared with other sites you will lose access
+          there too. This action cannot be undone.
+        </p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6, lineHeight: 1.55 }}>
+          Delete-account is currently handled by contacting support so we
+          can confirm the shared-identity impact before the deletion runs.
+        </p>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <a
+            href={`mailto:hello@lorcanaprices.io?subject=${encodeURIComponent('Delete my LorcanaPrices account')}&body=${encodeURIComponent(`Please delete the account associated with ${user.email ?? 'my email'}.`)}`}
+            className="btn btn-sm"
+            style={{
+              padding: '9px 14px',
+              borderRadius: 8,
+              background: 'transparent',
+              color: '#C13849',
+              border: '1px solid rgba(193,56,73,0.4)',
+              textDecoration: 'none',
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            Request account deletion
+          </a>
+        </div>
+      </section>
+    </div>
   );
 }
-
-const panel: React.CSSProperties = {
-  padding: 18,
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 12,
-};

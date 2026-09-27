@@ -13,7 +13,9 @@ import { normaliseRarity } from '@/lib/lorcana/rarity';
 import { toLcGamedata } from '@/lib/lorcana/gamedata';
 import { pickCardImage } from '@/lib/lorcana/image';
 import { SetMarketOverview } from '@/components/SetMarketOverview';
-import EbayFindButton from '@/components/EbayFindButton';
+import EbayFindButton, { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
+import Faq from '@/components/Faq';
+import { buildSetFaq } from '@/server/faq-set';
 import { SetGridClient, type SetGridEntry } from '@/components/SetGridClient';
 import RarityDistribution from '@/components/set/RarityDistribution';
 import FinishSplitPanel from '@/components/set/FinishSplitPanel';
@@ -261,6 +263,19 @@ export default async function SetPage({
           </div>
 
           <SetGridClient entries={entries} />
+
+          <Faq
+            title={`FAQ — ${set.name}`}
+            entries={buildSetFaq({
+              set,
+              cards: [...cards],
+              market,
+              uniqueNames,
+              rarityCounts,
+            })}
+          />
+
+          <EbayAffiliateDisclosure />
         </>
       )}
     </div>

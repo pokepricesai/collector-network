@@ -5,6 +5,8 @@ import { LC_INKS, LC_INK_LABEL } from '@/lib/lorcana/ink';
 import { LC_CARD_TYPES, LC_CARD_TYPE_LABEL } from '@/lib/lorcana/card-type';
 import { findCards, type FindFilters } from '@/server/find';
 import CardBoard from '@/components/home/CardBoard';
+import Faq from '@/components/Faq';
+import { CARD_FINDER_FAQ } from '@/lib/faq-content';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -158,6 +160,8 @@ export default async function CardFinderPage({ searchParams }: Props) {
         <Link href="/card-finder?inkable=false" className="chip chip-btn">Uninkable</Link>
         <Link href="/card-finder?ink=amethyst&rarity=Legendary" className="chip chip-btn">Amethyst Legendary</Link>
       </div>
+
+      <Faq title="Using the Card Finder" entries={CARD_FINDER_FAQ} />
     </div>
   );
 }
