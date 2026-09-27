@@ -28,6 +28,7 @@ export default async function HomePage() {
         cardCount={payload.stats.cardCount}
         setCount={payload.stats.setCount}
         enchantedCount={payload.stats.enchantedCount}
+        mostValuable={payload.mostValuable}
       />
       <EnchantedSpotlight
         tiles={payload.enchantedSpotlight}

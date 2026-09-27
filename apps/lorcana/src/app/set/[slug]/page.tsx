@@ -13,6 +13,7 @@ import { normaliseRarity } from '@/lib/lorcana/rarity';
 import { toLcGamedata } from '@/lib/lorcana/gamedata';
 import { pickCardImage } from '@/lib/lorcana/image';
 import { SetMarketOverview } from '@/components/SetMarketOverview';
+import EbayFindButton from '@/components/EbayFindButton';
 import { SetGridClient, type SetGridEntry } from '@/components/SetGridClient';
 import RarityDistribution from '@/components/set/RarityDistribution';
 import FinishSplitPanel from '@/components/set/FinishSplitPanel';
@@ -215,6 +216,20 @@ export default async function SetPage({
               <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{market.pricedCount.toLocaleString()}</strong> with USD retail</span>
             )}
             {set.released_at && <span>Released {formatReleased(set.released_at)}</span>}
+          </div>
+          {/* Prominent sealed-product CTA. We do not carry sealed
+              market data ourselves, so this is deliberately framed
+              as marketplace discovery, not a tracked value. */}
+          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <EbayFindButton
+              sealedSearchTerm={`Disney Lorcana ${set.name} sealed`}
+              setName={set.name}
+              setCode={set.code}
+              source="lorcana-set-sealed"
+              size="md"
+              label={`Find sealed ${set.name} on eBay`}
+              disclose
+            />
           </div>
         </div>
       </header>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { SITE_ORIGIN, isSitemapEligible } from '@/lib/seo';
 import { LC_INKS } from '@/lib/lorcana/ink';
+import { LORCANA_ARTICLES } from '@/lib/insights';
 
 // Hub / static pages sitemap. Colour landing pages and the top-level
 // hubs live here; card and set URLs are in their own shards.
@@ -42,6 +43,16 @@ export async function GET() {
       lastmod: BUILD_ISO,
       changefreq: 'weekly',
       priority: '0.7',
+    });
+  }
+
+  // Insights articles.
+  for (const article of LORCANA_ARTICLES) {
+    items.push({
+      url: `${SITE_ORIGIN}/insights/${article.slug}`,
+      lastmod: `${article.updatedAt}T00:00:00.000Z`,
+      changefreq: 'monthly',
+      priority: '0.65',
     });
   }
 

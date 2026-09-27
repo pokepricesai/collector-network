@@ -9,10 +9,10 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic';
 
-// Slim OP account dashboard. Deliberately minimal for the parity
-// pass — enough to prove the auth loop and give the user a landing
-// after sign-in. Richer analytics (top-value, portfolio value over
-// time) come once the collection has been populated by real users.
+// Lorcana account dashboard. Auth via @collector-network/auth (shared
+// with YGO / OP / MTG); no separate Lorcana auth architecture.
+// Richer analytics land once the collection has been populated by
+// real users — see docs/lorcana/schema-request-collection.md.
 
 export default async function AccountPage() {
   const user = await requireUser('/account');
@@ -55,7 +55,17 @@ export default async function AccountPage() {
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent-2)' }}>Browse</div>
           <h2 style={tileTitleStyle}>Sets</h2>
           <p style={tileMetaStyle}>
-            Every OP, EB and Starter Deck, sorted by release. Set value and top movers on each set page.
+            Every chapter, promo set and D23 print, sorted by release.
+            Set value and treatment breakdown on each set page.
+          </p>
+        </Link>
+        <Link href="/settings" style={tileStyle}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent-2)' }}>Manage</div>
+          <h2 style={tileTitleStyle}>Settings</h2>
+          <p style={tileMetaStyle}>
+            Profile, email preferences and account tools. Auth is shared
+            across the Collector Network — one login covers YGO, One
+            Piece and Lorcana.
           </p>
         </Link>
         <form action="/auth/sign-out" method="post" style={tileStyle}>

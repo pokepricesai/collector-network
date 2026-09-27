@@ -39,8 +39,10 @@ export default async function CardFinderPage({ searchParams }: Props) {
     sort: (raw.sort as FindFilters['sort']) ?? 'price-desc',
   };
 
+  // Default-to-all: never gate on "user must pick a filter first".
+  // Every visit renders the full priced catalogue and filters narrow.
   const anyFilter = Object.entries(filters).some(([k, v]) => k !== 'sort' && v != null && v !== '');
-  const result = anyFilter ? await findCards(filters) : null;
+  const result = await findCards(filters);
 
   return (
     <div className="lc-container lc-section">
@@ -48,11 +50,13 @@ export default async function CardFinderPage({ searchParams }: Props) {
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div className="label-mono">Card Finder</div>
           <h1 style={{ margin: '4px 0 6px' }}>
-            Filter every Lorcana card
+            Find any Lorcana card
           </h1>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, maxWidth: 640, lineHeight: 1.55 }}>
-            Combine ink, rarity, card type and inkability. Results ranked
-            by cheapest current USD retail across every printing.
+            The full catalogue is here. Combine ink, rarity, card type
+            and inkability to narrow it — or just search by name. Results
+            ranked by highest current retail across every printing by
+            default.
           </p>
         </div>
       </header>
@@ -120,34 +124,40 @@ export default async function CardFinderPage({ searchParams }: Props) {
         </div>
       </form>
 
-      {result ? (
-        result.tiles.length === 0 ? (
-          <div className="lc-panel" style={{
-            textAlign: 'center', color: 'var(--text-muted)',
-            borderStyle: 'dashed', borderColor: 'var(--border-strong)',
-          }}>
-            No priced cards matched. Try loosening a filter or clearing the search.
-          </div>
-        ) : (
-          <CardBoard tiles={result.tiles} columns={6} compact />
-        )
-      ) : (
-        <div className="lc-panel">
-          <div className="label-mono" style={{ marginBottom: 8 }}>Start narrow</div>
-          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
-            Choose at least one filter above — ink, rarity, card type,
-            inkability or a name query. Results appear priced and ranked
-            by their cheapest current USD retail.
-          </p>
-          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link href="/card-finder?rarity=Enchanted" className="chip chip-btn">Enchanted only</Link>
-            <Link href="/card-finder?rarity=Iconic" className="chip chip-btn">Iconic only</Link>
-            <Link href="/card-finder?cardType=LOCATION" className="chip chip-btn">Locations</Link>
-            <Link href="/card-finder?inkable=false" className="chip chip-btn">Uninkable</Link>
-            <Link href="/card-finder?ink=amethyst&rarity=Legendary" className="chip chip-btn">Amethyst Legendary</Link>
-          </div>
+      {/* Active-filter chips + quick presets */}
+      {anyFilter && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+          {filters.ink && (
+            <span className="chip chip-ink" style={{ fontSize: 12 }}>Ink: {filters.ink}</span>
+          )}
+          {filters.rarity && <span className="chip chip-gold" style={{ fontSize: 12 }}>Rarity: {filters.rarity}</span>}
+          {filters.cardType && <span className="chip" style={{ fontSize: 12 }}>Type: {filters.cardType}</span>}
+          {filters.inkable && <span className="chip" style={{ fontSize: 12 }}>{filters.inkable === 'true' ? 'Inkable' : 'Uninkable'}</span>}
+          {filters.set && <span className="chip" style={{ fontSize: 12 }}>Set: {filters.set.toUpperCase()}</span>}
+          {filters.q && <span className="chip" style={{ fontSize: 12 }}>"{filters.q}"</span>}
         </div>
       )}
+
+      {result.tiles.length === 0 ? (
+        <div className="lc-panel" style={{
+          textAlign: 'center', color: 'var(--text-muted)',
+          borderStyle: 'dashed', borderColor: 'var(--border-strong)',
+        }}>
+          No priced cards matched. Try loosening a filter or clearing the search.
+        </div>
+      ) : (
+        <CardBoard tiles={result.tiles} columns={6} compact />
+      )}
+
+      {/* Preset shortcuts always available — collectors landing cold
+          can still pivot to a common view. */}
+      <div style={{ marginTop: 22, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Link href="/card-finder?rarity=Enchanted" className="chip chip-btn">Enchanted only</Link>
+        <Link href="/card-finder?rarity=Iconic" className="chip chip-btn">Iconic only</Link>
+        <Link href="/card-finder?cardType=LOCATION" className="chip chip-btn">Locations</Link>
+        <Link href="/card-finder?inkable=false" className="chip chip-btn">Uninkable</Link>
+        <Link href="/card-finder?ink=amethyst&rarity=Legendary" className="chip chip-btn">Amethyst Legendary</Link>
+      </div>
     </div>
   );
 }

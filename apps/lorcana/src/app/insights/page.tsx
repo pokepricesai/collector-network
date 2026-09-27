@@ -1,64 +1,68 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { canonicalFor } from '@/lib/seo';
-
-// V1 insights hub. Editorial articles land in the next slice. For
-// now we render a placeholder with the intended cadence so the
-// sitemap-eligible URL exists and the nav has somewhere to go.
+import { LORCANA_ARTICLES } from '@/lib/insights';
 
 export const metadata: Metadata = {
-  title: 'Lorcana market insights — set analysis, treatment premiums, launch trackers',
+  title:
+    'Lorcana market insights — rarity guides, chase-card analysis and collecting basics',
   description:
-    'Editorial analysis of the Disney Lorcana market. Set-by-set treatment premiums, chase-card tracking and release cadence.',
+    'Editorial guides for Disney Lorcana collectors. Rarity explainers, chase-card tracking, collecting basics and the live top-price ranking.',
   alternates: { canonical: canonicalFor('/insights') },
 };
 
 export default function InsightsIndex() {
   return (
-    <div style={{ padding: '32px 24px' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto' }}>
-        <header className="lc-page-hero" style={{ marginBottom: 24 }}>
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
-              Insights
-            </div>
-            <h1 style={{ margin: '4px 0 6px', fontSize: 30 }}>
-              Market analysis, set-by-set
-            </h1>
-            <p
+    <div className="lc-container lc-section" style={{ maxWidth: 900 }}>
+      <header className="lc-page-hero" style={{ marginBottom: 24 }}>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div className="label-mono" style={{ color: 'var(--accent-2)' }}>Insights</div>
+          <h1 className="lc-serif" style={{ margin: '4px 0 6px', fontSize: 34, letterSpacing: '-0.01em' }}>
+            Guides for Lorcana collectors
+          </h1>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.55, maxWidth: 640 }}>
+            Rarity explainers, chase-card analysis and collecting basics.
+            Every article links straight to live LorcanaPrices card and set
+            pages so the numbers move with the market.
+          </p>
+        </div>
+      </header>
+
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 14 }}>
+        {LORCANA_ARTICLES.map((a) => (
+          <li key={a.slug}>
+            <Link
+              href={`/insights/${a.slug}`}
               style={{
-                margin: 0,
-                color: 'var(--text-muted)',
-                fontSize: 15,
-                lineHeight: 1.55,
-                maxWidth: 640,
+                display: 'block',
+                padding: 18,
+                borderRadius: 12,
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                textDecoration: 'none',
+                color: 'inherit',
               }}
             >
-              Set-by-set breakdowns of treatment premiums, chase-card tracking
-              across languages, and launch-window analysis. First articles are
-              on the way.
-            </p>
-          </div>
-        </header>
-
-        <div
-          style={{
-            padding: '32px 24px',
-            background: 'var(--surface)',
-            border: '1px dashed var(--border-strong)',
-            borderRadius: 16,
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-            lineHeight: 1.55,
-          }}
-        >
-          Editorial articles are on their way. In the meantime,{' '}
-          <Link href="/market" style={{ fontWeight: 700 }}>
-            watch the movers board
-          </Link>{' '}
-          for the freshest signal.
-        </div>
-      </div>
+              <div className="label-mono" style={{ marginBottom: 6 }}>
+                {new Date(a.publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+              <h2 className="lc-serif" style={{ margin: '0 0 8px', fontSize: 22, letterSpacing: '-0.01em' }}>
+                {a.title}
+              </h2>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
+                {a.description}
+              </p>
+              <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {a.tags.map((t) => (
+                  <span key={t} className="chip" style={{ fontSize: 11 }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

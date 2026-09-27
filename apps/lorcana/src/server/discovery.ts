@@ -108,48 +108,78 @@ interface DiscoveryQueryOpts {
   limit: number;
 }
 
-/** Pull the top-N cards ordered by cheapest USD retail across their
- *  printings, filtered by rarity/ink/set. Used by:
- *    * homepage most-valuable
- *    * homepage Enchanted spotlight
- *    * market/enchanted / market/iconic / market/most-valuable */
+/** Pull the top-N most-valuable cards.
+ *
+ *  Bug-fix note (2026-09-27, specialist-sites launch programme):
+ *  the previous implementation sampled an arbitrary 500-card slice
+ *  (no price ordering), picked the CHEAPEST printing per card and
+ *  compared prices across currencies without conversion. That put a
+ *  €5,928 nonfoil `Elsa - Snow Queen` and a $1,729 foil `Hades -
+ *  Looking for a Deal` completely off the homepage. This rewrite:
+ *    (1) queries `tcg_market_prices_current` price-first,
+ *    (2) filters retail-list rows only,
+ *    (3) normalises EUR -> USD at a fixed 1.08 rate for ordering (we
+ *        keep native currency values on the tile for display),
+ *    (4) drops obvious data-outliers where the observation is >5x its
+ *        own 30-day average (single-seller-at-crazy-price noise),
+ *    (5) picks the DEAREST retail-quality printing per card so the
+ *        Iconic-foil or Enchanted-foil version leads, and
+ *    (6) supports optional rarity/set/ink filters (used by the market
+ *        surfaces).
+ */
 export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<DiscoveryTile[]> {
   const supabase = getLorcanaClient();
   const gameId = await getLorcanaGameId(supabase);
 
-  const candidatesTarget = opts.cardCandidates ?? Math.max(200, opts.limit * 20);
-
-  let cardsQ = supabase
-    .from('tcg_cards')
-    .select('id, name, set_id, collector_number, rarity, images, gamedata')
+  // 1. Take a fat top-of-price slice from tcg_market_prices_current.
+  //    We over-fetch by ~15x the limit to leave headroom for outlier
+  //    exclusion and rarity/ink/set filtering downstream.
+  const sliceLimit = Math.max(200, opts.limit * 20);
+  let priceQ = supabase
+    .from('tcg_market_prices_current')
+    .select('tcg_printing_id, price, currency, avg_30d, finish, list_type')
     .eq('game_id', gameId)
-    .limit(candidatesTarget);
-  if (opts.rarity) {
-    if (Array.isArray(opts.rarity)) cardsQ = cardsQ.in('rarity', opts.rarity);
-    else cardsQ = cardsQ.eq('rarity', opts.rarity);
+    .eq('list_type', 'retail')
+    .order('price', { ascending: false })
+    .limit(sliceLimit);
+  const { data: priceRowsRaw, error: priceErr } = await priceQ;
+  if (priceErr || !priceRowsRaw) return [];
+
+  interface PriceRow {
+    tcg_printing_id: string;
+    price: number;
+    currency: string;
+    avg_30d: number | null;
+    finish: string | null;
+    list_type: string | null;
   }
-  if (opts.setId) cardsQ = cardsQ.eq('set_id', opts.setId);
+  const priceRows = priceRowsRaw as PriceRow[];
 
-  const { data: cardRows, error: cardsErr } = await cardsQ;
-  if (cardsErr) return [];
-  let cards = (cardRows as TcgCard[] | null) ?? [];
-
-  if (opts.ink) {
-    const inkLower = opts.ink.toLowerCase();
-    cards = cards.filter((c) => {
-      const gd = c.gamedata as Record<string, unknown> | null;
-      return String(gd?.['ink'] ?? '').toLowerCase() === inkLower;
+  // 2. Normalise + outlier guard.
+  const EUR_USD = 1.08;
+  const norm: { printingId: string; usdish: number; eur: number | null; currency: string; finish: string | null }[] = [];
+  for (const r of priceRows) {
+    if (r.price == null || r.price <= 0) continue;
+    // Outlier: observation > 5x its 30-day trend is data noise from a
+    // single crazy-priced listing. Keep if trend missing (new listing).
+    if (r.avg_30d != null && r.avg_30d > 0 && r.price > r.avg_30d * 5) continue;
+    const usdish = r.currency === 'USD' ? r.price : r.currency === 'EUR' ? r.price * EUR_USD : null;
+    if (usdish == null) continue;
+    norm.push({
+      printingId: r.tcg_printing_id,
+      usdish,
+      eur: r.currency === 'EUR' ? r.price : null,
+      currency: r.currency,
+      finish: r.finish,
     });
   }
-  if (cards.length === 0) return [];
+  if (norm.length === 0) return [];
 
-  const cardIds = cards.map((c) => c.id);
-  const cardsById = new Map(cards.map((c) => [c.id, c]));
-
-  // Fetch printings for these cards.
+  // 3. Resolve printings -> cards.
+  const printingIds = Array.from(new Set(norm.map((n) => n.printingId)));
   const printingBatches = await Promise.all(
-    chunk(cardIds, 100).map((batch) =>
-      supabase.from('tcg_printings').select('*').in('tcg_card_id', batch as string[]),
+    chunk(printingIds, 100).map((batch) =>
+      supabase.from('tcg_printings').select('*').in('id', batch as string[]),
     ),
   );
   const printings: TcgPrinting[] = [];
@@ -157,51 +187,86 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
     if (!r.error) printings.push(...(((r.data as TcgPrinting[]) ?? [])));
   }
   if (printings.length === 0) return [];
-
-  const priced = await priceLookup(supabase, printings.map((p) => p.id));
   const printingsById = new Map(printings.map((p) => [p.id, p]));
 
-  // For each card pick the CHEAPEST priced printing. This mirrors set
-  // valuation: the shelf price of the card, not the foil premium.
-  const perCardBest = new Map<string, { printing: TcgPrinting; usd: number; eur: number | null }>();
-  for (const p of printings) {
-    const price = priced.get(p.id);
-    if (!price) continue;
-    const cur = perCardBest.get(p.tcg_card_id);
-    if (!cur || price.usd < cur.usd) {
-      perCardBest.set(p.tcg_card_id, { printing: p, usd: price.usd, eur: price.eur });
+  // 4. Fetch card metadata for the involved card_ids.
+  const cardIds = Array.from(new Set(printings.map((p) => p.tcg_card_id)));
+  const cardBatches = await Promise.all(
+    chunk(cardIds, 100).map((batch) =>
+      supabase.from('tcg_cards').select('id, name, set_id, collector_number, rarity, images, gamedata').in('id', batch as string[]),
+    ),
+  );
+  let cards: TcgCard[] = [];
+  for (const r of cardBatches) {
+    if (!r.error) cards.push(...(((r.data as TcgCard[]) ?? [])));
+  }
+
+  // 5. Apply optional filters at the card level.
+  if (opts.rarity) {
+    const wanted = new Set(Array.isArray(opts.rarity) ? opts.rarity : [opts.rarity]);
+    cards = cards.filter((c) => c.rarity && wanted.has(c.rarity));
+  }
+  if (opts.ink) {
+    const inkLower = opts.ink.toLowerCase();
+    cards = cards.filter((c) => {
+      const gd = c.gamedata as Record<string, unknown> | null;
+      return String(gd?.['ink'] ?? '').toLowerCase() === inkLower;
+    });
+  }
+  if (opts.setId) cards = cards.filter((c) => c.set_id === opts.setId);
+  if (cards.length === 0) return [];
+  const cardsById = new Map(cards.map((c) => [c.id, c]));
+
+  // 6. For each card, pick the DEAREST retail-quality printing. This
+  //    is the "most valuable" reading — a card's chase printing.
+  interface Best {
+    cardId: string; printingId: string; usdish: number; eur: number | null; currency: string; finish: string | null;
+  }
+  const bestByCard = new Map<string, Best>();
+  for (const n of norm) {
+    const printing = printingsById.get(n.printingId);
+    if (!printing) continue;
+    if (!cardsById.has(printing.tcg_card_id)) continue;
+    const cur = bestByCard.get(printing.tcg_card_id);
+    if (!cur || n.usdish > cur.usdish) {
+      bestByCard.set(printing.tcg_card_id, {
+        cardId: printing.tcg_card_id,
+        printingId: printing.id,
+        usdish: n.usdish,
+        eur: n.eur,
+        currency: n.currency,
+        finish: n.finish ?? printing.finish,
+      });
     }
   }
 
-  // Fetch set metadata for whichever set_ids we actually reference.
+  // 7. Fetch set metadata for labels.
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
   const { data: setRows } = await supabase.from('tcg_sets').select('*').in('id', setIds as string[]);
   const setsById = new Map(((setRows as TcgSet[] | null) ?? []).map((s) => [s.id, s]));
 
   const tiles: DiscoveryTile[] = [];
-  for (const [cardId, best] of perCardBest) {
+  for (const [cardId, best] of bestByCard) {
     const card = cardsById.get(cardId);
     if (!card) continue;
     const set = setsById.get(card.set_id) ?? null;
     const gd = card.gamedata as Record<string, unknown> | null;
     tiles.push({
       cardId,
-      printingId: best.printing.id,
+      printingId: best.printingId,
       name: card.name,
       setName: set?.name ?? null,
       setCode: set?.code ?? null,
       collectorNumber: card.collector_number,
       rarity: card.rarity,
-      finish: best.printing.finish,
+      finish: best.finish,
       imageUrl: pickImage(card.images),
-      priceUsd: best.usd,
+      priceUsd: best.usdish,
       priceEur: best.eur,
       ink: (gd?.['ink'] as string | null) ?? null,
     });
   }
 
-  // Order by USD desc for "most valuable" contexts. Callers who want a
-  // different order can re-sort.
   tiles.sort((a, b) => b.priceUsd - a.priceUsd);
   return tiles.slice(0, opts.limit);
 }

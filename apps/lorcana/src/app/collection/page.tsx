@@ -26,13 +26,34 @@ export default async function CollectionPage() {
         <PageHeader />
         <div style={panelStyle}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-2)', marginBottom: 6 }}>
-            Schema pending
+            Collection storage — migration pending
           </div>
-          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--text-muted)' }}>
-            Collection storage is being provisioned for LorcanaPrices. This page will start working
-            automatically once the shared-schema migration has been applied. Your account is unaffected —
-            you can still browse cards, sets and market data in the meantime.
+          <p style={{ margin: '0 0 14px', fontSize: 14, lineHeight: 1.65, color: 'var(--text-muted)' }}>
+            Collection storage for LorcanaPrices needs a small database
+            migration before this page can hold your cards. The migration
+            script is written and ready — see
+            {' '}<code style={{ background: 'var(--surface-inset)', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>
+              docs/lorcana/schema-request-collection.md
+            </code>{' '}
+            in the repository — and matches the approach already used for
+            YGO and One Piece collections. It creates a table called
+            {' '}<code style={{ background: 'var(--surface-inset)', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>
+              lorcana_collection_items
+            </code>{' '}
+            with owner-scoped Row-Level Security so nobody else can read
+            or write your holdings.
           </p>
+          <p style={{ margin: '0 0 14px', fontSize: 14, lineHeight: 1.65, color: 'var(--text-muted)' }}>
+            Once the migration runs, this page will start working
+            automatically. Your account is unaffected in the meantime —
+            you can still browse the whole catalogue, watch the market
+            and read guides.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link href="/browse" className="btn btn-primary btn-sm">Browse sets</Link>
+            <Link href="/market" className="btn btn-ghost btn-sm">Market</Link>
+            <Link href="/insights" className="btn btn-ghost btn-sm">Insights</Link>
+          </div>
         </div>
       </main>
     );

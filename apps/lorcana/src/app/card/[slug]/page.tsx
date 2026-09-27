@@ -11,6 +11,7 @@ import { TREATMENT_DISPLAY_ORDER } from '@/lib/lorcana/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import EffectText from '@/components/card/EffectText';
+import EbayFindButton from '@/components/EbayFindButton';
 import type { LcCardView, LcPrintingView } from '@/server/read';
 
 // Logical / gameplay card page. Shows every printing across every set
@@ -163,6 +164,24 @@ export default async function LogicalCardPage({
                 {treatmentOrder.length} treatment{treatmentOrder.length === 1 ? '' : 's'} · {flat.length} printing{flat.length === 1 ? '' : 's'}
               </span>
             </div>
+          </div>
+
+          {/* Prominent affiliate CTA — buy this card. Sits high, near
+              the title / info chips, above the stat grid so the
+              purchase intent is obvious. Uses the shared @collector-
+              network/affiliate builder with the LorcanaPrices EPN
+              campaign id. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <EbayFindButton
+              cardName={bundle.name}
+              setName={heroCard.set?.name ?? null}
+              setCode={heroCard.set?.code ?? null}
+              collectorNumber={heroCard.card.collector_number ?? null}
+              source="lorcana-card"
+              size="lg"
+              label={`Find ${bundle.name} on eBay`}
+              disclose
+            />
           </div>
 
           <CardStatGrid gamedata={heroCard.gamedata} classifications={heroCard.gamedata.classifications} />
