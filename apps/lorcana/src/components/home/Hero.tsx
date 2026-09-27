@@ -8,9 +8,10 @@ import { slugifyCardName } from '@/lib/lorcana/slug';
 //
 // Layout:
 //   LEFT  — proposition, concise explanation, search, primary CTAs.
-//           One coherent type system: Outfit for the headline, Figtree
-//           for body, Cormorant Garamond italic only for a small
-//           evergreen sub-line so the mark still feels storybook.
+//           ONE coherent type system: Outfit for headings, Figtree for
+//           body — no serif accents on this surface. Differentiation
+//           comes from layout, ink colour tokens, ornament details
+//           in the accent kit and imagery, not typeface switching.
 //   RIGHT — one useful value module. When the caller passes a
 //           populated `mostValuable` we render the actual top-priced
 //           card as a linked hero tile with real live pricing. When
@@ -76,14 +77,13 @@ export default function Hero({
               {cardCount > 0 && (
                 <>
                   {' '}
-                  <span className="lc-serif-italic" style={{ color: 'var(--text-strong)' }}>
+                  <strong style={{ color: 'var(--text-strong)', fontWeight: 700 }}>
                     {fmt(cardCount)} cards
-                  </span>{' '}
+                  </strong>{' '}
                   across {fmt(setCount)} sets, including{' '}
-                  <span style={{ color: 'var(--amethyst-500, #6A43BE)', fontWeight: 700 }}>
-                    {fmt(enchantedCount)} Enchanted
-                  </span>{' '}
-                  overprints.
+                  <strong style={{ color: 'var(--amethyst-500, #6A43BE)', fontWeight: 700 }}>
+                    {fmt(enchantedCount)} Enchanted cards
+                  </strong>.
                 </>
               )}
             </p>
@@ -165,7 +165,14 @@ function TopValueCard({ tile }: { tile: DiscoveryTile }) {
           )}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div className="lc-serif" style={{ fontSize: 20, lineHeight: 1.15, color: 'var(--text-strong)' }}>
+          <div style={{
+            fontFamily: 'Outfit, system-ui, sans-serif',
+            fontWeight: 700,
+            fontSize: 19,
+            lineHeight: 1.2,
+            letterSpacing: '-0.01em',
+            color: 'var(--text-strong)',
+          }}>
             {tile.name}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
@@ -216,7 +223,14 @@ function CollectionCta() {
       }}
     >
       <div className="label-mono" style={{ marginBottom: 10 }}>Build your Lorcana collection</div>
-      <div className="lc-serif" style={{ fontSize: 22, lineHeight: 1.15, color: 'var(--text-strong)' }}>
+      <div style={{
+        fontFamily: 'Outfit, system-ui, sans-serif',
+        fontWeight: 800,
+        fontSize: 22,
+        lineHeight: 1.15,
+        letterSpacing: '-0.01em',
+        color: 'var(--text-strong)',
+      }}>
         Track every card. Watch value grow.
       </div>
       <ul style={{ margin: '14px 0 18px', paddingLeft: 18, fontSize: 14, lineHeight: 1.7, color: 'var(--text-muted)' }}>

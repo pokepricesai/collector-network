@@ -110,34 +110,39 @@ interface DiscoveryQueryOpts {
 
 /** Pull the top-N most-valuable cards.
  *
- *  Bug-fix note (2026-09-27, specialist-sites launch programme):
- *  the previous implementation sampled an arbitrary 500-card slice
- *  (no price ordering), picked the CHEAPEST printing per card and
- *  compared prices across currencies without conversion. That put a
- *  €5,928 nonfoil `Elsa - Snow Queen` and a $1,729 foil `Hades -
- *  Looking for a Deal` completely off the homepage. This rewrite:
- *    (1) queries `tcg_market_prices_current` price-first,
- *    (2) filters retail-list rows only,
- *    (3) normalises EUR -> USD at a fixed 1.08 rate for ordering (we
- *        keep native currency values on the tile for display),
- *    (4) drops obvious data-outliers where the observation is >5x its
- *        own 30-day average (single-seller-at-crazy-price noise),
- *    (5) picks the DEAREST retail-quality printing per card so the
- *        Iconic-foil or Enchanted-foil version leads, and
- *    (6) supports optional rarity/set/ink filters (used by the market
- *        surfaces).
+ *  Ranking policy (2026-09-27 rewrite):
+ *    * Queries `tcg_market_prices_current` price-first and
+ *      retail-list only.
+ *    * Ranks WITHIN a single currency. Lorcana today has one live
+ *      retail feed (Cardmarket EU / EUR). Any mixed-currency
+ *      normalisation should be a shared market-data capability with a
+ *      maintained FX source, not a fixed constant in a per-app query.
+ *      If additional currencies appear in the feed later, a mixed
+ *      list simply falls back to the dominant currency for ordering.
+ *    * Picks the DEAREST retail-quality printing per card so the
+ *      Iconic-foil or Enchanted-foil version leads.
+ *    * Deduplicates by logical card so the same card's foil and
+ *      nonfoil don't both crowd the top.
+ *    * Outlier rule protects legitimate high-price promos: a row is
+ *      discarded ONLY if BOTH (price >5x its 30-day average) AND
+ *      (30-day average is at least a modest floor). A card whose
+ *      30-day average is zero or trivial is treated as "new / thin
+ *      history, keep it" — that covers late-run Promos, D23 exclusives
+ *      and just-added Iconic prints where the trend has not caught up.
+ *    * Supports optional rarity/set/ink filters (used by the market
+ *      surfaces).
  */
 export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<DiscoveryTile[]> {
   const supabase = getLorcanaClient();
   const gameId = await getLorcanaGameId(supabase);
 
   // 1. Take a fat top-of-price slice from tcg_market_prices_current.
-  //    We over-fetch by ~15x the limit to leave headroom for outlier
+  //    We over-fetch by ~20x the limit to leave headroom for outlier
   //    exclusion and rarity/ink/set filtering downstream.
   const sliceLimit = Math.max(200, opts.limit * 20);
-  let priceQ = supabase
+  const priceQ = supabase
     .from('tcg_market_prices_current')
-    .select('tcg_printing_id, price, currency, avg_30d, finish, list_type')
+    .select('tcg_printing_id, price, currency, avg_30d, finish, list_type, source, region')
     .eq('game_id', gameId)
     .eq('list_type', 'retail')
     .order('price', { ascending: false })
@@ -152,30 +157,53 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
     avg_30d: number | null;
     finish: string | null;
     list_type: string | null;
+    source: string | null;
+    region: string | null;
   }
   const priceRows = priceRowsRaw as PriceRow[];
 
-  // 2. Normalise + outlier guard.
-  const EUR_USD = 1.08;
-  const norm: { printingId: string; usdish: number; eur: number | null; currency: string; finish: string | null }[] = [];
+  // 2. Pick a single dominant currency to rank against. Today's Lorcana
+  //    feed is single-currency (EUR) but we don't hardcode the choice —
+  //    we pick whichever currency has the most rows in this slice.
+  const currencyCounts = new Map<string, number>();
   for (const r of priceRows) {
+    if (!r.currency) continue;
+    currencyCounts.set(r.currency, (currencyCounts.get(r.currency) ?? 0) + 1);
+  }
+  let rankingCurrency: string | null = null;
+  let bestCount = 0;
+  for (const [ccy, count] of currencyCounts) {
+    if (count > bestCount) { rankingCurrency = ccy; bestCount = count; }
+  }
+  if (!rankingCurrency) return [];
+
+  // 3. Filter to the dominant currency + apply the outlier guard.
+  //    Outlier rule: discard only if BOTH (price > 5x avg_30d) AND
+  //    (avg_30d is a meaningful floor — >= 5 units in this currency).
+  //    Legitimate scarce promos with thin trend history stay.
+  const OUTLIER_FLOOR = 5;      // 5 EUR / USD — nothing below this is worth policing
+  const OUTLIER_MULTIPLE = 5;   // 5x above trend
+  const norm: { printingId: string; price: number; finish: string | null; source: string | null; region: string | null; currency: string }[] = [];
+  for (const r of priceRows) {
+    if (r.currency !== rankingCurrency) continue;
     if (r.price == null || r.price <= 0) continue;
-    // Outlier: observation > 5x its 30-day trend is data noise from a
-    // single crazy-priced listing. Keep if trend missing (new listing).
-    if (r.avg_30d != null && r.avg_30d > 0 && r.price > r.avg_30d * 5) continue;
-    const usdish = r.currency === 'USD' ? r.price : r.currency === 'EUR' ? r.price * EUR_USD : null;
-    if (usdish == null) continue;
+    if (
+      r.avg_30d != null &&
+      r.avg_30d >= OUTLIER_FLOOR &&
+      r.price > r.avg_30d * OUTLIER_MULTIPLE
+    ) continue;
     norm.push({
       printingId: r.tcg_printing_id,
-      usdish,
-      eur: r.currency === 'EUR' ? r.price : null,
+      price: r.price,
       currency: r.currency,
       finish: r.finish,
+      source: r.source,
+      region: r.region,
     });
   }
   if (norm.length === 0) return [];
 
-  // 3. Resolve printings -> cards.
+  // 4. Resolve printings -> cards.
   const printingIds = Array.from(new Set(norm.map((n) => n.printingId)));
   const printingBatches = await Promise.all(
     chunk(printingIds, 100).map((batch) =>
@@ -189,7 +217,7 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
   if (printings.length === 0) return [];
   const printingsById = new Map(printings.map((p) => [p.id, p]));
 
-  // 4. Fetch card metadata for the involved card_ids.
+  // 5. Fetch card metadata for the involved card_ids.
   const cardIds = Array.from(new Set(printings.map((p) => p.tcg_card_id)));
   const cardBatches = await Promise.all(
     chunk(cardIds, 100).map((batch) =>
@@ -201,7 +229,7 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
     if (!r.error) cards.push(...(((r.data as TcgCard[]) ?? [])));
   }
 
-  // 5. Apply optional filters at the card level.
+  // 6. Apply optional filters at the card level.
   if (opts.rarity) {
     const wanted = new Set(Array.isArray(opts.rarity) ? opts.rarity : [opts.rarity]);
     cards = cards.filter((c) => c.rarity && wanted.has(c.rarity));
@@ -217,10 +245,10 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
   if (cards.length === 0) return [];
   const cardsById = new Map(cards.map((c) => [c.id, c]));
 
-  // 6. For each card, pick the DEAREST retail-quality printing. This
+  // 7. For each card, pick the DEAREST retail-quality printing. This
   //    is the "most valuable" reading — a card's chase printing.
   interface Best {
-    cardId: string; printingId: string; usdish: number; eur: number | null; currency: string; finish: string | null;
+    cardId: string; printingId: string; price: number; currency: string; finish: string | null; source: string | null; region: string | null;
   }
   const bestByCard = new Map<string, Best>();
   for (const n of norm) {
@@ -228,19 +256,20 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
     if (!printing) continue;
     if (!cardsById.has(printing.tcg_card_id)) continue;
     const cur = bestByCard.get(printing.tcg_card_id);
-    if (!cur || n.usdish > cur.usdish) {
+    if (!cur || n.price > cur.price) {
       bestByCard.set(printing.tcg_card_id, {
         cardId: printing.tcg_card_id,
         printingId: printing.id,
-        usdish: n.usdish,
-        eur: n.eur,
+        price: n.price,
         currency: n.currency,
         finish: n.finish ?? printing.finish,
+        source: n.source,
+        region: n.region,
       });
     }
   }
 
-  // 7. Fetch set metadata for labels.
+  // 8. Fetch set metadata for labels.
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
   const { data: setRows } = await supabase.from('tcg_sets').select('*').in('id', setIds as string[]);
   const setsById = new Map(((setRows as TcgSet[] | null) ?? []).map((s) => [s.id, s]));
@@ -261,13 +290,23 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
       rarity: card.rarity,
       finish: best.finish,
       imageUrl: pickImage(card.images),
-      priceUsd: best.usdish,
-      priceEur: best.eur,
+      // Store the live source-currency value on both fields for now;
+      // downstream renderers display native currency, and if EUR-only
+      // callers want a specific field they can read priceEur first.
+      priceUsd: best.currency === 'USD' ? best.price : 0,
+      priceEur: best.currency === 'EUR' ? best.price : null,
       ink: (gd?.['ink'] as string | null) ?? null,
     });
   }
 
-  tiles.sort((a, b) => b.priceUsd - a.priceUsd);
+  // Sort by native price WITHIN the ranking currency. Because we
+  // filtered to a single currency at step 3 the price scale is
+  // consistent — no FX involved.
+  tiles.sort((a, b) => {
+    const av = a.priceEur ?? a.priceUsd;
+    const bv = b.priceEur ?? b.priceUsd;
+    return bv - av;
+  });
   return tiles.slice(0, opts.limit);
 }
 
