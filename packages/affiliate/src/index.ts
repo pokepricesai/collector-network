@@ -1,7 +1,17 @@
-// @collector-network/affiliate — package shell.
+// @collector-network/affiliate — shared affiliate helpers.
 //
-// Intended responsibility: eBay Partner Network and other affiliate link
-// construction, click tracking, sub-id tagging, and any network-wide
-// affiliate reporting glue. Not implemented yet.
+// Current scope: eBay Partner Network link construction.
 
-export const __affiliate_package_placeholder = true;
+export {
+  buildEbaySearchLink,
+  epnCampaignId,
+  ebayAffiliateEnabled,
+  marketplaceFor,
+  CCG_CATEGORY_ID,
+} from './ebay';
+export type {
+  EbayMarketplace,
+  EbayGameConfig,
+  EbaySearchInput,
+  EbayLink,
+} from './ebay';

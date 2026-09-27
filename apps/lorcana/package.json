@@ -13,6 +13,7 @@
     "clean": "rimraf .next .turbo node_modules"
   },
   "dependencies": {
+    "@collector-network/affiliate": "workspace:*",
     "@collector-network/auth": "workspace:^",
     "@collector-network/database": "workspace:*",
     "@collector-network/market-data": "workspace:*",

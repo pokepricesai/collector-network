@@ -1,27 +1,45 @@
-// eBay affiliate URL builder for Lorcana.
+// eBay affiliate URL builder — LorcanaPrices.
 //
-// The full campaign wiring (EPN account, tracking IDs, category scoping)
-// lands with the shared @collector-network/affiliate package. Until then
-// this helper produces a plain eBay search URL for the exact
-// printing / treatment. When the affiliate package arrives we swap the
-// origin and layer campaign params on top; the public component contract
-// does not change.
+// Thin adapter over @collector-network/affiliate. Shared package
+// handles EPN campaign wiring, marketplace routing and customid
+// sanitisation.
+
+import {
+  buildEbaySearchLink,
+  type EbayLink,
+  type EbayMarketplace,
+} from '@collector-network/affiliate';
+
+const LORCANA_CONFIG = {
+  gameTerminator: 'Disney Lorcana',
+} as const;
 
 export interface EbayLinkParams {
   cardName: string;
   setName?: string | null;
+  collectorNumber?: string | null;
   treatmentLabel?: string | null;
+  /** Any of: Enchanted, Iconic, Epic, Legendary, Promo, Foil, etc. */
+  finishOrTreatment?: string | null;
+  marketplace?: EbayMarketplace;
+  source?: string | null;
+}
+
+export function buildLorcanaEbayLink(params: EbayLinkParams): EbayLink {
+  return buildEbaySearchLink(
+    {
+      cardName: params.cardName,
+      setName: params.setName ?? null,
+      collectorNumber: params.collectorNumber ?? null,
+      modifier: params.treatmentLabel ?? undefined,
+      finish: params.finishOrTreatment ?? null,
+      marketplace: params.marketplace,
+      source: params.source ?? null,
+    },
+    LORCANA_CONFIG,
+  );
 }
 
 export function buildEbaySearchUrl(params: EbayLinkParams): string {
-  const bits: string[] = [];
-  bits.push(params.cardName);
-  if (params.setName) bits.push(params.setName);
-  if (params.treatmentLabel) bits.push(params.treatmentLabel);
-  bits.push('disney lorcana');
-  const q = bits.filter(Boolean).join(' ');
-  const url = new URL('https://www.ebay.com/sch/i.html');
-  url.searchParams.set('_nkw', q);
-  url.searchParams.set('_sacat', '38292'); // Trading Card Games
-  return url.toString();
+  return buildLorcanaEbayLink(params).href;
 }

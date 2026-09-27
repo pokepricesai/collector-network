@@ -20,6 +20,9 @@ importers:
 
   apps/lorcana:
     dependencies:
+      '@collector-network/affiliate':
+        specifier: workspace:*
+        version: link:../../packages/affiliate
       '@collector-network/auth':
         specifier: workspace:^
         version: link:../../packages/auth
@@ -90,6 +93,9 @@ importers:
 
   apps/onepiece:
     dependencies:
+      '@collector-network/affiliate':
+        specifier: workspace:*
+        version: link:../../packages/affiliate
       '@collector-network/auth':
         specifier: workspace:^
         version: link:../../packages/auth
@@ -160,6 +166,9 @@ importers:
 
   apps/yugioh:
     dependencies:
+      '@collector-network/affiliate':
+        specifier: workspace:*
+        version: link:../../packages/affiliate
       '@collector-network/auth':
         specifier: workspace:^
         version: link:../../packages/auth
@@ -221,6 +230,9 @@ importers:
 
   packages/affiliate:
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.20.4
       typescript:
         specifier: ^5.6.3
         version: 5.9.3

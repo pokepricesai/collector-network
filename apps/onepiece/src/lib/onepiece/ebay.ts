@@ -1,31 +1,50 @@
-// eBay affiliate URL builder.
+// eBay affiliate URL builder — OnePiecePrices.
 //
-// The full campaign wiring (EPN account, tracking IDs, category
-// scoping) lands with the shared @collector-network/affiliate package
-// during Slice 9. Until then this helper produces a plain eBay search
-// URL for the exact printing / treatment. When the affiliate package
-// arrives we swap the origin and layer campaign params on top; the
-// public component contract does not change.
+// Thin adapter over @collector-network/affiliate. The shared package
+// handles EPN campaign wiring, marketplace routing and customid
+// sanitisation. This module supplies the OP-specific game terminator
+// so the search text lands on One Piece results.
+
+import {
+  buildEbaySearchLink,
+  type EbayLink,
+  type EbayMarketplace,
+} from '@collector-network/affiliate';
+
+const OP_CONFIG = {
+  gameTerminator: 'One Piece Card Game',
+  // 38292 (Collectible Card Games) — safe network-wide default.
+} as const;
 
 export interface EbayLinkParams {
   cardName: string;
   setName?: string | null;
+  collectorNumber?: string | null;
   treatmentLabel?: string | null;
   language?: string | null;
+  marketplace?: EbayMarketplace;
+  /** Origin identifier for EPN customid analytics. Prefer stable
+   *  short values, e.g. 'card-overview' or 'treatment-panel'. */
+  source?: string | null;
 }
 
+/** Returns a full EbayLink (href, marketplace, affiliate flag, label). */
+export function buildOnePieceEbayLink(params: EbayLinkParams): EbayLink {
+  return buildEbaySearchLink(
+    {
+      cardName: params.cardName,
+      setName: params.setName ?? null,
+      collectorNumber: params.collectorNumber ?? null,
+      modifier: params.treatmentLabel ?? undefined,
+      language: params.language ?? null,
+      marketplace: params.marketplace,
+      source: params.source ?? null,
+    },
+    OP_CONFIG,
+  );
+}
+
+/** Legacy string-only entry point kept for existing callers. */
 export function buildEbaySearchUrl(params: EbayLinkParams): string {
-  const bits: string[] = [];
-  bits.push(params.cardName);
-  if (params.setName) bits.push(params.setName);
-  if (params.treatmentLabel) bits.push(params.treatmentLabel);
-  bits.push('one piece card game');
-  if (params.language && params.language.toLowerCase() === 'jp') {
-    bits.push('japanese');
-  }
-  const q = bits.filter(Boolean).join(' ');
-  const url = new URL('https://www.ebay.com/sch/i.html');
-  url.searchParams.set('_nkw', q);
-  url.searchParams.set('_sacat', '38292'); // Trading Card Games
-  return url.toString();
+  return buildOnePieceEbayLink(params).href;
 }
