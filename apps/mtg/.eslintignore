@@ -1,0 +1,12 @@
+node_modules/
+.next/
+coverage/
+public/
+supabase/functions/**
+pokeprices-chat-edge-function.ts
+next-env.d.ts
+tsconfig.tsbuildinfo
+response.html
+response2.html
+seo/
+scripts/verify-*.mjs

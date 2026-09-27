@@ -1,0 +1,47 @@
+{
+  // ────────────────────────────────────────────────────────────────────────
+  // tsconfig.edge.json — INFORMATIONAL DIAGNOSTIC ONLY
+  // ────────────────────────────────────────────────────────────────────────
+  // Used by `npm run typecheck:edge:diagnostic`.
+  //
+  // Supabase Edge Functions run on Deno. The TypeScript compiler invoked
+  // by this config does NOT understand the `Deno` global, `jsr:` imports
+  // or `https://…` URL imports, and will therefore report many runtime-
+  // resolution errors. Those errors are expected and informational.
+  //
+  // DO NOT treat this script as a pass/fail gate. It is excluded from
+  // `npm run typecheck` and from the standard validation chain.
+  //
+  // The authoritative way to type-check Supabase Edge Functions is the
+  // Supabase CLI:
+  //
+  //   supabase functions verify smart-endpoint
+  //
+  // or, running inside a Deno environment:
+  //
+  //   deno check supabase/functions/smart-endpoint/index.ts
+  //
+  // ────────────────────────────────────────────────────────────────────────
+  "compilerOptions": {
+    "target":                "es2022",
+    "lib":                   ["es2022"],
+    "module":                "esnext",
+    "moduleResolution":      "bundler",
+    "esModuleInterop":       true,
+    "isolatedModules":       true,
+    "noEmit":                true,
+    "skipLibCheck":          true,
+    "strict":                false,
+    "allowJs":               false,
+    "resolveJsonModule":     true,
+    "allowImportingTsExtensions": true,
+    "types":                 []
+  },
+  "include": [
+    "supabase/functions/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}
