@@ -109,7 +109,7 @@ function CardTile({ tile, variant, compact }: { tile: DiscoveryTile; variant: 'd
           )}
         </div>
         <span className="lc-tile-price" style={{ color: isDark ? '#F5E7B8' : undefined }}>
-          {formatPrice(tile.priceUsd, 'USD')}
+          {formatPrice(tile.priceUsd, tile.priceCurrency)}
         </span>
       </div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

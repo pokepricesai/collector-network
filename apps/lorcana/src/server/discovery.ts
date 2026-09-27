@@ -24,7 +24,15 @@ export interface DiscoveryTile {
   rarity: string | null;
   finish: string | null;
   imageUrl: string | null;
+  /** Numeric retail price in the source currency. Renderers should
+   *  consult `priceCurrency` before adding a symbol. Kept named
+   *  `priceUsd` for callsite compatibility across the app. */
   priceUsd: number;
+  /** Source currency the numeric value is denominated in. */
+  priceCurrency: 'USD' | 'EUR' | 'GBP' | 'JPY' | string;
+  /** Legacy EUR field kept for callsites that specifically want an
+   *  EUR value; null when the source isn't EUR. New code should read
+   *  `priceUsd` + `priceCurrency`. */
   priceEur: number | null;
   ink: string | null;
 }
@@ -290,10 +298,12 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
       rarity: card.rarity,
       finish: best.finish,
       imageUrl: pickImage(card.images),
-      // Store the live source-currency value on both fields for now;
-      // downstream renderers display native currency, and if EUR-only
-      // callers want a specific field they can read priceEur first.
-      priceUsd: best.currency === 'USD' ? best.price : 0,
+      // Preserve the source-currency value as the primary number.
+      // Callers that render should switch on priceCurrency instead of
+      // assuming USD. The legacy priceEur field stays populated only
+      // when the source really is EUR.
+      priceUsd: best.price,
+      priceCurrency: best.currency,
       priceEur: best.currency === 'EUR' ? best.price : null,
       ink: (gd?.['ink'] as string | null) ?? null,
     });

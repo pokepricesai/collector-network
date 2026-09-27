@@ -9,8 +9,14 @@ interface Props {
   setName: string;
 }
 
-function fmt(price: number): string {
-  return price.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+function fmt(price: number, currency = 'USD'): string {
+  const spec = { USD: ['en-US', 'USD'], EUR: ['en-IE', 'EUR'], GBP: ['en-GB', 'GBP'] } as const;
+  const [locale, ccy] = (spec as Record<string, readonly [string, string] | undefined>)[currency] ?? ['en-US', currency];
+  try {
+    return price.toLocaleString(locale, { style: 'currency', currency: ccy, maximumFractionDigits: 2 });
+  } catch {
+    return `${currency} ${price.toFixed(2)}`;
+  }
 }
 
 function coverageLabel(priced: number, eligible: number): string {
@@ -74,7 +80,7 @@ export function SetMarketOverview({ market, setCode, setName }: Props) {
               color: 'var(--text-strong)',
             }}
           >
-            {fmt(market.subtotalUsd)}
+            {fmt(market.subtotalUsd, market.currency)}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, maxWidth: 460, lineHeight: 1.4 }}>
             {valueSublabel}
@@ -201,7 +207,7 @@ function TileRow({ tile, setCode }: { tile: LcSetTile; setCode: string }) {
         </div>
       </div>
       <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>
-        {fmt(tile.priceUsd)}
+        {fmt(tile.priceUsd, tile.priceCurrency)}
       </div>
     </Link>
   );

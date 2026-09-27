@@ -145,6 +145,7 @@ export default async function SetPage({
       inks: gamedata.inks,
       imageUrl: image,
       priceUsd: priceLookup.get(hero.id) ?? null,
+      priceCurrency: market.currency,
     };
   });
 

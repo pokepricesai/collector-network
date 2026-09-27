@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { LC_INK_LABEL, type LcInk } from '@/lib/lorcana/ink';
+import { formatPrice } from '@/lib/lorcana/format-price';
 
 export interface SetGridEntry {
   name: string;
@@ -19,6 +20,7 @@ export interface SetGridEntry {
   inks: LcInk[];
   imageUrl: string | null;
   priceUsd: number | null;
+  priceCurrency?: string;
 }
 
 interface Props {
@@ -192,7 +194,7 @@ export function SetGridClient({ entries }: Props) {
               )}
               {e.priceUsd != null && (
                 <span style={{ marginLeft: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 700 }}>
-                  ${e.priceUsd.toFixed(2)}
+                  {formatPrice(e.priceUsd, e.priceCurrency ?? 'USD')}
                 </span>
               )}
             </div>

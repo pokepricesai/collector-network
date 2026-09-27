@@ -33,6 +33,9 @@ export interface LcSetTile {
   rarity: string | null;
   imageUrl: string | null;
   priceUsd: number;
+  /** Currency the numeric price is denominated in. Optional to keep
+   *  legacy shape working; renderers default to USD when absent. */
+  priceCurrency?: string;
   finish: string | null;
 }
 
@@ -40,6 +43,8 @@ export interface LcSetMarket {
   eligibleCount: number;
   pricedCount: number;
   subtotalUsd: number;
+  /** Currency of subtotalUsd and every tile price. */
+  currency: string;
   coverage: number;
   mostValuable: LcSetTile[];
   cheapest: LcSetTile[];
@@ -61,6 +66,7 @@ export async function getSetMarketForLorcana(
       eligibleCount: 0,
       pricedCount: 0,
       subtotalUsd: 0,
+      currency: 'USD',
       coverage: 0,
       mostValuable: [],
       cheapest: [],
@@ -119,6 +125,18 @@ export async function getSetMarketForLorcana(
     quotesByPrinting.set(q.printingId, b);
   }
 
+  // Pick a single ranking currency for the whole set. Today's feed is
+  // EUR-only; if USD quotes are present prefer them, else fall back to
+  // whichever currency the retail feed uses.
+  const currencyCounts = new Map<string, number>();
+  for (const q of retailQuotes) {
+    if (!q.currency) continue;
+    currencyCounts.set(q.currency, (currencyCounts.get(q.currency) ?? 0) + 1);
+  }
+  const rankingCurrency = currencyCounts.has('USD')
+    ? 'USD'
+    : (Array.from(currencyCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'USD');
+
   const tiles: LcSetTile[] = [];
   for (const hero of heroes) {
     const heroPrintings = printingsByCard.get(hero.id) ?? [];
@@ -128,7 +146,7 @@ export async function getSetMarketForLorcana(
       printing: TcgPrinting;
     } | null = null;
     for (const p of heroPrintings) {
-      const best = selectPreferredRetailQuote(quotesByPrinting.get(p.id) ?? [], 'USD');
+      const best = selectPreferredRetailQuote(quotesByPrinting.get(p.id) ?? [], rankingCurrency);
       if (best?.price == null) continue;
       if (cheapestOnHero == null || best.price < cheapestOnHero.price) {
         cheapestOnHero = { price: best.price, printing: p };
@@ -143,6 +161,7 @@ export async function getSetMarketForLorcana(
         rarity: hero.rarity,
         imageUrl: pickTileImage(cardsById.get(hero.id) ?? hero),
         priceUsd: cheapestOnHero.price,
+        priceCurrency: rankingCurrency,
         finish: cheapestOnHero.printing.finish,
       });
     }
@@ -159,6 +178,7 @@ export async function getSetMarketForLorcana(
     eligibleCount,
     pricedCount,
     subtotalUsd,
+    currency: rankingCurrency,
     coverage,
     mostValuable: byPriceDesc.slice(0, topN),
     cheapest: byPriceAsc.slice(0, topN),
