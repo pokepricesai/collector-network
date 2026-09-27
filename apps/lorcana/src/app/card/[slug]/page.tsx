@@ -12,10 +12,13 @@ import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import EffectText from '@/components/card/EffectText';
 import EbayFindButton, { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
-import { CollectionPromptStrip } from '@/components/card/CollectionPromptStrip';
+import LogicalAddToCollection, {
+  type PrintingPick,
+} from '@/components/card/LogicalAddToCollection';
 import AskLorcanaPanel from '@/components/card/AskLorcanaPanel';
 import Faq from '@/components/Faq';
 import { buildCardFaq } from '@/server/faq-card';
+import { getCurrentUser } from '@collector-network/auth';
 import type { LcCardView, LcPrintingView } from '@/server/read';
 
 // Logical / gameplay card page. Shows every printing across every set
@@ -83,6 +86,22 @@ export default async function LogicalCardPage({
     if (!entries || entries.length === 0) continue;
     treatmentOrder.push({ label: entries[0]!.printingView.treatment.label, code, entries });
   }
+
+  // Read the auth session once for the LogicalAddToCollection component.
+  const currentUser = await getCurrentUser();
+
+  // Materialise a flat list of every real printing the user could
+  // legitimately add to their collection. The LogicalAddToCollection
+  // picker uses this list — no default/fallback printing.
+  const printingPicks: PrintingPick[] = flat.map(({ cardView, printingView }) => ({
+    cardId: cardView.card.id,
+    printingId: printingView.printing.id,
+    treatmentLabel: printingView.treatment.label,
+    treatmentCode: printingView.treatment.code,
+    finish: printingView.printing.finish ?? null,
+    setCode: cardView.set?.code ?? null,
+    collectorNumber: cardView.card.collector_number ?? null,
+  }));
 
   // Compute deterministic FAQ from the bundle. Prices pulled from the
   // printings' known retail (`market`) rows.
@@ -199,16 +218,20 @@ export default async function LogicalCardPage({
             </div>
           </div>
 
-          {/* Prominent collection prompt — signed-out: sign-in/sign-up
-              CTAs; signed-in: soft nudge to the treatments panel below.
-              This is the dominant post-title action per the launch brief. */}
-          <CollectionPromptStrip
+          {/* Primary action: real Add-to-Collection with a printing
+              picker. Signed-out shows Sign in + Create free account.
+              Signed-in shows the picker then the actual form. Never
+              inserts an ambiguous row — every write is scoped to a
+              real printing id. */}
+          <LogicalAddToCollection
             cardName={bundle.name}
+            isSignedIn={Boolean(currentUser)}
             returnPath={`/card/${slugifyCardName(bundle.name)}`}
+            printings={printingPicks}
           />
 
-          {/* Smaller, secondary affiliate CTA. Long disclosure lives at
-              the bottom of the page (EbayAffiliateDisclosure). */}
+          {/* Secondary affiliate CTA. Small size; long disclosure lives
+              at the bottom of the page (EbayAffiliateDisclosure). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <EbayFindButton
               cardName={bundle.name}

@@ -11,16 +11,15 @@
 // the endpoint returns a safe 503 with a plainly-worded message —
 // nothing hallucinated, no fake answers.
 //
-// Env required for the AI feature to actually answer (all optional
-// until Luke wires them up):
-//   NEXT_PUBLIC_AI_ENABLED   client-side flag; set to 'true' to
-//                            render the UI.
-//   AI_GATEWAY_URL           provider endpoint (Vercel AI Gateway
-//                            or an OpenAI-compatible URL).
-//   AI_GATEWAY_API_KEY       provider bearer token.
-//   AI_GATEWAY_MODEL         model name, e.g. 'anthropic/claude-sonnet-4-6'
-//                            or 'openai/gpt-4o-mini'. Defaults to
-//                            'openai/gpt-4o-mini'.
+// Env required for the AI feature to actually answer:
+//   NEXT_PUBLIC_AI_ENABLED  client-side flag; 'true' renders the UI.
+//   AI_GATEWAY_URL          Vercel AI Gateway base — expected value:
+//                           https://ai-gateway.vercel.sh/v1
+//   AI_GATEWAY_API_KEY      Gateway bearer token (SENSITIVE; never
+//                           read, printed, copied or logged here).
+//   AI_GATEWAY_MODEL        Gateway model string. Defaults to a cheap
+//                           tier when unset (anthropic/claude-haiku-4-5)
+//                           aligning with the network provider strategy.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { LORCANA_SYSTEM_PROMPT } from '@/lib/ai-knowledge';
@@ -28,12 +27,23 @@ import { LORCANA_SYSTEM_PROMPT } from '@/lib/ai-knowledge';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const AI_URL = process.env['AI_GATEWAY_URL'] ?? '';
+const AI_URL_BASE = (process.env['AI_GATEWAY_URL'] ?? '').replace(/\/+$/, '');
 const AI_KEY = process.env['AI_GATEWAY_API_KEY'] ?? '';
-const AI_MODEL = process.env['AI_GATEWAY_MODEL'] ?? 'openai/gpt-4o-mini';
+const AI_MODEL = process.env['AI_GATEWAY_MODEL'] ?? 'anthropic/claude-haiku-4-5';
+
+// Gateway path — resolves to `${base}/chat/completions` when the base
+// is the Vercel AI Gateway root. Legacy callers may already have the
+// full path in the env; we append only when the base doesn't end in
+// `chat/completions`.
+function resolveEndpoint(): string {
+  if (!AI_URL_BASE) return '';
+  if (/\/chat\/completions$/.test(AI_URL_BASE)) return AI_URL_BASE;
+  return `${AI_URL_BASE}/chat/completions`;
+}
 
 export async function POST(req: NextRequest) {
-  if (!AI_URL || !AI_KEY) {
+  const endpoint = resolveEndpoint();
+  if (!endpoint || !AI_KEY) {
     return NextResponse.json(
       {
         ok: false,
@@ -68,7 +78,7 @@ export async function POST(req: NextRequest) {
   const systemPrompt = `${LORCANA_SYSTEM_PROMPT}\n\nCard facts for this question (ground truth):\n${context}\n\nRules:\n- Never invent card facts, prices, printings or rarity.\n- Cite the exact values above where relevant.\n- Refuse to predict future prices; direct the user to the price-history chart.\n- Keep responses under 6 sentences.`;
 
   try {
-    const res = await fetch(AI_URL, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

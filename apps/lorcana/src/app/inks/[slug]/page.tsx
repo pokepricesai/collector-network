@@ -5,6 +5,8 @@ import { isLcInk, LC_INK_LABEL, LC_INK_DESCRIPTOR, type LcInk } from '@/lib/lorc
 import { getPricedTiles } from '@/server/discovery';
 import CardBoard from '@/components/home/CardBoard';
 import { canonicalFor } from '@/lib/seo';
+import Faq from '@/components/Faq';
+import { inkFaq } from '@/lib/faq-content';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -118,6 +120,8 @@ export default async function InkDetail({
           <CardBoard tiles={legendary} columns={6} compact />
         </section>
       )}
+
+      <Faq title={`About ${label} Lorcana cards`} entries={inkFaq(label, slug)} />
     </div>
   );
 }
