@@ -84,6 +84,10 @@ async function buildShard(shard: SitemapShard): Promise<Entry[]> {
       { loc: `${url}/sets`, lastmod: now, changefreq: 'daily', priority: 0.9 },
       { loc: `${url}/rarities`, lastmod: now, changefreq: 'weekly', priority: 0.8 },
       { loc: `${url}/archetypes`, lastmod: now, changefreq: 'weekly', priority: 0.8 },
+      { loc: `${url}/insights`, lastmod: now, changefreq: 'weekly', priority: 0.75 },
+      { loc: `${url}/insights/most-valuable-yugioh-cards`, lastmod: '2026-09-28', changefreq: 'weekly', priority: 0.7 },
+      { loc: `${url}/insights/yugioh-rarities-explained`, lastmod: '2026-09-28', changefreq: 'weekly', priority: 0.7 },
+      { loc: `${url}/insights/yugioh-collecting-guide-sets-editions-rarities-prices`, lastmod: '2026-09-28', changefreq: 'weekly', priority: 0.7 },
     ];
   }
   if (shard === 'cards') return buildCards(url);

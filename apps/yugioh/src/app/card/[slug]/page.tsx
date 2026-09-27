@@ -25,6 +25,11 @@ import { normaliseFnl } from '../../../lib/fnl';
 import { normaliseRarity } from '../../../lib/rarity';
 import { siteUrl } from '../../../lib/site-url';
 import { toCardSlug } from '../../../lib/slug';
+import { buildYugiohEbayLink } from '../../../lib/ebay';
+import AskYGOPricesPanel from '../../../components/card/AskYGOPricesPanel';
+import Faq from '../../../components/Faq';
+import EbayAffiliateDisclosure from '../../../components/EbayAffiliateDisclosure';
+import { cardFaq } from '../../../lib/faq-content';
 import styles from '../../../components/card/CardIdentity.module.css';
 
 // /card/[slug] — the logical card page. Aggregates all tcg_cards rows
@@ -262,6 +267,34 @@ export default async function LogicalCardPage({ params }: Props) {
                     ?.frameType ?? '').toLowerCase(),
                 )}
               />
+              {/* Prominent eBay affiliate CTA. Small gold button
+                  next to the primary actions; asterisk footnote
+                  maps to the affiliate disclosure at page bottom. */}
+              {(() => {
+                const link = buildYugiohEbayLink({
+                  cardName: data.name,
+                  rarity: data.rarityRange[0] ?? null,
+                  source: 'card-header',
+                });
+                return (
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="sponsored nofollow noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '8px 14px', borderRadius: 10,
+                      background: 'linear-gradient(180deg, #f5c518 0%, #e0b21b 100%)',
+                      color: '#1a1a1a', fontWeight: 700, fontSize: 12.5,
+                      textDecoration: 'none',
+                      border: '1px solid rgba(0, 0, 0, 0.15)',
+                    }}
+                  >
+                    <span>Find on eBay<sup style={{ fontSize: '0.8em', marginLeft: 2 }}>*</sup></span>
+                    <span aria-hidden style={{ fontSize: '0.85em', opacity: 0.7 }}>↗</span>
+                  </a>
+                );
+              })()}
             </div>
           </div>
         </section>
@@ -337,10 +370,78 @@ export default async function LogicalCardPage({ params }: Props) {
           </header>
           <VariantsTable variants={data.variants} cardSlug={data.slug} />
         </section>
+
+        <AskYGOPricesPanel
+          cardId={data.variants[0]?.card.id ?? data.slug}
+          cardName={data.name}
+          contextSummary={buildAiContext(data)}
+          suggestions={[
+            `What does ${data.name} do?`,
+            `What printings of ${data.name} exist?`,
+            `Which printing is currently the most valuable?`,
+            `What archetype is ${data.name} associated with?`,
+          ]}
+        />
+
+        <Faq
+          title={`About ${data.name}`}
+          entries={cardFaq(data.name, {
+            printingCount: data.variants.length,
+            rarityCount: data.rarityRange.length,
+            archetypes: gd.archetypes ?? [],
+            frameType: gd.frameType ?? null,
+            usdLow: data.usdPriceLow ?? null,
+            usdHigh: data.usdPriceHigh ?? null,
+          })}
+        />
+
+        <EbayAffiliateDisclosure />
       </main>
       <Footer />
     </>
   );
+}
+
+// Compact grounded-context string for the AI panel. Includes only
+// verified DB facts — name, frame, monster type, attribute, level/
+// rank/link, ATK/DEF, archetype, rules text, set + rarity range,
+// USD retail range, F&L status, printing count. Never invents.
+function buildAiContext(data: LogicalCardData): string {
+  const gd = data.gamedata;
+  const lines: Array<string | null> = [
+    `Card: ${data.name}`,
+    gd.frameType ? `Frame: ${gd.frameType}` : null,
+    gd.attribute ? `Attribute: ${gd.attribute}` : null,
+    gd.race ? `Type / Monster type: ${gd.race}` : null,
+    gd.level != null ? `Level: ${gd.level}` : null,
+    gd.linkRating != null ? `Link Rating: ${gd.linkRating}` : null,
+    gd.pendulumScale != null ? `Pendulum Scale: ${gd.pendulumScale}` : null,
+    gd.atk != null ? `ATK: ${gd.atk}` : null,
+    gd.def != null ? `DEF: ${gd.def}` : null,
+    gd.archetypes && gd.archetypes.length > 0 ? `Archetypes: ${gd.archetypes.join(', ')}` : null,
+    data.rulesText ? `Card text: ${data.rulesText}` : null,
+    data.rarityRange.length > 0 ? `Known rarities: ${data.rarityRange.slice(0, 8).join(', ')}` : null,
+    data.editionRange.length > 0 ? `Known editions: ${data.editionRange.join(', ')}` : null,
+    `Printing count on YGOPrices: ${data.variants.length}`,
+    data.usdPriceLow != null && data.usdPriceHigh != null
+      ? `Live USD retail range across every indexed printing: $${data.usdPriceLow.toFixed(2)} to $${data.usdPriceHigh.toFixed(2)}`
+      : null,
+    gd.banlist?.tcg ? `TCG Forbidden & Limited status: ${gd.banlist.tcg}` : null,
+    gd.banlist?.ocg ? `OCG Forbidden & Limited status: ${gd.banlist.ocg}` : null,
+  ];
+  const printingHighlights = data.variants.slice(0, 6).map((v) => {
+    const parts: string[] = [];
+    if (v.printing.collector_number) parts.push(v.printing.collector_number);
+    if (v.card.rarity) parts.push(v.card.rarity);
+    parts.push(v.edition === '1st_edition' ? '1st Edition' : v.edition === 'limited' ? 'Limited' : 'Unlimited');
+    if (v.printing.language) parts.push(v.printing.language.toUpperCase());
+    if (v.bestUsdRetail?.price != null) parts.push(`$${v.bestUsdRetail.price.toFixed(2)}`);
+    return `  - ${parts.join(' · ')}`;
+  });
+  if (printingHighlights.length > 0) {
+    lines.push(`Sample printings (first ${printingHighlights.length}):\n${printingHighlights.join('\n')}`);
+  }
+  return lines.filter((l): l is string => Boolean(l)).join('\n');
 }
 
 async function CardScopedGradedSection({ data }: { data: LogicalCardData }) {

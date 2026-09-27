@@ -14,6 +14,10 @@ import {
   getYugiohSetBySlug,
   type SetPageData,
 } from '../../../server/browse';
+import { buildYugiohEbayLink } from '../../../lib/ebay';
+import Faq from '../../../components/Faq';
+import EbayAffiliateDisclosure from '../../../components/EbayAffiliateDisclosure';
+import { setFaq } from '../../../lib/faq-content';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 1800;
@@ -102,6 +106,39 @@ export default async function SetPage({ params }: Props) {
               in a moment. Card metadata is still displayed below.
             </div>
           )}
+
+          {/* Sealed-set eBay CTA. Targets sealed booster boxes /
+              tins / structure decks for this set via the shared
+              affiliate builder. Asterisk footnote maps to the
+              affiliate disclosure at the bottom of the page. */}
+          {(() => {
+            const link = buildYugiohEbayLink({
+              cardName: `${data.set.name} sealed`,
+              setName: data.set.name,
+              setCode: data.set.code,
+              source: 'set-sealed',
+            });
+            return (
+              <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <a
+                  href={link.href}
+                  target="_blank"
+                  rel="sponsored nofollow noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '9px 14px', borderRadius: 10,
+                    background: 'linear-gradient(180deg, #f5c518 0%, #e0b21b 100%)',
+                    color: '#1a1a1a', fontWeight: 700, fontSize: 13,
+                    textDecoration: 'none',
+                    border: '1px solid rgba(0, 0, 0, 0.15)',
+                  }}
+                >
+                  <span>Find sealed {data.set.name} products on eBay<sup style={{ fontSize: '0.8em', marginLeft: 2 }}>*</sup></span>
+                  <span aria-hidden style={{ fontSize: '0.85em', opacity: 0.7 }}>↗</span>
+                </a>
+              </div>
+            );
+          })()}
         </header>
 
         {data.topByUsdPrice.length > 0 && (
@@ -215,6 +252,17 @@ export default async function SetPage({ params }: Props) {
             ))}
           </div>
         </section>
+
+        <Faq
+          title={`About the ${data.set.name} set`}
+          entries={setFaq(data.set.name, data.set.code, {
+            uniqueCards: data.uniqueCardCount,
+            variants: data.variantCount,
+            rarities: data.rarityBreakdown.length,
+          })}
+        />
+
+        <EbayAffiliateDisclosure />
       </main>
       <Footer />
     </>

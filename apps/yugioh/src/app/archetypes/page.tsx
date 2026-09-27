@@ -5,6 +5,8 @@ import { Header } from '../../components/Header';
 import { Surface } from '../../components/Surface';
 import { siteUrl } from '../../lib/site-url';
 import { listYugiohArchetypesForDirectory } from '../../server/browse';
+import Faq from '../../components/Faq';
+import { ARCHETYPES_FAQ } from '../../lib/faq-content';
 import styles from '../../components/browse/Browse.module.css';
 
 // 1h ISR — the underlying archetype scan is slow (~15s cold across
@@ -58,6 +60,8 @@ export default async function ArchetypesDirectoryPage() {
             </Link>
           ))}
         </div>
+
+        <Faq title="About Yu-Gi-Oh! archetypes" entries={ARCHETYPES_FAQ} />
       </main>
       <Footer />
     </>
