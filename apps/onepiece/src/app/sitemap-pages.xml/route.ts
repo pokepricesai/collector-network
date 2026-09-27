@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { SITE_ORIGIN, isSitemapEligible } from '@/lib/seo';
 import { OP_COLOURS } from '@/lib/onepiece/colour';
+import { OP_ARTICLES } from '@/lib/articles';
 
 // Hub / static pages sitemap. Colour landing pages and the top-level
 // hubs live here; card and set URLs are in their own shards.
@@ -42,6 +43,17 @@ export async function GET() {
       lastmod: BUILD_ISO,
       changefreq: 'weekly',
       priority: '0.7',
+    });
+  }
+
+  for (const article of OP_ARTICLES) {
+    const path = `/insights/${article.slug}`;
+    if (!isSitemapEligible(path)) continue;
+    items.push({
+      url: `${SITE_ORIGIN}${path}`,
+      lastmod: article.updatedIso,
+      changefreq: 'monthly',
+      priority: '0.65',
     });
   }
 

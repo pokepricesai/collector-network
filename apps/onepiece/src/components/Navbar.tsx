@@ -16,21 +16,24 @@ import { useRouter, usePathname } from 'next/navigation';
 
 type NavItem = { label: string; href: string };
 
+// "Cards" nav item removed — Card Finder is the single primary
+// discovery surface (name search still hits /cards/search via the
+// header search bar). This eliminates the redundant top-level
+// duplicate and makes the header lighter.
 const PRIMARY_LINKS_WIDE: NavItem[] = [
-  { label: 'Cards',       href: '/cards/search' },
+  { label: 'Card Finder', href: '/card-finder' },
   { label: 'Sets',        href: '/browse' },
   { label: 'Leaders',     href: '/leaders' },
   { label: 'Colours',     href: '/colours' },
-  { label: 'Card Finder', href: '/card-finder' },
   { label: 'Movers',      href: '/market' },
   { label: 'Insights',    href: '/insights' },
 ];
 
 const PRIMARY_LINKS_MEDIUM: NavItem[] = [
-  { label: 'Cards',    href: '/cards/search' },
-  { label: 'Sets',     href: '/browse' },
-  { label: 'Movers',   href: '/market' },
-  { label: 'Insights', href: '/insights' },
+  { label: 'Card Finder', href: '/card-finder' },
+  { label: 'Sets',        href: '/browse' },
+  { label: 'Movers',      href: '/market' },
+  { label: 'Insights',    href: '/insights' },
 ];
 
 const TOOLS_LINKS: NavItem[] = [
@@ -50,11 +53,10 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Cards & Sets',
     items: [
-      { label: 'Search cards', href: '/cards/search' },
+      { label: 'Card Finder',  href: '/card-finder' },
       { label: 'Browse sets',  href: '/browse' },
       { label: 'Leaders',      href: '/leaders' },
       { label: 'Colours',      href: '/colours' },
-      { label: 'Card Finder',  href: '/card-finder' },
     ],
   },
   {
@@ -78,6 +80,7 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
       { label: 'My Collection', href: '/collection' },
       { label: 'Account', href: '/account' },
       { label: 'Sign in', href: '/sign-in' },
+      { label: 'Sign up', href: '/sign-up' },
     ],
   },
 ];

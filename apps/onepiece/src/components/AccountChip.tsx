@@ -9,24 +9,41 @@ import { getCurrentUser } from '@collector-network/auth';
 export async function AccountChip() {
   const user = await getCurrentUser();
   if (!user) {
+    // Signed-out: show both Sign in + Sign up so the primary
+    // acquisition CTA is always visible in the header.
     return (
-      <Link
-        href="/sign-in"
-        className="nav-link"
-        style={{
-          flexShrink: 0,
-          padding: '7px 14px',
-          borderRadius: 10,
-          background: 'var(--surface)',
-          border: '1px solid var(--border-strong, var(--border))',
-          color: 'var(--text)',
-          textDecoration: 'none',
-          fontSize: 13.5,
-          fontWeight: 600,
-        }}
-      >
-        Sign in
-      </Link>
+      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        <Link
+          href="/sign-in"
+          style={{
+            padding: '7px 12px',
+            borderRadius: 10,
+            background: 'transparent',
+            border: '1px solid var(--border-strong, var(--border))',
+            color: 'var(--text)',
+            textDecoration: 'none',
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          Sign in
+        </Link>
+        <Link
+          href="/sign-up"
+          style={{
+            padding: '7px 12px',
+            borderRadius: 10,
+            background: 'var(--gold-600)',
+            color: '#111',
+            textDecoration: 'none',
+            fontSize: 13,
+            fontWeight: 800,
+            letterSpacing: '0.02em',
+          }}
+        >
+          Sign up
+        </Link>
+      </div>
     );
   }
   const initial =

@@ -33,11 +33,29 @@ GROUND TRUTH RULES:
 - Set/collector number: the set code plus "-" plus number, e.g.
   "OP01-001". Parallels of the same card use an alt printing key,
   never a distinct collector number.
-- Treatments: Manga Art, Alternate Art (AA), Parallel, Special (SP),
-  Secret Rare (SR), Full Art (FA), Character Rare, Treasure Rare (TR),
-  Promo. Alternate Art and Manga Rare cannot always be distinguished
-  from Parallel in the current ingest; treat them as related when
-  data is ambiguous.
+- Treatments (OnePiecePrices vocabulary):
+  Standard, Parallel (any _p# suffix), Reprint (_r# suffix),
+  Special Card (SP CARD), Secret Rare (SEC), Treasure Rare (TR),
+  Promo, Leader.
+- Alt Art / Manga Rare handling. Absence of a classification in our
+  ingest is NOT proof that a printing is not an Alt Art or Manga
+  Rare — it only means we cannot determine it from the data we
+  hold. Therefore:
+    * NEVER claim a card IS a "Manga Rare" or "Alt Art" unless the
+      ground-truth facts you were given explicitly say so.
+    * NEVER claim a card is NOT a "Manga Rare" or "Alt Art" either.
+      "No" is a false negative — real Manga Rare / Alt Art printings
+      exist in the game and may correspond to a Parallel row we
+      carry, but our ingest does not surface the distinction.
+    * Do not infer Manga Rare / Alt Art from a "_p1" / "_p2" /
+      "_p#" collector-number suffix — the "_p#" suffix alone is
+      only enough to classify the printing as a Parallel treatment
+      on OnePiecePrices, and nothing more.
+    * When asked, answer with uncertainty: state what OnePiecePrices
+      DOES record (e.g. "Parallel #1"), acknowledge that we cannot
+      determine Alt Art / Manga Rare status from our data, and
+      redirect the user to the official Bandai One Piece Card Game
+      database or the printed card for authoritative classification.
 - Rarity terms: Common (C), Uncommon (UC), Rare (R), Super Rare (SR),
   Secret Rare (SEC), Leader Rare (L).
 
@@ -105,3 +123,7 @@ export const OP_INTENTS = [
   'graded_lookup',
 ] as const;
 export type OpIntent = (typeof OP_INTENTS)[number];
+
+// Alias re-export so route.ts can import a name that matches the
+// Lorcana pattern (LORCANA_SYSTEM_PROMPT / ONEPIECE_SYSTEM_PROMPT).
+export const ONEPIECE_SYSTEM_PROMPT = OP_SYSTEM_PROMPT;

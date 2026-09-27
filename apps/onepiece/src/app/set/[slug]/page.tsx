@@ -10,6 +10,10 @@ import { toOpGamedata } from '@/lib/onepiece/gamedata';
 import { pickCardImage } from '@/lib/onepiece/image';
 import { SetMarketOverview } from '@/components/SetMarketOverview';
 import { SetGridClient, type SetGridEntry } from '@/components/SetGridClient';
+import { buildEbaySearchUrl } from '@/lib/onepiece/ebay';
+import Faq from '@/components/Faq';
+import EbayAffiliateDisclosure from '@/components/EbayAffiliateDisclosure';
+import { setFaq } from '@/lib/faq-content';
 import type { TcgCard } from '@collector-network/database';
 
 export const revalidate = 900;
@@ -212,6 +216,52 @@ export default async function SetPage({
               )}
               {set.released_at && <span>Released {formatReleased(set.released_at)}</span>}
             </p>
+
+            {/* Sealed-set eBay CTA. Uses the set's own name plus
+                the product type token so the resulting eBay search
+                lands on booster boxes / starter decks for this exact
+                set rather than singles. Small gold button — asterisk
+                footnote maps to the disclosure at page bottom. */}
+            {(() => {
+              const productType = inferSetType(set.code).toLowerCase();
+              // Booster / extra booster / starter deck → sealed
+              // product; everything else falls back to the plain
+              // set name.
+              const sealedTerm =
+                productType.includes('booster') ? `${set.name} booster box`
+                : productType.includes('starter') ? `${set.name} starter deck`
+                : set.name;
+              const href = buildEbaySearchUrl({
+                cardName: sealedTerm,
+                setName: set.name,
+                source: 'set-sealed',
+              });
+              return (
+                <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="sponsored nofollow noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '9px 14px',
+                      borderRadius: 10,
+                      background: 'linear-gradient(180deg, #f5c518 0%, #e0b21b 100%)',
+                      color: '#1a1a1a',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      textDecoration: 'none',
+                      border: '1px solid rgba(0, 0, 0, 0.15)',
+                    }}
+                  >
+                    <span>Find sealed {set.name} on eBay<sup style={{ fontSize: '0.8em', marginLeft: 2 }}>*</sup></span>
+                    <span aria-hidden style={{ fontSize: '0.85em', opacity: 0.7 }}>↗</span>
+                  </a>
+                </div>
+              );
+            })()}
           </div>
         </header>
 
@@ -234,6 +284,13 @@ export default async function SetPage({
             <SetGridClient entries={entries} />
           </>
         )}
+
+        <Faq
+          title={`About ${set.name}`}
+          entries={setFaq(set.name, set.code)}
+        />
+
+        <EbayAffiliateDisclosure />
       </div>
     </div>
   );

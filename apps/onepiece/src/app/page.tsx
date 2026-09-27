@@ -6,6 +6,8 @@ import TreatmentsBand from '@/components/home/TreatmentsBand';
 import CollectorTools from '@/components/home/CollectorTools';
 import { getHomepageData } from '@/server/homepage';
 import { SITE_URL } from '@/lib/site-url';
+import Faq from '@/components/Faq';
+import { HOMEPAGE_FAQ } from '@/lib/faq-content';
 
 // Revalidate every 15 minutes. Long enough that peaks don't hammer
 // Supabase; short enough that movers stay fresh.
@@ -26,11 +28,18 @@ export default async function HomePage() {
   const payload = await getHomepageData();
   return (
     <>
-      <Hero cardCount={payload.stats.cardCount} setCount={payload.stats.setCount} />
+      <Hero
+        cardCount={payload.stats.cardCount}
+        setCount={payload.stats.setCount}
+        topLeaders={payload.topLeaders}
+      />
       <LatestSets sets={payload.latestSets} />
       <MoversBoard risers={payload.risers} fallers={payload.fallers} />
       <TreatmentsBand />
       <CollectorTools />
+      <div style={{ maxWidth: 1180, margin: '0 auto', padding: '0 24px 64px' }}>
+        <Faq title="Frequently asked questions" entries={HOMEPAGE_FAQ} />
+      </div>
     </>
   );
 }
