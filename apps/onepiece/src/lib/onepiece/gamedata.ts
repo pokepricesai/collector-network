@@ -59,7 +59,13 @@ export function toOpGamedata(raw: unknown): OpGamedata {
   const src = raw as Record<string, unknown>;
 
   return {
-    type: normaliseCardType(src['type'] ?? src['card_type']),
+    // Real production key is `cardType` (camelCase). Older data used
+    // `type` / `card_type`; keep those as fallbacks. Prior to this
+    // fix the parser missed cardType entirely and every OP card came
+    // back with type=null — which is why Leaders / Colours grids
+    // looked "blocked on ingest" when in fact all rows have full
+    // data (verified 2026-09-27 against 5,538 live rows).
+    type: normaliseCardType(src['cardType'] ?? src['type'] ?? src['card_type']),
     colours: parseColours(src['colours'] ?? src['colors'] ?? src['color']),
     cost: numberOrNull(src['cost']),
     power: numberOrNull(src['power']),

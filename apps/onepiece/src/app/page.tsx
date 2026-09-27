@@ -28,7 +28,11 @@ export default async function HomePage() {
   const payload = await getHomepageData();
   return (
     <>
-      <Hero cardCount={payload.stats.cardCount} setCount={payload.stats.setCount} />
+      <Hero
+        cardCount={payload.stats.cardCount}
+        setCount={payload.stats.setCount}
+        topLeaders={payload.topLeaders}
+      />
       <LatestSets sets={payload.latestSets} />
       <MoversBoard risers={payload.risers} fallers={payload.fallers} />
       <TreatmentsBand />

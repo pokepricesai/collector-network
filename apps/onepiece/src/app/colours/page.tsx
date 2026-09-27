@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { OP_COLOURS, OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import { canonicalFor } from '@/lib/seo';
+import Faq from '@/components/Faq';
+import { COLOURS_FAQ } from '@/lib/faq-content';
 
 export const metadata: Metadata = {
   title: 'One Piece card colours — Red, Green, Blue, Purple, Black, Yellow',
@@ -96,6 +98,8 @@ export default function ColoursIndex() {
             </Link>
           ))}
         </div>
+
+        <Faq title="About One Piece colours" entries={COLOURS_FAQ} />
       </div>
     </div>
   );

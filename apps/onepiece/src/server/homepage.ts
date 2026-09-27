@@ -1,7 +1,8 @@
 import 'server-only';
-import { listRecentSetsWithCounts, type OpSetSummary } from './browse';
+import { listRecentSetsWithCounts, listSetsWithCounts, type OpSetSummary } from './browse';
 import { getMovers, type MoverEntry } from './market';
 import { getOnepieceClient, getOnepieceGameId } from './client';
+import { queryFinder, type OpFinderTile } from './finder';
 
 // Homepage payload assembly.
 //
@@ -21,16 +22,18 @@ export interface HomepagePayload {
   latestSets: OpSetSummary[];
   risers: MoverEntry[];
   fallers: MoverEntry[];
+  topLeaders: OpFinderTile[];
   errors: string[];
 }
 
 export async function getHomepageData(): Promise<HomepagePayload> {
   const errors: string[] = [];
 
-  const [statsResult, latestResult, moversResult] = await Promise.allSettled([
+  const [statsResult, latestResult, moversResult, leadersResult] = await Promise.allSettled([
     getHomepageStats(),
     listRecentSetsWithCounts(8),
     getMovers(30, 6),
+    topLeadersForHome(),
   ]);
 
   const stats: HomepageStats =
@@ -55,13 +58,31 @@ export async function getHomepageData(): Promise<HomepagePayload> {
           fallers: [],
         });
 
+  const topLeaders =
+    leadersResult.status === 'fulfilled'
+      ? leadersResult.value
+      : (errors.push('topLeaders: ' + (leadersResult.reason?.message ?? 'unknown')), []);
+
   return {
     stats,
     latestSets,
     risers: movers.risers,
     fallers: movers.fallers,
+    topLeaders,
     errors,
   };
+}
+
+async function topLeadersForHome(): Promise<OpFinderTile[]> {
+  const sets = await listSetsWithCounts();
+  const result = await queryFinder(
+    { cardType: 'leader', onlyPriced: true },
+    'price-desc',
+    0,
+    5,
+    sets.map((s) => s.set),
+  );
+  return result.tiles;
 }
 
 async function getHomepageStats(): Promise<HomepageStats> {
