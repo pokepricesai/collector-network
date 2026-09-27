@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>OnePiecePrices</title>
+  <defs>
+    <linearGradient id="op-sail" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#DC2626"/>
+      <stop offset="1" stop-color="#7F1D1D"/>
+    </linearGradient>
+    <linearGradient id="op-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F5C518"/>
+      <stop offset="1" stop-color="#C29414"/>
+    </linearGradient>
+  </defs>
+  <!-- Ship's wheel / compass rose emblem in OP red + gold. Reads as
+       a compass at 16px, as a wheel at 180px. Never uses trademarked
+       Straw Hat / Jolly Roger imagery. -->
+  <circle cx="32" cy="32" r="26" fill="url(#op-sail)"/>
+  <circle cx="32" cy="32" r="26" fill="none" stroke="url(#op-gold)" stroke-width="2"/>
+  <!-- Four-point compass rose -->
+  <path d="M32 8 L36 30 L32 32 L28 30 Z" fill="url(#op-gold)"/>
+  <path d="M32 56 L36 34 L32 32 L28 34 Z" fill="url(#op-gold)"/>
+  <path d="M8 32 L30 36 L32 32 L30 28 Z" fill="url(#op-gold)"/>
+  <path d="M56 32 L34 36 L32 32 L34 28 Z" fill="url(#op-gold)"/>
+  <circle cx="32" cy="32" r="3.5" fill="#FFF5DE"/>
+</svg>

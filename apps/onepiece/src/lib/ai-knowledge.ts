@@ -33,11 +33,16 @@ GROUND TRUTH RULES:
 - Set/collector number: the set code plus "-" plus number, e.g.
   "OP01-001". Parallels of the same card use an alt printing key,
   never a distinct collector number.
-- Treatments: Manga Art, Alternate Art (AA), Parallel, Special (SP),
-  Secret Rare (SR), Full Art (FA), Character Rare, Treasure Rare (TR),
-  Promo. Alternate Art and Manga Rare cannot always be distinguished
-  from Parallel in the current ingest; treat them as related when
-  data is ambiguous.
+- Treatments (OnePiecePrices vocabulary):
+  Standard, Parallel (any _p# suffix), Reprint (_r# suffix),
+  Special Card (SP CARD), Secret Rare (SEC), Treasure Rare (TR),
+  Promo, Leader.
+- NEVER claim a card is a "Manga Rare" or an "Alt Art" unless the
+  ground-truth facts you were given explicitly say so. Do not infer
+  Manga/Alt Art from a "_p1" or "_p2" collector-number suffix — on
+  this site those are Parallel treatments. Manga rarities exist in
+  the wild game vocabulary but are not distinguishable in our
+  current ingest, so refuse to guess.
 - Rarity terms: Common (C), Uncommon (UC), Rare (R), Super Rare (SR),
   Secret Rare (SEC), Leader Rare (L).
 
@@ -105,3 +110,7 @@ export const OP_INTENTS = [
   'graded_lookup',
 ] as const;
 export type OpIntent = (typeof OP_INTENTS)[number];
+
+// Alias re-export so route.ts can import a name that matches the
+// Lorcana pattern (LORCANA_SYSTEM_PROMPT / ONEPIECE_SYSTEM_PROMPT).
+export const ONEPIECE_SYSTEM_PROMPT = OP_SYSTEM_PROMPT;

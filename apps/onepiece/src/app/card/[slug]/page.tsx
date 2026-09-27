@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getCurrentUser } from '@collector-network/auth';
 import { getCardBundleByName } from '@/server/read';
 import { searchCards } from '@/server/search';
 import { canonicalFor } from '@/lib/seo';
@@ -10,6 +11,13 @@ import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import { TREATMENT_DISPLAY_ORDER } from '@/lib/onepiece/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
+import LogicalAddToCollection, {
+  type PrintingPick,
+} from '@/components/card/LogicalAddToCollection';
+import AskOnePiecePanel from '@/components/card/AskOnePiecePanel';
+import Faq from '@/components/Faq';
+import EbayAffiliateDisclosure from '@/components/EbayAffiliateDisclosure';
+import { logicalCardFaq } from '@/lib/faq-content';
 import type { OpCardView, OpPrintingView } from '@/server/read';
 
 // Logical / gameplay card page. Shows every printing across every set
@@ -79,6 +87,27 @@ export default async function LogicalCardPage({
   // Pick hero art from the highest-rarity card row.
   const heroCard = pickHero(bundle.cards);
   const heroImage = pickCardImage(heroCard.card.images);
+
+  // Load current user server-side so LogicalAddToCollection can render
+  // its signed-in vs signed-out state without a client fetch.
+  const currentUser = await getCurrentUser();
+  const returnPath = `/card/${slug}`;
+
+  // Materialise every real printing as a PrintingPick for the picker —
+  // never a synthetic default row.
+  const printingPicks: PrintingPick[] = flat.map((entry) => {
+    const { cardView, printingView } = entry;
+    return {
+      cardId: cardView.card.id,
+      printingId: printingView.printing.id,
+      treatmentLabel: printingView.treatment.label,
+      treatmentCode: printingView.treatment.code,
+      finish: printingView.printing.finish ?? null,
+      setCode: printingView.set?.code ?? null,
+      collectorNumber: printingView.printing.collector_number ?? null,
+      variantIndex: printingView.variantIndex,
+    };
+  });
 
   const grouped = groupByTreatment(flat);
   const treatmentOrder: Array<{
@@ -162,6 +191,18 @@ export default async function LogicalCardPage({
             </div>
 
             <CardStatGrid gamedata={heroCard.gamedata} types={heroCard.gamedata.types} />
+
+            {/* Primary Add-to-Collection surface — printing picker
+                inline so users pick the exact printing.id (never an
+                ambiguous row). Signed-out shows Sign up + Sign in. */}
+            <div style={{ marginTop: 4 }}>
+              <LogicalAddToCollection
+                cardName={bundle.name}
+                isSignedIn={Boolean(currentUser)}
+                returnPath={returnPath}
+                printings={printingPicks}
+              />
+            </div>
 
             {heroCard.gamedata.effectText && (
               <div
@@ -257,9 +298,97 @@ export default async function LogicalCardPage({
             </div>
           ))}
         </section>
+
+        <AskOnePiecePanel
+          cardId={heroCard.card.id}
+          cardName={bundle.name}
+          contextSummary={buildAiContext(bundle.name, heroCard, flat)}
+          suggestions={[
+            `What treatments of ${bundle.name} exist?`,
+            `What is the cheapest priced printing of ${bundle.name}?`,
+            `Is ${bundle.name} inkable / uninkable?`.replace('inkable / uninkable', 'a Leader'),
+          ]}
+        />
+
+        <Faq
+          title={`About ${bundle.name}`}
+          entries={logicalCardFaq(bundle.name, {
+            treatmentCount: treatmentOrder.length,
+            printingCount: flat.length,
+            colours: heroCard.gamedata.colours.map((c) => OP_COLOUR_LABEL[c] ?? c),
+            rarities: Array.from(new Set(bundle.cards.map((c) => c.card.rarity ?? '').filter(Boolean))),
+          })}
+        />
+
+        <EbayAffiliateDisclosure />
       </div>
     </div>
   );
+}
+
+// Build a compact grounded-context string for the AI panel. Includes
+// name, colours, card type, gameplay stats, treatments and cheapest
+// live prices per printing. Deliberately terse — the model reads
+// this as the ground-truth block.
+function buildAiContext(
+  name: string,
+  heroCard: OpCardView,
+  flat: Array<{ cardView: OpCardView; printingView: OpPrintingView }>,
+): string {
+  const g = heroCard.gamedata;
+  const stats: string[] = [];
+  if (g.cost != null) stats.push(`Cost ${g.cost}`);
+  if (g.power != null) stats.push(`Power ${g.power}`);
+  if (g.counter != null) stats.push(`Counter ${g.counter}`);
+  if (g.life != null) stats.push(`Life ${g.life}`);
+  if (g.attribute) stats.push(`Attribute ${g.attribute}`);
+  const treatments = new Map<string, number>();
+  const priceRows: string[] = [];
+  for (const { printingView } of flat) {
+    const key = printingView.treatment.label;
+    treatments.set(key, (treatments.get(key) ?? 0) + 1);
+    const cheapest = pickCheapestLive(printingView);
+    if (cheapest) {
+      priceRows.push(
+        `  ${printingView.set?.code?.toUpperCase() ?? '—'} ${printingView.printing.collector_number ?? '—'} ${printingView.treatment.short}${printingView.variantIndex != null ? `#${printingView.variantIndex}` : ''} ${printingView.printing.finish ?? 'nonfoil'}: ${cheapest}`,
+      );
+    }
+  }
+  const rarities = Array.from(new Set(flat.map((e) => e.cardView.card.rarity).filter(Boolean))).join(', ');
+  const treatmentLine = Array.from(treatments.entries())
+    .map(([k, v]) => `${k} (${v})`)
+    .join(', ');
+  return [
+    `Card: ${name}`,
+    heroCard.set ? `Set: ${heroCard.set.name} (${heroCard.set.code.toUpperCase()})` : null,
+    rarities ? `Rarity codes across printings: ${rarities}` : null,
+    g.colours.length > 0 ? `Colours: ${g.colours.join(' / ')}` : null,
+    g.types && g.types.length > 0 ? `Types: ${g.types.join(', ')}` : null,
+    g.type ? `Card type: ${g.type}` : null,
+    stats.length > 0 ? `Gameplay stats: ${stats.join(', ')}` : null,
+    `Treatments: ${treatmentLine || '—'}`,
+    `Total priced printings: ${flat.length}`,
+    priceRows.length > 0 ? `Cheapest live prices:\n${priceRows.join('\n')}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join('\n');
+}
+
+function pickCheapestLive(view: OpPrintingView): string | null {
+  const marketRows = (view.pricing?.market ?? []) as Array<{
+    price?: number | null;
+    currency?: string | null;
+  }>;
+  let best: { price: number; currency: string } | null = null;
+  for (const row of marketRows) {
+    if (row.price == null || !row.currency) continue;
+    if (best == null || row.price < best.price) {
+      best = { price: row.price, currency: row.currency };
+    }
+  }
+  if (!best) return null;
+  const symbol = best.currency === 'EUR' ? '€' : best.currency === 'USD' ? '$' : `${best.currency} `;
+  return `${symbol}${best.price.toFixed(2)}`;
 }
 
 function pickHero(cards: OpCardView[]): OpCardView {

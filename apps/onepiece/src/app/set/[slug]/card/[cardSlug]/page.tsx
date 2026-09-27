@@ -13,6 +13,7 @@ import TreatmentPanel from '@/components/card/TreatmentPanel';
 import PriceHistorySpark from '@/components/card/PriceHistorySpark';
 import { AddToCollection } from '@/components/AddToCollection';
 import { GradedPricesPanel } from '@/components/GradedPricesPanel';
+import EbayAffiliateDisclosure from '@/components/EbayAffiliateDisclosure';
 import { getPrintingHistory } from '@/server/history';
 import { getGradedRowsForAnchor } from '@/server/graded';
 import type { OpCardView, OpPrintingView } from '@/server/read';
@@ -374,6 +375,8 @@ export default async function PrintingPage({
             </ul>
           </section>
         )}
+
+        <EbayAffiliateDisclosure />
       </div>
     </div>
   );

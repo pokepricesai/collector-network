@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isOpColour, OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import { canonicalFor } from '@/lib/seo';
+import Faq from '@/components/Faq';
+import { colourFaq } from '@/lib/faq-content';
 
 // V1 colour landing pages. Static content today; the "cards in this
 // colour" grid arrives once the gamedata.colours index is fully
@@ -96,8 +98,8 @@ export default async function ColourDetail({
           }}
         >
           Colour-scoped card grid coming soon. Meanwhile,{' '}
-          <Link href="/cards/search" style={{ fontWeight: 700 }}>
-            search for a card
+          <Link href="/card-finder" style={{ fontWeight: 700 }}>
+            open the Card Finder
           </Link>{' '}
           or{' '}
           <Link href="/browse" style={{ fontWeight: 700 }}>
@@ -105,6 +107,8 @@ export default async function ColourDetail({
           </Link>
           .
         </div>
+
+        <Faq title={`About ${label} One Piece cards`} entries={colourFaq(label, slug)} />
       </div>
     </div>
   );

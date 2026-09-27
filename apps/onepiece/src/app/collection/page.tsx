@@ -6,6 +6,8 @@ import { CollectionRowActions } from './CollectionRowActions';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug } from '@/lib/onepiece/slug';
 import { pickCardImage } from '@/lib/onepiece/image';
+import Faq from '@/components/Faq';
+import { COLLECTION_FAQ } from '@/lib/faq-content';
 
 export const metadata: Metadata = {
   title: 'My One Piece Collection',
@@ -222,6 +224,8 @@ export default async function CollectionPage() {
           })}
         </section>
       )}
+
+      <Faq title="About the One Piece collection tracker" entries={COLLECTION_FAQ} />
     </main>
   );
 }

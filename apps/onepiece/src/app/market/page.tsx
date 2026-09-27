@@ -4,6 +4,8 @@ import { getMovers, type MoverEntry, type MoverWindow } from '@/server/market';
 import { buildPrintingSlug } from '@/lib/onepiece/slug';
 import { formatPrice } from '@/lib/onepiece/format-price';
 import { SITE_URL } from '@/lib/site-url';
+import Faq from '@/components/Faq';
+import { MARKET_FAQ } from '@/lib/faq-content';
 
 export const revalidate = 900;
 
@@ -88,6 +90,8 @@ export default async function MarketPage({
           <Column title="Risers" tone="up" movers={risers} />
           <Column title="Fallers" tone="down" movers={fallers} />
         </div>
+
+        <Faq title="About the One Piece market" entries={MARKET_FAQ} />
       </div>
     </div>
   );

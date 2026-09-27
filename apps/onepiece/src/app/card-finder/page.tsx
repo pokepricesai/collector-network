@@ -4,6 +4,8 @@ import { canonicalFor } from '@/lib/seo';
 import { OP_COLOURS, OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import { OP_CARD_TYPES, OP_CARD_TYPE_LABEL } from '@/lib/onepiece/card-type';
 import { OP_TREATMENTS } from '@/lib/onepiece/treatment';
+import Faq from '@/components/Faq';
+import { CARD_FINDER_FAQ } from '@/lib/faq-content';
 
 export const metadata: Metadata = {
   title: 'One Piece card finder — filter by colour, cost, power, counter and more',
@@ -124,12 +126,11 @@ export default function CardFinderPage() {
             <Link href="/browse" style={{ fontWeight: 700 }}>
               browse by set
             </Link>{' '}
-            or{' '}
-            <Link href="/cards/search" style={{ fontWeight: 700 }}>
-              search by name
-            </Link>
-            .
+            or use the search bar in the header to look up a card by
+            name.
           </div>
+
+          <Faq title="Card Finder — what you can search" entries={CARD_FINDER_FAQ} />
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { canonicalFor } from '@/lib/seo';
+import Faq from '@/components/Faq';
+import { LEADERS_FAQ } from '@/lib/faq-content';
 
 // V1 Leaders directory. Static explainer today. The full leader grid
 // wires up once the gamedata.type='leader' filter is queryable at
@@ -60,11 +62,13 @@ export default function LeadersPage() {
             browse by set
           </Link>{' '}
           or{' '}
-          <Link href="/cards/search" style={{ fontWeight: 700 }}>
-            search by Leader name
+          <Link href="/card-finder" style={{ fontWeight: 700 }}>
+            open the Card Finder
           </Link>
           .
         </div>
+
+        <Faq title="About One Piece Leaders" entries={LEADERS_FAQ} />
       </div>
     </div>
   );
