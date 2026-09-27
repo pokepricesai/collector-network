@@ -499,6 +499,177 @@ export function cardFaq(name: string, facts: {
   return entries;
 }
 
+export function archetypeFaq(name: string, facts: {
+  memberVariants: number;
+  setsRepresented: number;
+  topExampleName: string | null;
+  topExamplePriceUsd: number | null;
+  frameTypeBreakdown: Array<{ frameType: string; count: number }>;
+  attributeBreakdown: Array<{ attribute: string; count: number }>;
+}): FaqEntry[] {
+  const entries: FaqEntry[] = [
+    {
+      q: `How many cards are in the ${name} archetype?`,
+      a: (
+        <>
+          We currently catalogue{' '}
+          {facts.memberVariants.toLocaleString('en-US')} member card
+          variants of the {name} archetype across{' '}
+          {facts.setsRepresented.toLocaleString('en-US')} recently
+          indexed sets. Each variant is a distinct set × rarity ×
+          edition combination.
+        </>
+      ),
+      plainAnswer: `We currently catalogue ${facts.memberVariants.toLocaleString('en-US')} member card variants of the ${name} archetype across ${facts.setsRepresented.toLocaleString('en-US')} recently indexed sets. Each variant is a distinct set × rarity × edition combination.`,
+    },
+  ];
+  if (facts.topExampleName && facts.topExamplePriceUsd != null) {
+    const priceStr = `$${facts.topExamplePriceUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    entries.push({
+      q: `Which ${name} card is currently most valuable?`,
+      a: (
+        <>
+          The dearest {name} member in our live retail feed right now is{' '}
+          <em>{facts.topExampleName}</em> at {priceStr} USD. Prices move
+          — check the card page for the current value and history.
+        </>
+      ),
+      plainAnswer: `The dearest ${name} member in our live retail feed right now is ${facts.topExampleName} at ${priceStr} USD.`,
+    });
+  }
+  if (facts.frameTypeBreakdown.length > 0) {
+    const top = facts.frameTypeBreakdown.slice(0, 4)
+      .map((b) => `${b.frameType} (${b.count})`).join(', ');
+    entries.push({
+      q: `What card types are in the ${name} archetype?`,
+      a: (
+        <>
+          Card-class distribution across the indexed members: {top}
+          {facts.frameTypeBreakdown.length > 4 ? ' and other classes' : ''}.
+        </>
+      ),
+      plainAnswer: `Card-class distribution across the indexed ${name} members: ${top}${facts.frameTypeBreakdown.length > 4 ? ' and other classes' : ''}.`,
+    });
+  }
+  if (facts.attributeBreakdown.length > 0) {
+    const top = facts.attributeBreakdown.slice(0, 4)
+      .map((b) => `${b.attribute} (${b.count})`).join(', ');
+    entries.push({
+      q: `What attributes appear in the ${name} archetype?`,
+      a: (
+        <>
+          Attribute distribution across the indexed monster members:{' '}
+          {top}
+          {facts.attributeBreakdown.length > 4 ? ' and other attributes' : ''}.
+        </>
+      ),
+      plainAnswer: `Attribute distribution across the indexed ${name} monster members: ${top}${facts.attributeBreakdown.length > 4 ? ' and other attributes' : ''}.`,
+    });
+  }
+  entries.push({
+    q: `Where can I browse every ${name} card?`,
+    a: (
+      <>
+        Every member card indexed on YGOPrices is listed above on this
+        page. To filter the whole catalogue by archetype elsewhere, open{' '}
+        <Link href={`/card-finder?archetype=${encodeURIComponent(name)}`}>
+          Card Finder with the {name} archetype filter applied
+        </Link>.
+      </>
+    ),
+    plainAnswer: `Every indexed ${name} member is listed on this page. To filter the whole catalogue by archetype, open Card Finder with the ${name} archetype filter applied.`,
+  });
+  return entries;
+}
+
+export function rarityFaq(familyLabel: string, familySlug: string, facts: {
+  totalCards: number;
+  distinctRarityNames: string[];
+  latestSetsCount: number;
+  topExampleName: string | null;
+  topExamplePriceUsd: number | null;
+}): FaqEntry[] {
+  const entries: FaqEntry[] = [
+    {
+      q: `What is the ${familyLabel} rarity family in Yu-Gi-Oh!?`,
+      a: (
+        <>
+          On YGOPrices, {familyLabel} groups every printing whose
+          on-card rarity label falls into this family. In our
+          catalogue that currently covers{' '}
+          {facts.totalCards.toLocaleString('en-US')} distinct cards
+          across {facts.distinctRarityNames.length} distinct rarity
+          {facts.distinctRarityNames.length === 1 ? '' : ' names'}
+          {facts.distinctRarityNames.length > 0 && facts.distinctRarityNames.length <= 6
+            ? ` (${facts.distinctRarityNames.join(', ')})`
+            : ''}.
+          Konami has printed and retired several rarity labels over
+          the years — we display each printing&apos;s ingest-time
+          label rather than reinventing historical definitions.
+        </>
+      ),
+      plainAnswer: `On YGOPrices, ${familyLabel} groups every printing whose on-card rarity label falls into this family. In our catalogue that currently covers ${facts.totalCards.toLocaleString('en-US')} distinct cards across ${facts.distinctRarityNames.length} distinct rarity name${facts.distinctRarityNames.length === 1 ? '' : 's'}${facts.distinctRarityNames.length > 0 && facts.distinctRarityNames.length <= 6 ? ` (${facts.distinctRarityNames.join(', ')})` : ''}.`,
+    },
+    {
+      q: `How many ${familyLabel} cards are there?`,
+      a: (
+        <>
+          {facts.totalCards.toLocaleString('en-US')} distinct{' '}
+          {familyLabel} cards are currently indexed on YGOPrices.
+          That count reflects our ingest — the live game has more
+          across every set Konami has ever printed.
+        </>
+      ),
+      plainAnswer: `${facts.totalCards.toLocaleString('en-US')} distinct ${familyLabel} cards are currently indexed on YGOPrices. That count reflects our ingest — the live game has more across every set Konami has ever printed.`,
+    },
+  ];
+  if (facts.topExampleName && facts.topExamplePriceUsd != null) {
+    const priceStr = `$${facts.topExamplePriceUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    entries.push({
+      q: `Which ${familyLabel} card is currently most valuable?`,
+      a: (
+        <>
+          The dearest {familyLabel} example in our live retail feed
+          right now is <em>{facts.topExampleName}</em> at {priceStr}{' '}
+          USD. Prices move — open the card page for the current
+          value and history.
+        </>
+      ),
+      plainAnswer: `The dearest ${familyLabel} example in our live retail feed right now is ${facts.topExampleName} at ${priceStr} USD.`,
+    });
+  }
+  if (facts.latestSetsCount > 0) {
+    entries.push({
+      q: `Which sets have ${familyLabel} cards?`,
+      a: (
+        <>
+          {facts.latestSetsCount.toLocaleString('en-US')} recent sets
+          contain {familyLabel} cards. See the &quot;Recently indexed
+          sets&quot; panel on this page for a sample; individual set
+          pages show the full rarity breakdown for each release.
+        </>
+      ),
+      plainAnswer: `${facts.latestSetsCount.toLocaleString('en-US')} recent sets contain ${familyLabel} cards. The "Recently indexed sets" panel on this page shows a sample; individual set pages carry the full rarity breakdown.`,
+    });
+  }
+  entries.push({
+    q: `Where can I filter every ${familyLabel} card in Card Finder?`,
+    a: (
+      <>
+        Card Finder groups rarities into families, so filtering by{' '}
+        <em>{familyLabel}</em> returns every card that carries a
+        {familyLabel === 'Secret Rare' ? '' : 'n'} equivalent label
+        across our data. Open{' '}
+        <Link href={`/card-finder?rarityFamily=${familySlug}`}>
+          Card Finder with {familyLabel} applied
+        </Link>.
+      </>
+    ),
+    plainAnswer: `Card Finder groups rarities into families, so filtering by ${familyLabel} returns every card that carries an equivalent label across our data.`,
+  });
+  return entries;
+}
+
 export function setFaq(setName: string, setCode: string, facts: {
   uniqueCards: number;
   variants: number;

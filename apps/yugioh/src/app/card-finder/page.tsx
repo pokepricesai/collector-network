@@ -15,6 +15,8 @@ import { siteUrl } from '../../lib/site-url';
 import { toCardSlug } from '../../lib/slug';
 import { runYugiohCardFinder } from '../../server/card-finder';
 import { safe } from '../../server/safe';
+import Faq from '../../components/Faq';
+import { CARD_FINDER_FAQ } from '../../lib/faq-content';
 import styles from './CardFinder.module.css';
 import { FilterPanel } from './FilterPanel';
 
@@ -102,6 +104,8 @@ export default async function CardFinderPage({ searchParams }: PageProps) {
             )}
           </div>
         </div>
+
+        <Faq title="About the Card Finder" entries={CARD_FINDER_FAQ} />
       </main>
       <Footer />
     </>

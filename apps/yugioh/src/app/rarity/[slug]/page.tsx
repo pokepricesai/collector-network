@@ -18,6 +18,8 @@ import {
   getYugiohRarityBySlug,
   type RarityPageData,
 } from '../../../server/browse';
+import Faq from '../../../components/Faq';
+import { rarityFaq } from '../../../lib/faq-content';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
@@ -229,6 +231,17 @@ export default async function RarityPage({ params }: Props) {
             ))}
           </div>
         </section>
+
+        <Faq
+          title={`About ${label} rarity`}
+          entries={rarityFaq(label, data.family, {
+            totalCards: data.totalCards,
+            distinctRarityNames: data.rarities,
+            latestSetsCount: data.latestSets.length,
+            topExampleName: data.topByUsdPrice[0]?.card.name ?? null,
+            topExamplePriceUsd: data.topByUsdPrice[0]?.bestUsdRetail?.price ?? null,
+          })}
+        />
       </main>
       <Footer />
     </>
