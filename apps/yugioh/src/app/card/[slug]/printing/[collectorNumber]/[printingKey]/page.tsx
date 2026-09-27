@@ -15,6 +15,7 @@ import { Surface } from '../../../../../../components/Surface';
 import { AddToCollectionMount } from '../../../../../../components/collection/AddToCollectionMount';
 import { WatchButtonMount } from '../../../../../../components/watchlist/WatchButtonMount';
 import { AddToDeckMount } from '../../../../../../components/decks/AddToDeckMount';
+import { EbayLinkButton } from '../../../../../../components/card/EbayLinkButton';
 import { GradedStrip } from '../../../../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../../../../components/signature/RarityRefractorLine';
@@ -377,6 +378,28 @@ export default async function PrintingPage({ params }: Props) {
               ))}
             </Surface>
           )}
+          {/* Outbound eBay CTA for this exact printing. Uses the
+              shared @collector-network/affiliate EPN wiring; the
+              button renders a plain search when the campaign env
+              is absent. Not affiliated with eBay Inc. */}
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <EbayLinkButton
+              cardName={data.card.name}
+              setName={data.set?.name ?? null}
+              setCode={data.card.set_id ?? null}
+              collectorNumber={data.printing.collector_number ?? null}
+              edition={
+                data.edition === '1st_edition' ? '1st Edition'
+                : data.edition === 'limited' ? 'Limited Edition'
+                : null
+              }
+              rarity={data.card.rarity ?? null}
+              source="ygo-printing"
+            />
+            <span style={{ fontSize: 11, opacity: 0.6 }}>
+              Affiliate. We may earn a commission from qualifying eBay purchases.
+            </span>
+          </div>
         </section>
 
         {/* Slice A: price history for this exact printing. Retail

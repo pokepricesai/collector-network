@@ -1,7 +1,7 @@
-// @collector-network/analytics — package shell.
+// @collector-network/analytics — shared analytics primitives.
 //
-// Intended responsibility: shared analytics/event-tracking primitives.
-// GA4 (or successor) init, canonical event names, safe wrappers for
-// server/client emit. Not implemented yet.
+// Scope today: GA4 script pair keyed by NEXT_PUBLIC_GA_ID. Safe no-op
+// when unset so preview / pre-launch environments never send hits.
 
-export const __analytics_package_placeholder = true;
+export { GoogleAnalytics, isGoogleAnalyticsEnabled } from './google-analytics';
+export type { GoogleAnalyticsProps } from './google-analytics';

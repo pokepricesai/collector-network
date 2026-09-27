@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/next';
+import { GoogleAnalytics } from '@collector-network/analytics';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -103,11 +104,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Footer />
         {/* Vercel Web Analytics — anonymous page-view counts + the
             track() API for custom events. Only records data on
-            production deployments; a no-op on dev + preview. Same
-            wiring as apps/yugioh. Add Google Analytics 4 later via
-            a small client component if the network standardises on
-            it. */}
+            production deployments; a no-op on dev + preview. */}
         <Analytics />
+        {/* GA4 via shared @collector-network/analytics. Safe no-op
+            when NEXT_PUBLIC_GA_ID is unset. */}
+        <GoogleAnalytics />
       </body>
     </html>
   );

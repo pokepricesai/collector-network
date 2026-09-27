@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/next';
+import { GoogleAnalytics } from '@collector-network/analytics';
 import { ygoFontClassName } from '../design/fonts';
 import '../design/tokens.css';
 
@@ -19,6 +20,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             src/lib/analytics.ts. Runs only on production; disabled in
             dev and preview by default. */}
         <Analytics />
+        {/* GA4 via shared @collector-network/analytics. Safe no-op
+            when NEXT_PUBLIC_GA_ID is unset. */}
+        <GoogleAnalytics />
       </body>
     </html>
   );

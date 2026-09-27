@@ -23,6 +23,9 @@ importers:
       '@collector-network/affiliate':
         specifier: workspace:*
         version: link:../../packages/affiliate
+      '@collector-network/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@collector-network/auth':
         specifier: workspace:^
         version: link:../../packages/auth
@@ -35,6 +38,9 @@ importers:
       '@collector-network/network-config':
         specifier: workspace:*
         version: link:../../packages/network-config
+      '@collector-network/seo':
+        specifier: workspace:*
+        version: link:../../packages/seo
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.117.0)
@@ -96,6 +102,9 @@ importers:
       '@collector-network/affiliate':
         specifier: workspace:*
         version: link:../../packages/affiliate
+      '@collector-network/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@collector-network/auth':
         specifier: workspace:^
         version: link:../../packages/auth
@@ -108,6 +117,9 @@ importers:
       '@collector-network/network-config':
         specifier: workspace:*
         version: link:../../packages/network-config
+      '@collector-network/seo':
+        specifier: workspace:*
+        version: link:../../packages/seo
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.117.0)
@@ -169,6 +181,9 @@ importers:
       '@collector-network/affiliate':
         specifier: workspace:*
         version: link:../../packages/affiliate
+      '@collector-network/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@collector-network/auth':
         specifier: workspace:^
         version: link:../../packages/auth
@@ -184,6 +199,9 @@ importers:
       '@collector-network/network-ui':
         specifier: workspace:*
         version: link:../../packages/network-ui
+      '@collector-network/seo':
+        specifier: workspace:*
+        version: link:../../packages/seo
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.117.0)
@@ -239,6 +257,18 @@ importers:
 
   packages/analytics:
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.20.4
+      '@types/react':
+        specifier: ^19.0.7
+        version: 19.3.0
+      next:
+        specifier: ^15.1.4
+        version: 15.5.25(@types/node@22.20.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
@@ -324,6 +354,12 @@ importers:
 
   packages/seo:
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.20.4
+      next:
+        specifier: ^15.1.4
+        version: 15.5.25(@types/node@22.20.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
