@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { getPricedTiles } from '@/server/discovery';
 import CardBoard from '@/components/home/CardBoard';
 import { canonicalFor } from '@/lib/seo';
+import Faq from '@/components/Faq';
+import { MARKET_ICONIC_FAQ } from '@/lib/faq-content';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -36,6 +38,7 @@ export default async function IconicListPage() {
         </div>
       </header>
       <CardBoard tiles={tiles} columns={5} compact emptyLabel="No Iconic cards priced yet." />
+      <Faq title="About Iconic Lorcana cards" entries={MARKET_ICONIC_FAQ} />
     </div>
   );
 }

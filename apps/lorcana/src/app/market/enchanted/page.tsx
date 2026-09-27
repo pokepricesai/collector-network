@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { getPricedTiles } from '@/server/discovery';
 import CardBoard from '@/components/home/CardBoard';
 import { canonicalFor } from '@/lib/seo';
+import Faq from '@/components/Faq';
+import { MARKET_ENCHANTED_FAQ } from '@/lib/faq-content';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -37,6 +39,7 @@ export default async function EnchantedListPage() {
         </div>
       </header>
       <CardBoard tiles={tiles} columns={6} compact emptyLabel="No Enchanted cards priced yet." />
+      <Faq title="About Enchanted Lorcana cards" entries={MARKET_ENCHANTED_FAQ} />
     </div>
   );
 }
