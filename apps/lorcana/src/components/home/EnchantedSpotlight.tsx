@@ -2,10 +2,13 @@ import Link from 'next/link';
 import type { DiscoveryTile } from '@/server/discovery';
 import CardBoard from './CardBoard';
 
-// Top of the collector funnel. Enchanted overprints are Lorcana's
-// signature chase axis and this module is the fastest way to make
-// that legible: dark parchment panel, gold-accented header, six
-// tiles from real data.
+// Top of the collector funnel. Enchanted is the signature Lorcana
+// chase rarity and this module is the fastest way to make that
+// legible: dark parchment panel, gold-accented header, six tiles
+// from real data. "Enchanted overprint" is the technically correct
+// print-industry term (an overprint replaces a Common slot with an
+// alt-art variant) but the DB records rarity=Enchanted so we lead
+// with the plain rarity term.
 
 interface Props {
   tiles: DiscoveryTile[];
@@ -25,12 +28,12 @@ export default function EnchantedSpotlight({ tiles, iconic = [] }: Props) {
                 The chase axis
               </div>
               <h2 style={{ margin: 0 }}>
-                Enchanted overprints
+                Enchanted cards
               </h2>
               <p style={{ marginTop: 8, color: 'rgba(240,225,183,0.72)', maxWidth: 520, fontSize: 14, lineHeight: 1.55 }}>
-                Bordered alt-art printings, numbered past the base set.
-                Priced by their cheapest current retail — the true shelf
-                floor rather than the foil premium.
+                Alt-art overprints in the replaced-common slot, numbered
+                past the base set. Ranked by highest current retail
+                across every printing.
               </p>
             </div>
             <Link
