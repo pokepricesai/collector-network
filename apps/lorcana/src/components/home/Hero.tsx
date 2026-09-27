@@ -26,10 +26,12 @@ export default function Hero({ cardCount, setCount, enchantedCount }: HeroProps)
             </span>
           </div>
 
-          <h1 style={{ letterSpacing: '-0.02em' }}>
-            Every printing.<br />
+          <h1 style={{ letterSpacing: '-0.01em' }}>
+            <span className="lc-serif" style={{ fontSize: '1.02em' }}>Every printing.</span><br />
             <span className="gold-text">Every Enchanted.</span><br />
-            One collector-grade catalogue.
+            <span className="lc-serif-italic" style={{ fontSize: '0.9em', color: 'var(--text-muted)' }}>
+              One collector-grade catalogue.
+            </span>
           </h1>
 
           <p style={{

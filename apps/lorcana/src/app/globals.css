@@ -855,3 +855,95 @@ button.nav-link, button.btn, button.chip {
   min-width: 0;
 }
 .lc-panel > * { max-width: 100%; }
+
+/* ─────────────────────────────────────────────────────────────
+   Storybook accent kit — restrained magical / ink motifs.
+   Added during specialist-sites launch programme.
+   Purpose: reinforce Lorcana identity via serif accents,
+   ink-drop micro details and jewel-toned interactive states,
+   without cluttering the data.
+   ───────────────────────────────────────────────────────────── */
+
+/* Serif accent for page-title flourishes. Cormorant Garamond
+   loaded from Google Fonts in layout.tsx. Reserve for hero titles
+   and section subtitles — do NOT apply to data numbers. */
+.lc-serif {
+  font-family: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.lc-serif-italic {
+  font-family: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Ink-drop bullet — tiny circular ink mark used before section
+   subtitles or as list markers. Uses currentColor. */
+.lc-inkdrop::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  background: currentColor;
+  border-radius: 50%;
+  opacity: 0.55;
+  vertical-align: middle;
+  transform: translateY(-2px);
+}
+
+/* Ornamental divider — three ink drops with hair rules. Sits
+   between hero and first content section. */
+.lc-ornament-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  margin: 24px 0;
+  color: var(--text-muted, #6a5a41);
+}
+.lc-ornament-divider::before,
+.lc-ornament-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.35;
+  max-width: 100px;
+}
+.lc-ornament-divider .lc-ornament-drops {
+  display: inline-flex;
+  gap: 6px;
+}
+.lc-ornament-divider .lc-ornament-drops::before,
+.lc-ornament-divider .lc-ornament-drops::after,
+.lc-ornament-divider .lc-ornament-drops {
+  color: inherit;
+}
+
+/* Ink-jewel accent panel — subtle inner glow using a chosen ink
+   colour. Apply on set-page hero or panel-of-the-day. Six variants,
+   one per ink. Kept very low opacity so data stays legible. */
+.lc-jewel { position: relative; isolation: isolate; }
+.lc-jewel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(80% 60% at 15% 0%, var(--jewel-tint, rgba(106,67,190,0.10)) 0%, transparent 60%);
+  pointer-events: none;
+}
+.lc-jewel--amber    { --jewel-tint: rgba(225,161,27,0.10); }
+.lc-jewel--amethyst { --jewel-tint: rgba(106,67,190,0.10); }
+.lc-jewel--emerald  { --jewel-tint: rgba(38,144,94,0.10); }
+.lc-jewel--ruby     { --jewel-tint: rgba(193,56,73,0.10); }
+.lc-jewel--sapphire { --jewel-tint: rgba(41,113,196,0.10); }
+.lc-jewel--steel    { --jewel-tint: rgba(100,115,140,0.10); }
+
+/* Nav treatment — smaller logo footprint so the wordmark reads
+   as a mark, not a headline. Override earlier lc-nav-logo rules. */
+.lc-nav-logo { max-height: 34px !important; }
+@media (max-width: 480px) {
+  .lc-nav-logo { max-height: 30px !important; }
+}

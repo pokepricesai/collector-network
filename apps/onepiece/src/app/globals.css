@@ -675,3 +675,69 @@ button.nav-link, button.btn, button.chip {
   color: #F6EED9;
   line-height: 1.1;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Nautical accent kit — restrained sea-map motifs.
+   Added during specialist-sites launch programme.
+   Purpose: reinforce OP identity via subtle, low-contrast
+   visual cues (wave dividers, compass tick, map-corner rules)
+   that make section transitions feel game-native without
+   drowning the data underneath.
+   ───────────────────────────────────────────────────────────── */
+
+/* Wave divider — a low-amplitude repeating rule, gold tinted.
+   Use between hero and first content section, or between major
+   panel groups. Height stays ≤12px so it never eats page room. */
+.op-wave {
+  height: 10px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 10' preserveAspectRatio='none'><path d='M0 5 Q 15 0 30 5 T 60 5' fill='none' stroke='%23C88C1A' stroke-opacity='0.35' stroke-width='1'/></svg>");
+  background-size: 60px 10px;
+  background-repeat: repeat-x;
+  opacity: 0.6;
+}
+.op-wave--ocean { filter: hue-rotate(-40deg) saturate(0.9); }
+
+/* Compass tick — tiny N/S indicator used at the start of key
+   section headings. Uses currentColor so it inherits from the
+   surrounding text tone. Purely decorative; aria-hidden expected. */
+.op-compass::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background:
+    linear-gradient(to top, transparent 45%, currentColor 45%, currentColor 55%, transparent 55%);
+  opacity: 0.55;
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
+
+/* Map-corner accent — sits in the top-left of any container to
+   suggest a chart edge. Two thin lines forming an ‘L’. */
+.op-mapcorner {
+  position: relative;
+}
+.op-mapcorner::before,
+.op-mapcorner::after {
+  content: "";
+  position: absolute;
+  background: var(--gold-300);
+  opacity: 0.4;
+}
+.op-mapcorner::before {
+  top: 8px; left: 8px;
+  width: 22px; height: 1px;
+}
+.op-mapcorner::after {
+  top: 8px; left: 8px;
+  width: 1px; height: 22px;
+}
+
+/* Tuned navbar treatment — smaller logo, less visual weight so
+   product content dominates. Overrides the earlier 44px height.
+   No layout change — width remains auto so wordmark ratio holds. */
+.op-nav-logo { height: 38px; }
+@media (max-width: 480px) { .op-nav-logo { height: 32px; } }
