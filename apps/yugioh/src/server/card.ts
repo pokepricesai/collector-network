@@ -135,7 +135,7 @@ async function _getYugiohLogicalCardBySlug(
 // gain comes from.
 export const getYugiohLogicalCardBySlug = withCacheBypass(
   _getYugiohLogicalCardBySlug,
-  unstable_cache(_getYugiohLogicalCardBySlug, ['ygo:logicalCardBySlug', 'v1'], {
+  unstable_cache(_getYugiohLogicalCardBySlug, ['ygo:logicalCardBySlug', 'v2'], {
     revalidate: CACHE_TTL.ENTITY_MEDIUM,
     tags: [CACHE_TAGS.CARD],
   }),
