@@ -55,8 +55,12 @@ test('slugMatches rejects near-misses', () => {
 });
 
 test('slugToIlikePattern turns dashes into % wildcards', () => {
-  assert.equal(slugToIlikePattern('blue-eyes-white-dragon'), 'blue%eyes%white%dragon');
-  assert.equal(slugToIlikePattern('dark-magician'), 'dark%magician');
+  // Leading + trailing % allow DB names that start or end with stripped
+  // punctuation (e.g. Maxx "C" ends with a straight double-quote).
+  // slugMatches() re-slugs the DB name for exact correctness.
+  assert.equal(slugToIlikePattern('blue-eyes-white-dragon'), '%blue%eyes%white%dragon%');
+  assert.equal(slugToIlikePattern('dark-magician'), '%dark%magician%');
+  assert.equal(slugToIlikePattern('maxx-c'), '%maxx%c%');
 });
 
 test('normalisePrintingKey accepts common values', () => {
@@ -88,11 +92,11 @@ test('two names distinguished only by bang produce distinct slugs', () => {
 });
 
 test('slugToIlikePattern strips disambiguator suffix so ILIKE matches the base name', () => {
-  assert.equal(slugToIlikePattern('ectoplasmic-fortification--x'), 'ectoplasmic%fortification');
-  assert.equal(slugToIlikePattern('how-did-dai-get-here--q'), 'how%did%dai%get%here');
-  assert.equal(slugToIlikePattern('bingo-machine-go--xxx'), 'bingo%machine%go');
+  assert.equal(slugToIlikePattern('ectoplasmic-fortification--x'), '%ectoplasmic%fortification%');
+  assert.equal(slugToIlikePattern('how-did-dai-get-here--q'), '%how%did%dai%get%here%');
+  assert.equal(slugToIlikePattern('bingo-machine-go--xxx'), '%bingo%machine%go%');
   // Non-suffixed slugs unchanged.
-  assert.equal(slugToIlikePattern('blue-eyes-white-dragon'), 'blue%eyes%white%dragon');
+  assert.equal(slugToIlikePattern('blue-eyes-white-dragon'), '%blue%eyes%white%dragon%');
 });
 
 test('slugMatches round-trips for bang-marked names', () => {

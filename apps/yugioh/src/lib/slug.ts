@@ -59,7 +59,12 @@ export function toCardSlug(name: string): string {
 export function slugToIlikePattern(slug: string): string {
   const base = slug.replace(/--[xq]+$/, '');
   const escaped = base.replace(/[%_]/g, (m) => `\\${m}`);
-  return escaped.replace(/-/g, '%');
+  // Wrap in leading + trailing % to allow names that begin or end with
+  // punctuation that got stripped by toCardSlug (e.g. Maxx "C" ends
+  // with a straight double-quote; without a trailing % the ILIKE
+  // filter refuses to match). Correctness is preserved because
+  // slugMatches() always re-slugs the DB name and compares exactly.
+  return `%${escaped.replace(/-/g, '%')}%`;
 }
 
 // True if the given DB name slugs to the same string.
