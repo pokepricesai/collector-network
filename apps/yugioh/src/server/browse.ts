@@ -300,7 +300,24 @@ async function _getYugiohRarityBySlug(slug: string): Promise<RarityPageData | nu
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
   const cardIds = cards.map((c) => c.id);
 
-  // Sets + printings are independent — parallel fetch.
+  // Sets + printings are independent — parallel fetch. cardIds are
+  // bounded by RARITY_PAGE_CARD_CAP (200) so getPrintingsForCards
+  // stays inside a single .in() URL. The pricing lookup afterwards
+  // can produce 1000+ printing IDs, though — that must be chunked
+  // in parallel so the response doesn't time out under concurrent
+  // load.
+  const RARITY_IN_CHUNK = 200;
+  async function chunkedRarityPricingBatch(ids: readonly string[]) {
+    if (ids.length === 0) return new Map<string, PrintingPricing>();
+    const slices: string[][] = [];
+    for (let i = 0; i < ids.length; i += RARITY_IN_CHUNK) slices.push(ids.slice(i, i + RARITY_IN_CHUNK));
+    const parts = await Promise.all(slices.map((s) => getPrintingPricingBatch(supabase, s)));
+    const out = new Map<string, PrintingPricing>();
+    for (const partial of parts) {
+      for (const [k, v] of partial.entries()) out.set(k, v);
+    }
+    return out;
+  }
   const [sets, printings] = await Promise.all([
     getSetsByIds(supabase, setIds),
     getPrintingsForCards(supabase, cardIds),
@@ -314,7 +331,7 @@ async function _getYugiohRarityBySlug(slug: string): Promise<RarityPageData | nu
     printingsByCardId.set(p.tcg_card_id, bucket);
   }
   const pricingResult = await safe('rarity-pricing', () =>
-    getPrintingPricingBatch(supabase, printingIds),
+    chunkedRarityPricingBatch(printingIds),
   );
   const pricingMap = pricingResult.ok
     ? pricingResult.value
@@ -534,21 +551,25 @@ async function _getYugiohArchetypeBySlug(
   // under the cap without touching the shared package (which stays
   // Lorcana / OP / YGO-neutral).
   const IN_CHUNK = 200;
+  // Chunks run in parallel — sequential await made large archetypes
+  // (Blackwing, Cyber Dragon, Lightsworn, Magician, etc.) exceed the
+  // Vercel Function timeout under any concurrent load, e.g. a
+  // sitemap-driven crawler HEAD-sweep. 20 pricing chunks × ~200ms
+  // sequential = 4 s; the same 20 chunks in parallel = ~250 ms.
   async function chunkedPrintingsForCards(ids: readonly string[]) {
     if (ids.length === 0) return [] as TcgPrinting[];
-    const out: TcgPrinting[] = [];
-    for (let i = 0; i < ids.length; i += IN_CHUNK) {
-      const slice = ids.slice(i, i + IN_CHUNK);
-      out.push(...(await getPrintingsForCards(supabase, slice)));
-    }
-    return out;
+    const slices: string[][] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) slices.push(ids.slice(i, i + IN_CHUNK));
+    const results = await Promise.all(slices.map((s) => getPrintingsForCards(supabase, s)));
+    return results.flat();
   }
   async function chunkedPricingBatch(ids: readonly string[]) {
     if (ids.length === 0) return new Map<string, PrintingPricing>();
+    const slices: string[][] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) slices.push(ids.slice(i, i + IN_CHUNK));
+    const parts = await Promise.all(slices.map((s) => getPrintingPricingBatch(supabase, s)));
     const out = new Map<string, PrintingPricing>();
-    for (let i = 0; i < ids.length; i += IN_CHUNK) {
-      const slice = ids.slice(i, i + IN_CHUNK);
-      const partial = await getPrintingPricingBatch(supabase, slice);
+    for (const partial of parts) {
       for (const [k, v] of partial.entries()) out.set(k, v);
     }
     return out;
