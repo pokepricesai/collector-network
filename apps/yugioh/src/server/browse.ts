@@ -307,13 +307,13 @@ async function _getYugiohRarityBySlug(slug: string): Promise<RarityPageData | nu
   // in parallel so the response doesn't time out under concurrent
   // load.
   const RARITY_IN_CHUNK = 200;
+  // Sequential — see the archetype path for why full parallel fan-out
+  // is a trap here.
   async function chunkedRarityPricingBatch(ids: readonly string[]) {
     if (ids.length === 0) return new Map<string, PrintingPricing>();
-    const slices: string[][] = [];
-    for (let i = 0; i < ids.length; i += RARITY_IN_CHUNK) slices.push(ids.slice(i, i + RARITY_IN_CHUNK));
-    const parts = await Promise.all(slices.map((s) => getPrintingPricingBatch(supabase, s)));
     const out = new Map<string, PrintingPricing>();
-    for (const partial of parts) {
+    for (let i = 0; i < ids.length; i += RARITY_IN_CHUNK) {
+      const partial = await getPrintingPricingBatch(supabase, ids.slice(i, i + RARITY_IN_CHUNK));
       for (const [k, v] of partial.entries()) out.set(k, v);
     }
     return out;
@@ -551,25 +551,26 @@ async function _getYugiohArchetypeBySlug(
   // under the cap without touching the shared package (which stays
   // Lorcana / OP / YGO-neutral).
   const IN_CHUNK = 200;
-  // Chunks run in parallel — sequential await made large archetypes
-  // (Blackwing, Cyber Dragon, Lightsworn, Magician, etc.) exceed the
-  // Vercel Function timeout under any concurrent load, e.g. a
-  // sitemap-driven crawler HEAD-sweep. 20 pricing chunks × ~200ms
-  // sequential = 4 s; the same 20 chunks in parallel = ~250 ms.
+  // Chunks run sequentially. A brief experiment with full Promise.all
+  // fan-out fixed single-request latency but overwhelmed Supabase's
+  // HTTP connection pool under concurrent load (a 1500-card
+  // archetype × 20 pricing chunks × 10 concurrent archetype
+  // requests = ~200 in-flight Supabase queries → PostgREST 5xx
+  // cascade). Sequential per-request is self-limiting and keeps the
+  // system honest.
   async function chunkedPrintingsForCards(ids: readonly string[]) {
     if (ids.length === 0) return [] as TcgPrinting[];
-    const slices: string[][] = [];
-    for (let i = 0; i < ids.length; i += IN_CHUNK) slices.push(ids.slice(i, i + IN_CHUNK));
-    const results = await Promise.all(slices.map((s) => getPrintingsForCards(supabase, s)));
-    return results.flat();
+    const out: TcgPrinting[] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      out.push(...(await getPrintingsForCards(supabase, ids.slice(i, i + IN_CHUNK))));
+    }
+    return out;
   }
   async function chunkedPricingBatch(ids: readonly string[]) {
     if (ids.length === 0) return new Map<string, PrintingPricing>();
-    const slices: string[][] = [];
-    for (let i = 0; i < ids.length; i += IN_CHUNK) slices.push(ids.slice(i, i + IN_CHUNK));
-    const parts = await Promise.all(slices.map((s) => getPrintingPricingBatch(supabase, s)));
     const out = new Map<string, PrintingPricing>();
-    for (const partial of parts) {
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const partial = await getPrintingPricingBatch(supabase, ids.slice(i, i + IN_CHUNK));
       for (const [k, v] of partial.entries()) out.set(k, v);
     }
     return out;
