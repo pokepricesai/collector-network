@@ -19,7 +19,8 @@ export function toCardSlug(name: string): string {
   const normalized = name
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '') // strip combining-diacritic block
-    .replace(/[‘’'`]/g, ''); // apostrophes disappear (Collector's → collectors)
+    .replace(/[‘’'`]/g, '') // apostrophes disappear (Collector's → collectors)
+    .replace(/[“”"]/g, ''); // smart + straight double quotes disappear (Maxx "C" → maxx-c)
 
   // Yu-Gi-Oh! uses `!` and `?` to distinguish otherwise-identical card
   // names (see "Ectoplasmic Fortification" collision found in Sept 23

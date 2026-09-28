@@ -54,9 +54,14 @@ export function Footer() {
             converted; USD and EUR are shown as-is.
           </p>
           <p className={styles.text}>
-            Some outbound purchase links may earn a commission when we
-            enable affiliate programs. No affiliate tracking is active
-            in this build.
+            Find on eBay buttons across card and set pages are eBay
+            Partner Network affiliate links. YGOPrices may earn a
+            commission on qualifying purchases at no cost to you.
+          </p>
+          <p className={styles.text}>
+            <a href="/privacy" className={styles.link}>Privacy</a>{' · '}
+            <a href="/terms" className={styles.link}>Terms</a>{' · '}
+            <a href="/contact" className={styles.link}>Contact</a>
           </p>
         </div>
       </div>
