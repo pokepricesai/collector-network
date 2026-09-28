@@ -8,6 +8,8 @@ import { RarityRefractorLine } from '../../components/signature/RarityRefractorL
 import { RARITY_FAMILY_LABELS } from '../../design/tokens';
 import { siteUrl } from '../../lib/site-url';
 import { listYugiohRaritiesForDirectory } from '../../server/browse';
+import Faq from '../../components/Faq';
+import { RARITIES_FAQ } from '../../lib/faq-content';
 import styles from '../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
@@ -72,6 +74,8 @@ export default async function RaritiesDirectoryPage() {
             </Link>
           ))}
         </div>
+
+        <Faq title="About Yu-Gi-Oh! rarities" entries={RARITIES_FAQ} />
       </main>
       <Footer />
     </>

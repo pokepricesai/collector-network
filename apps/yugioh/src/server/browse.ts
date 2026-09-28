@@ -300,7 +300,24 @@ async function _getYugiohRarityBySlug(slug: string): Promise<RarityPageData | nu
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
   const cardIds = cards.map((c) => c.id);
 
-  // Sets + printings are independent — parallel fetch.
+  // Sets + printings are independent — parallel fetch. cardIds are
+  // bounded by RARITY_PAGE_CARD_CAP (200) so getPrintingsForCards
+  // stays inside a single .in() URL. The pricing lookup afterwards
+  // can produce 1000+ printing IDs, though — that must be chunked
+  // in parallel so the response doesn't time out under concurrent
+  // load.
+  const RARITY_IN_CHUNK = 200;
+  // Sequential — see the archetype path for why full parallel fan-out
+  // is a trap here.
+  async function chunkedRarityPricingBatch(ids: readonly string[]) {
+    if (ids.length === 0) return new Map<string, PrintingPricing>();
+    const out = new Map<string, PrintingPricing>();
+    for (let i = 0; i < ids.length; i += RARITY_IN_CHUNK) {
+      const partial = await getPrintingPricingBatch(supabase, ids.slice(i, i + RARITY_IN_CHUNK));
+      for (const [k, v] of partial.entries()) out.set(k, v);
+    }
+    return out;
+  }
   const [sets, printings] = await Promise.all([
     getSetsByIds(supabase, setIds),
     getPrintingsForCards(supabase, cardIds),
@@ -314,7 +331,7 @@ async function _getYugiohRarityBySlug(slug: string): Promise<RarityPageData | nu
     printingsByCardId.set(p.tcg_card_id, bucket);
   }
   const pricingResult = await safe('rarity-pricing', () =>
-    getPrintingPricingBatch(supabase, printingIds),
+    chunkedRarityPricingBatch(printingIds),
   );
   const pricingMap = pricingResult.ok
     ? pricingResult.value
@@ -524,11 +541,46 @@ async function _getYugiohArchetypeBySlug(
   const setIds = Array.from(new Set(cards.map((c) => c.set_id)));
   const cardIds = cards.map((c) => c.id);
 
+  // Chunk the printings + pricing lookups. `getPrintingsForCards` and
+  // `getPrintingPricingBatch` both use a single `.in(...)` under the
+  // hood, and PostgREST caps the URL length at ~2 KB — roughly 400
+  // UUIDs per call. Large archetypes like Elemental HERO have
+  // hundreds of cards / thousands of printings, so an unchunked call
+  // 500s here (verified as the cause of the pre-existing
+  // /archetype/elemental-hero regression). Chunking keeps the URL
+  // under the cap without touching the shared package (which stays
+  // Lorcana / OP / YGO-neutral).
+  const IN_CHUNK = 200;
+  // Chunks run sequentially. A brief experiment with full Promise.all
+  // fan-out fixed single-request latency but overwhelmed Supabase's
+  // HTTP connection pool under concurrent load (a 1500-card
+  // archetype × 20 pricing chunks × 10 concurrent archetype
+  // requests = ~200 in-flight Supabase queries → PostgREST 5xx
+  // cascade). Sequential per-request is self-limiting and keeps the
+  // system honest.
+  async function chunkedPrintingsForCards(ids: readonly string[]) {
+    if (ids.length === 0) return [] as TcgPrinting[];
+    const out: TcgPrinting[] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      out.push(...(await getPrintingsForCards(supabase, ids.slice(i, i + IN_CHUNK))));
+    }
+    return out;
+  }
+  async function chunkedPricingBatch(ids: readonly string[]) {
+    if (ids.length === 0) return new Map<string, PrintingPricing>();
+    const out = new Map<string, PrintingPricing>();
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const partial = await getPrintingPricingBatch(supabase, ids.slice(i, i + IN_CHUNK));
+      for (const [k, v] of partial.entries()) out.set(k, v);
+    }
+    return out;
+  }
+
   // Sets + printings are independent — fetch in parallel to halve the
   // wall-clock spent on this section.
   const [sets, printings] = await Promise.all([
     getSetsByIds(supabase, setIds),
-    getPrintingsForCards(supabase, cardIds),
+    chunkedPrintingsForCards(cardIds),
   ]);
   const setsById = new Map(sets.map((s) => [s.id, s]));
 
@@ -539,7 +591,7 @@ async function _getYugiohArchetypeBySlug(
     printingsByCardId.set(p.tcg_card_id, bucket);
   }
   const pricingResult = await safe('archetype-pricing', () =>
-    getPrintingPricingBatch(supabase, printings.map((p) => p.id)),
+    chunkedPricingBatch(printings.map((p) => p.id)),
   );
   const pricingMap = pricingResult.ok
     ? pricingResult.value

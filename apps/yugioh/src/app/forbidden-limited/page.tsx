@@ -13,6 +13,8 @@ import { CardMiniThumb } from '../../components/card-visual/CardMiniThumb';
 import type { FnlPageData, FnlSectionData } from '../../server/fnl';
 import { getYugiohForbiddenLimited } from '../../server/fnl';
 import { safe } from '../../server/safe';
+import Faq from '../../components/Faq';
+import { FNL_FAQ } from '../../lib/faq-content';
 import styles from '../../components/browse/Browse.module.css';
 import mobile from '../../components/market/MarketRankingRow.module.css';
 
@@ -232,6 +234,8 @@ export default async function ForbiddenLimitedPage() {
             </Surface>
           </div>
         </section>
+
+        <Faq title="About the Forbidden & Limited list" entries={FNL_FAQ} />
       </main>
       <Footer />
     </>

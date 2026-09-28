@@ -16,6 +16,8 @@ import {
   getYugiohArchetypeBySlug,
   type ArchetypePageData,
 } from '../../../server/browse';
+import Faq from '../../../components/Faq';
+import { archetypeFaq } from '../../../lib/faq-content';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
@@ -255,6 +257,18 @@ export default async function ArchetypePage({ params }: Props) {
             </p>
           )}
         </section>
+
+        <Faq
+          title={`About the ${data.name} archetype`}
+          entries={archetypeFaq(data.name, {
+            memberVariants: data.cards.length,
+            setsRepresented: data.setsRepresented.length,
+            topExampleName: data.topByUsdPrice[0]?.card.name ?? null,
+            topExamplePriceUsd: data.topByUsdPrice[0]?.bestUsdRetail?.price ?? null,
+            frameTypeBreakdown: data.frameTypeBreakdown,
+            attributeBreakdown: data.attributeBreakdown,
+          })}
+        />
       </main>
       <Footer />
     </>

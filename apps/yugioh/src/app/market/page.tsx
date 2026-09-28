@@ -6,6 +6,8 @@ import { Surface } from '../../components/Surface';
 import { GradedRankingTable, RetailRankingTable } from '../../components/market/MarketRankingTable';
 import { siteUrl } from '../../lib/site-url';
 import { getYugiohMarketHomeData } from '../../server/market';
+import Faq from '../../components/Faq';
+import { MARKET_FAQ } from '../../lib/faq-content';
 import styles from '../../components/browse/Browse.module.css';
 
 export const revalidate = 900;
@@ -159,6 +161,8 @@ export default async function MarketHomePage() {
             </ul>
           </details>
         )}
+
+        <Faq title="About the Yu-Gi-Oh! market" entries={MARKET_FAQ} />
       </main>
       <Footer />
     </>

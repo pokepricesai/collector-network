@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>YGOPrices</title>
+  <defs>
+    <linearGradient id="ygo-purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#4C1D95"/>
+    </linearGradient>
+    <linearGradient id="ygo-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F5C518"/>
+      <stop offset="1" stop-color="#B78A0F"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded-square token in deep purple, edged in gold. A stylised
+       three-diamond stack (large / medium / small) evokes a card
+       stack without copying trademarked Yu-Gi-Oh imagery. Reads at
+       16px as a purple tile, at 180px as a sharp emblem. -->
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="url(#ygo-purple)" stroke="url(#ygo-gold)" stroke-width="2"/>
+  <path d="M32 12 L44 24 L32 36 L20 24 Z" fill="url(#ygo-gold)"/>
+  <path d="M32 32 L40 40 L32 48 L24 40 Z" fill="#FFF5DE" fill-opacity="0.9"/>
+  <path d="M32 44 L36 48 L32 52 L28 48 Z" fill="url(#ygo-gold)"/>
+</svg>

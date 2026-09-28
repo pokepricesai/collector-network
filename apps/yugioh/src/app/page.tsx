@@ -14,6 +14,8 @@ import {
 } from '../components/homepage/Sections';
 import { siteUrl } from '../lib/site-url';
 import { getYugiohHomepageData } from '../server/homepage';
+import Faq from '../components/Faq';
+import { HOMEPAGE_FAQ } from '../lib/faq-content';
 
 // The homepage renders live from production Supabase via the Slice 3
 // read layer + Slice 4 design system. Each section's data is fetched
@@ -71,6 +73,9 @@ export default async function HomePage() {
         <RarityDiscovery entries={payload.rarityDiscovery} />
         <CollectorTools />
         <DataNotes payload={payload} />
+        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '0 24px 40px' }}>
+          <Faq title="Frequently asked questions" entries={HOMEPAGE_FAQ} />
+        </div>
       </HomepageShell>
       <Footer />
     </>
