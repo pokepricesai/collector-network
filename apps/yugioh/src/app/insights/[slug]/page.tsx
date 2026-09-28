@@ -132,7 +132,7 @@ export default async function ArticlePage({
           Prices are shown in USD (TCGplayer) or EUR (Cardmarket EU).
           YGOPrices never applies a hardcoded FX conversion.
           &quot;Find on eBay&quot; buttons across the site are
-          affiliate links — YGOPrices may earn a commission at no
+          affiliate links. YGOPrices may earn a commission at no
           additional cost to you.
         </p>
       </main>
@@ -165,7 +165,7 @@ async function MostValuableBody() {
         <em>Dark Duel Stories</em> promo runs, and modern chase
         rarities like <em>Quarter Century Secret Rare</em>{' '}
         alt-arts routinely sit at four-figure retail. This piece
-        walks through the current top of the market — live-priced
+        walks through the current top of the market. Live-priced
         against the same feed the rest of YGOPrices uses.
       </p>
 
@@ -195,7 +195,7 @@ async function MostValuableBody() {
               .replace(/^-|-$/g, '');
             const priceStr = price != null
               ? `${currency === 'USD' ? '$' : currency === 'EUR' ? '€' : `${currency} `}${Math.round(price).toLocaleString('en-US')}`
-              : '—';
+              : '–';
             const key = entry.printing?.id ?? `${name}-${i}`;
             return (
               <li key={key}>
@@ -279,33 +279,33 @@ function RaritiesBody() {
 
       <h2>The base rarity ladder</h2>
       <ul>
-        <li><strong>Common</strong> — no foil treatment. The bulk of any set.</li>
-        <li><strong>Rare</strong> — silver-foil name.</li>
-        <li><strong>Super Rare</strong> — holofoil illustration.</li>
-        <li><strong>Ultra Rare</strong> — gold-foil name + holofoil illustration.</li>
-        <li><strong>Secret Rare</strong> — full-card holofoil (&ldquo;etched&rdquo; appearance).</li>
+        <li><strong>Common</strong>: no foil treatment. The bulk of any set.</li>
+        <li><strong>Rare</strong>: silver-foil name.</li>
+        <li><strong>Super Rare</strong>: holofoil illustration.</li>
+        <li><strong>Ultra Rare</strong>: gold-foil name + holofoil illustration.</li>
+        <li><strong>Secret Rare</strong>: full-card holofoil (&ldquo;etched&rdquo; appearance).</li>
       </ul>
 
       <h2>Chase rarities beyond Secret Rare</h2>
       <ul>
-        <li><strong>Ultimate Rare</strong> — embossed relief on the artwork.</li>
-        <li><strong>Ghost Rare</strong> — pale, ethereal foil with a lenticular effect.</li>
+        <li><strong>Ultimate Rare</strong>: embossed relief on the artwork.</li>
+        <li><strong>Ghost Rare</strong>: pale, ethereal foil with a lenticular effect.</li>
         <li>
-          <strong>Starlight Rare</strong> — full-card starburst foil,
+          <strong>Starlight Rare</strong>: full-card starburst foil,
           typically 1 per box, introduced with{' '}
           <em>Rising Rampage</em>.
         </li>
         <li>
-          <strong>Quarter Century Secret Rare</strong> —
+          <strong>Quarter Century Secret Rare</strong>: 
           anniversary chase foil in modern sets.
         </li>
         <li>
-          <strong>Prismatic Secret Rare</strong> — layered holo
+          <strong>Prismatic Secret Rare</strong>: layered holo
           treatment on early <em>Dark Duel Stories</em> and other
           promotional runs.
         </li>
         <li>
-          <strong>10000 Secret Rare</strong> — special-issue
+          <strong>10000 Secret Rare</strong>: special-issue
           chase rarity (e.g. <em>Ten Thousand Dragon</em>).
         </li>
       </ul>
@@ -322,16 +322,16 @@ function RaritiesBody() {
           Terminal arcade series.
         </li>
         <li>
-          <strong>Collector&apos;s Rare</strong> — matte foil
+          <strong>Collector&apos;s Rare</strong>: matte foil
           treatment introduced in modern World Premiere / OCG
           crossover sets.
         </li>
         <li>
-          <strong>Platinum Secret Rare</strong> — platinum-toned
+          <strong>Platinum Secret Rare</strong>: platinum-toned
           foil variant.
         </li>
         <li>
-          <strong>Normal Parallel Rare</strong> — legacy parallel
+          <strong>Normal Parallel Rare</strong>: legacy parallel
           treatment on early promotional card runs (e.g. Mattel
           Action Figure promo Elemental HEROes).
         </li>
@@ -344,7 +344,7 @@ function RaritiesBody() {
         Blue-Eyes White Dragon Unlimited English</em> share a rarity
         but differ by edition, and their prices differ accordingly.
         Similarly, a <em>Ghost Rare</em> and a <em>Starlight Rare</em>
-        of the same card are two separate printings — never averaged
+        of the same card are two separate printings. Never averaged
         together. YGOPrices tracks each printing as its own priced
         entity.
       </p>
@@ -363,7 +363,7 @@ function CollectingBody() {
   return (
     <>
       <p>
-        Starting a Yu-Gi-Oh! collection can feel busy — the game
+        Starting a Yu-Gi-Oh! collection can feel busy. The game
         has printed over 12,000 unique cards across three decades,
         every card can exist at multiple rarities and editions, and
         the modern release schedule ships new booster sets every few
@@ -378,21 +378,21 @@ function CollectingBody() {
       </p>
       <ul>
         <li>
-          <strong>Set</strong> — the release the card came from.
+          <strong>Set</strong>: the release the card came from.
           The three-letter prefix on the collector number
           (LOB-001, MRD-006, BLAR-EN061, …) tells you which.
         </li>
         <li>
-          <strong>Rarity</strong> — Common, Rare, Super Rare, Ultra
+          <strong>Rarity</strong>: Common, Rare, Super Rare, Ultra
           Rare, Secret Rare and the chase tiers.
         </li>
         <li>
-          <strong>Edition</strong> — 1st Edition (marked
+          <strong>Edition</strong>: 1st Edition (marked
           &quot;1st Edition&quot; under the artwork), Unlimited (no
           marker), or Limited Edition (marked LE).
         </li>
         <li>
-          <strong>Language</strong> — English, French, German,
+          <strong>Language</strong>: English, French, German,
           Italian, Spanish, Portuguese, Japanese, Korean, etc.
         </li>
       </ul>
@@ -409,8 +409,8 @@ function CollectingBody() {
       <ol>
         <li>
           <strong>By archetype.</strong> Pick a Yu-Gi-Oh! archetype
-          you love — Blue-Eyes, Dark Magician, Elemental HERO, Sky
-          Striker, Salamangreat, Kashtira — and collect every
+          you love. Blue-Eyes, Dark Magician, Elemental HERO, Sky
+          Striker, Salamangreat, Kashtira. And collect every
           reprint. Browse them at{' '}
           <Link href="/archetypes">/archetypes</Link>.
         </li>
@@ -431,12 +431,12 @@ function CollectingBody() {
         cheapest first:
       </p>
       <ul>
-        <li><strong>Ultimate Rare</strong> — embossed foil.</li>
-        <li><strong>Ghost Rare</strong> — ethereal foil.</li>
-        <li><strong>Starlight Rare</strong> — starburst foil.</li>
-        <li><strong>Quarter Century Secret Rare</strong> — modern chase.</li>
-        <li><strong>Prismatic Secret Rare</strong> — legacy promo chase.</li>
-        <li><strong>10000 Secret Rare</strong> — event-tier chase.</li>
+        <li><strong>Ultimate Rare</strong>: embossed foil.</li>
+        <li><strong>Ghost Rare</strong>: ethereal foil.</li>
+        <li><strong>Starlight Rare</strong>: starburst foil.</li>
+        <li><strong>Quarter Century Secret Rare</strong>: modern chase.</li>
+        <li><strong>Prismatic Secret Rare</strong>: legacy promo chase.</li>
+        <li><strong>10000 Secret Rare</strong>: event-tier chase.</li>
       </ul>
       <p>
         The full explainer is at{' '}
@@ -451,7 +451,7 @@ function CollectingBody() {
         slabs. YGOPrices shows raw retail and graded market values
         side by side on every card page. On any card page or
         printing page you can click the &quot;Find on eBay&quot;
-        button to jump directly to a targeted search — that
+        button to jump directly to a targeted search. That
         button is an affiliate link and YGOPrices may earn a
         commission at no additional cost to you.
       </p>
@@ -468,7 +468,7 @@ function CollectingBody() {
         legality engine that reads directly from the{' '}
         <Link href="/forbidden-limited">Forbidden &amp; Limited list</Link>.
         Row-Level Security scopes every read and write to your own
-        account — nobody else can see your holdings.
+        account. Nobody else can see your holdings.
       </p>
     </>
   );

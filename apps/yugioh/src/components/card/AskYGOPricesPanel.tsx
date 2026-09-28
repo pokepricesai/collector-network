@@ -72,7 +72,7 @@ export default function AskYGOPricesPanel(props: AskYGOPricesPanelProps) {
         Grounded answers about {props.cardName}
       </h2>
       <p style={{ margin: '0 0 14px', color: 'var(--ygo-text-muted, #6B7280)', fontSize: 13, lineHeight: 1.55 }}>
-        Answers cite this card&apos;s live database facts — printings,
+        Answers cite this card&apos;s live database facts. Printings,
         rarity, edition, ATK/DEF, archetype, current prices and
         Forbidden &amp; Limited status where recorded. YGOPrices AI
         does not invent card details.

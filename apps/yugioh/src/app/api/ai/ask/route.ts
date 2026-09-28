@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, answer: 'Question too long.' }, { status: 400 });
   }
 
-  const systemPrompt = `${YGO_SYSTEM_PROMPT}\n\nCard facts for this question (ground truth):\n${context}\n\nRules:\n- Only cite facts provided above. Never invent prices, printings, editions, rarities, legality or rulings.\n- If the user asks whether a card is Forbidden / Limited / Semi-Limited and the facts do not include a banlist state, answer with uncertainty and point at /forbidden-limited.\n- If the user asks whether a card is worth buying or will go up in price, refuse to speculate and point at the price-history chart.\n- Absence of a printing / edition / rarity in the facts means we do not have data for it — treat it as unknown, not as negative proof that it does not exist.\n- Keep answers to at most six sentences.`;
+  const systemPrompt = `${YGO_SYSTEM_PROMPT}\n\nCard facts for this question (ground truth):\n${context}\n\nRules:\n- Only cite facts provided above. Never invent prices, printings, editions, rarities, legality or rulings.\n- If the user asks whether a card is Forbidden / Limited / Semi-Limited and the facts do not include a banlist state, answer with uncertainty and point at /forbidden-limited.\n- If the user asks whether a card is worth buying or will go up in price, refuse to speculate and point at the price-history chart.\n- Absence of a printing / edition / rarity in the facts means we do not have data for it. Treat it as unknown, not as negative proof that it does not exist.\n- Keep answers to at most six sentences.`;
 
   try {
     const res = await fetch(endpoint, {

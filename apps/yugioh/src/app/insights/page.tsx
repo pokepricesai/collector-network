@@ -12,7 +12,7 @@ import { YGO_ARTICLES } from '../../lib/articles';
 const SITE_URL = siteUrl();
 
 export const metadata: Metadata = {
-  title: 'YGOPrices insights — Yu-Gi-Oh! market analysis and collector guides',
+  title: 'YGOPrices insights. Yu-Gi-Oh! market analysis and collector guides',
   description:
     'Editorial coverage of the Yu-Gi-Oh! market and collecting: most valuable cards, rarity explainers, and a collector guide to sets, editions and prices.',
   alternates: { canonical: `${SITE_URL}/insights` },

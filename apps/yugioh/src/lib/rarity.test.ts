@@ -53,7 +53,7 @@ test('gold, platinum, and parallel families collapse variants', () => {
   assert.equal(normaliseRarity('Duel Terminal Normal Parallel Rare'), 'parallel');
 });
 
-test('unknown values fall through to other — no throws', () => {
+test('unknown values fall through to other. No throws', () => {
   assert.equal(normaliseRarity('Some New 2027 Rarity'), 'other');
   assert.equal(normaliseRarity('New artwork'), 'other'); // production data anomaly
   assert.equal(normaliseRarity('random-string-42'), 'other');

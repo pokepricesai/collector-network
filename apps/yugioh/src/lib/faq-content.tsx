@@ -12,8 +12,8 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     a: (
       <>
         YGOPrices is a collector-focused catalogue and market tracker
-        for the Yu-Gi-Oh! Trading Card Game. Every printing — each
-        set × rarity × edition — is tracked as its own priced entity
+        for the Yu-Gi-Oh! Trading Card Game. Every printing. Each
+        set × rarity × edition. Is tracked as its own priced entity
         backed by a daily retail feed and a graded market panel.
         Browsing is free; a free account lets you{' '}
         <Link href="/collection">track a collection</Link>,{' '}
@@ -42,7 +42,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     q: 'What is the difference between rarity and edition?',
     a: (
       <>
-        <strong>Rarity</strong> is a physical print property — Common,
+        <strong>Rarity</strong> is a physical print property. Common,
         Rare, Super Rare, Ultra Rare, Secret Rare, Ultimate, Ghost,
         Starlight, Quarter Century, Prismatic Secret, and product-
         specific rarities like Duel Terminal Parallel. <strong>Edition</strong>{' '}
@@ -64,7 +64,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
         in TCG-format decks and how many copies are legal. On
         YGOPrices we track the current TCG status (Forbidden, Limited
         to 1, Semi-Limited to 2, Unlimited to 3) alongside OCG counts.
-        The list is snapshotted from the ingest feed — consult
+        The list is snapshotted from the ingest feed. Consult
         Konami&apos;s official page for tournament-critical decisions.
       </>
     ),
@@ -81,7 +81,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
         <Link href="/watchlist">Watchlist</Link> alerts on price
         movement, and <Link href="/decks">Deck</Link> saving with
         legality checks and public share URLs. Every read and write
-        is Row-Level-Security scoped — only you see your own data.
+        is Row-Level-Security scoped. Only you see your own data.
       </>
     ),
     plainAnswer:
@@ -92,7 +92,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     a: (
       <>
         YGOPrices doesn&apos;t sell cards. Card and printing pages
-        carry a &quot;Find on eBay&quot; button — an affiliate link that
+        carry a &quot;Find on eBay&quot; button. An affiliate link that
         opens a targeted eBay search for the exact printing. YGOPrices
         may earn a commission on qualifying purchases at no cost to
         you.
@@ -122,7 +122,7 @@ export const CARD_FINDER_FAQ: FaqEntry[] = [
       <>
         Name (free-text), set, rarity, monster type, attribute, level /
         rank / link rating, ATK, DEF, archetype, Forbidden &amp; Limited
-        status, and USD price range. Filters are URL-driven — copy the
+        status, and USD price range. Filters are URL-driven. Copy the
         address bar to share a view.
       </>
     ),
@@ -134,7 +134,7 @@ export const CARD_FINDER_FAQ: FaqEntry[] = [
     a: (
       <>
         Yes. Opening the finder without filters lands you on the
-        full catalogue. Add filters to narrow — the ranking sits on
+        full catalogue. Add filters to narrow. The ranking sits on
         real live data at every step.
       </>
     ),
@@ -162,7 +162,7 @@ export const CARD_FINDER_FAQ: FaqEntry[] = [
     a: (
       <>
         Yes. The Archetype filter reads from
-        <code> gamedata.archetypes</code> — a card can belong to
+        <code> gamedata.archetypes</code>. A card can belong to
         multiple archetypes and is included wherever it applies.
       </>
     ),
@@ -189,12 +189,12 @@ export const MARKET_FAQ: FaqEntry[] = [
     q: 'Which currencies do you show?',
     a: (
       <>
-        Prices are shown in their source currency — USD (TCGplayer) or
+        Prices are shown in their source currency. USD (TCGplayer) or
         EUR (Cardmarket). We never apply a hardcoded FX rate.
       </>
     ),
     plainAnswer:
-      'Prices are shown in their source currency — USD (TCGplayer) or EUR (Cardmarket). No hardcoded FX conversion.',
+      'Prices are shown in their source currency. USD (TCGplayer) or EUR (Cardmarket). No hardcoded FX conversion.',
   },
   {
     q: 'Are graded (slabbed) prices tracked?',
@@ -219,7 +219,7 @@ export const MARKET_FAQ: FaqEntry[] = [
       </>
     ),
     plainAnswer:
-      'Not every printing has active live listings. Blank means the daily feed returned no price for that printing — we never substitute stale data.',
+      'Not every printing has active live listings. Blank means the daily feed returned no price for that printing. We never substitute stale data.',
   },
 ];
 
@@ -270,7 +270,7 @@ export const WATCHLIST_FAQ: FaqEntry[] = [
       <>
         An exact printing (set × rarity × edition × language) with its
         current live retail price and short-term movement (7 / 30 /
-        90 day deltas). Adding a card doesn&apos;t buy anything — it
+        90 day deltas). Adding a card doesn&apos;t buy anything. It
         surfaces price moves.
       </>
     ),
@@ -291,7 +291,7 @@ export const WATCHLIST_FAQ: FaqEntry[] = [
   },
   {
     q: 'Is my watchlist private?',
-    a: <>Yes — Row-Level Security ensures only the signed-in owner sees their watches.</>,
+    a: <>Yes. Row-Level Security ensures only the signed-in owner sees their watches.</>,
     plainAnswer:
       'Yes. Row-Level Security ensures only the signed-in owner sees their watches.',
   },
@@ -328,7 +328,7 @@ export const DECKS_FAQ: FaqEntry[] = [
       <>
         No. Deck gameplay identity is by card name (a normalised
         <code> card_key</code>). The specific printing you pick is a
-        display hint for the visual — it never affects legality or
+        display hint for the visual. It never affects legality or
         gameplay.
       </>
     ),
@@ -342,8 +342,8 @@ export const ARCHETYPES_FAQ: FaqEntry[] = [
     q: 'What counts as an archetype in Yu-Gi-Oh!?',
     a: (
       <>
-        An archetype is a set of cards that share a name pattern —
-        typically a common substring — and often support each other
+        An archetype is a set of cards that share a name pattern –
+        typically a common substring. And often support each other
         mechanically (e.g. Blue-Eyes, Sky Striker, Salamangreat). The
         list here comes from <code>gamedata.archetypes</code> on each
         card row.
@@ -356,7 +356,7 @@ export const ARCHETYPES_FAQ: FaqEntry[] = [
     q: 'Can a card belong to more than one archetype?',
     a: (
       <>
-        Yes — some cards support multiple archetypes and appear in
+        Yes. Some cards support multiple archetypes and appear in
         each. The Card Finder&apos;s archetype filter matches whenever
         the card lists that archetype.
       </>
@@ -414,7 +414,7 @@ export const FNL_FAQ: FaqEntry[] = [
     q: 'How often does this list update?',
     a: (
       <>
-        Konami updates the list on a schedule — typically ~3× per
+        Konami updates the list on a schedule. Typically ~3× per
         year plus emergency amendments. The version on YGOPrices is
         snapshotted from the ingest feed; for tournament-critical
         decisions consult Konami&apos;s official page for the current
@@ -531,7 +531,7 @@ export function archetypeFaq(name: string, facts: {
         <>
           The dearest {name} member in our live retail feed right now is{' '}
           <em>{facts.topExampleName}</em> at {priceStr} USD. Prices move
-          — check the card page for the current value and history.
+         . Check the card page for the current value and history.
         </>
       ),
       plainAnswer: `The dearest ${name} member in our live retail feed right now is ${facts.topExampleName} at ${priceStr} USD.`,
@@ -604,7 +604,7 @@ export function rarityFaq(familyLabel: string, familySlug: string, facts: {
             ? ` (${facts.distinctRarityNames.join(', ')})`
             : ''}.
           Konami has printed and retired several rarity labels over
-          the years — we display each printing&apos;s ingest-time
+          the years. We display each printing&apos;s ingest-time
           label rather than reinventing historical definitions.
         </>
       ),
@@ -616,11 +616,11 @@ export function rarityFaq(familyLabel: string, familySlug: string, facts: {
         <>
           {facts.totalCards.toLocaleString('en-US')} distinct{' '}
           {familyLabel} cards are currently indexed on YGOPrices.
-          That count reflects our ingest — the live game has more
+          That count reflects our ingest. The live game has more
           across every set Konami has ever printed.
         </>
       ),
-      plainAnswer: `${facts.totalCards.toLocaleString('en-US')} distinct ${familyLabel} cards are currently indexed on YGOPrices. That count reflects our ingest — the live game has more across every set Konami has ever printed.`,
+      plainAnswer: `${facts.totalCards.toLocaleString('en-US')} distinct ${familyLabel} cards are currently indexed on YGOPrices. That count reflects our ingest. The live game has more across every set Konami has ever printed.`,
     },
   ];
   if (facts.topExampleName && facts.topExamplePriceUsd != null) {
@@ -631,7 +631,7 @@ export function rarityFaq(familyLabel: string, familySlug: string, facts: {
         <>
           The dearest {familyLabel} example in our live retail feed
           right now is <em>{facts.topExampleName}</em> at {priceStr}{' '}
-          USD. Prices move — open the card page for the current
+          USD. Prices move. Open the card page for the current
           value and history.
         </>
       ),
@@ -704,8 +704,8 @@ export function setFaq(setName: string, setCode: string, facts: {
       q: `Are the prices on this set page live?`,
       a: (
         <>
-          Yes. Each card tile shows the current best USD retail — or
-          EUR retail as a fallback — from the daily production feed.
+          Yes. Each card tile shows the current best USD retail. Or
+          EUR retail as a fallback. From the daily production feed.
           Click a tile for the full print history and per-printing
           pricing.
         </>

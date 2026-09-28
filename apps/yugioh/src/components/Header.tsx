@@ -22,6 +22,7 @@ const NAV: NavItem[] = [
   { label: 'Market', href: '/market' },
   { label: 'F&L', href: '/forbidden-limited' },
   { label: 'Decks', href: '/decks' },
+  { label: 'Insights', href: '/insights' },
 ];
 
 export async function Header({ compactSearch = true }: { compactSearch?: boolean }) {

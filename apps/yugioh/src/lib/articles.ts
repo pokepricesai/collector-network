@@ -30,7 +30,7 @@ export const YGO_ARTICLES: YgoArticleMeta[] = [
     title:
       'Yu-Gi-Oh! card rarities explained: Secret Rare, Ultimate Rare, Ghost Rare, Starlight Rare and more',
     description:
-      'A precise guide to every Yu-Gi-Oh! rarity you will encounter — from Common through Prismatic Secret Rare — and why rarity is not the same as edition or treatment.',
+      'A precise guide to every Yu-Gi-Oh! rarity you will encounter. From Common through Prismatic Secret Rare. And why rarity is not the same as edition or treatment.',
     publishedIso: '2026-09-28',
     updatedIso: '2026-09-28',
     readingMinutes: 8,

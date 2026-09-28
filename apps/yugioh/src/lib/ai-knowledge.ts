@@ -135,5 +135,5 @@ export const YGO_REFUSALS = {
   legality_without_context:
     "The current forbidden/limited list changes; I check it live at /forbidden-limited.",
   medical_or_legal:
-    "That's outside what I can help with — try a general search.",
+    "That's outside what I can help with. Try a general search.",
 };
