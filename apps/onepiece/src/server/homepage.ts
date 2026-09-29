@@ -1,6 +1,7 @@
 import 'server-only';
 import { listRecentSetsWithCounts, listSetsWithCounts, type OpSetSummary } from './browse';
 import { getMovers, type MoverEntry } from './market';
+import { getCurrencyPreference } from '../lib/onepiece/currency-server';
 import { getOnepieceClient, getOnepieceGameId } from './client';
 import { queryFinder, type OpFinderTile } from './finder';
 
@@ -28,11 +29,12 @@ export interface HomepagePayload {
 
 export async function getHomepageData(): Promise<HomepagePayload> {
   const errors: string[] = [];
+  const currency = await getCurrencyPreference();
 
   const [statsResult, latestResult, moversResult, leadersResult] = await Promise.allSettled([
     getHomepageStats(),
     listRecentSetsWithCounts(8),
-    getMovers(30, 6),
+    getMovers(30, 6, currency),
     topLeadersForHome(),
   ]);
 
@@ -74,13 +76,17 @@ export async function getHomepageData(): Promise<HomepagePayload> {
 }
 
 async function topLeadersForHome(): Promise<OpFinderTile[]> {
-  const sets = await listSetsWithCounts();
+  const [sets, currency] = await Promise.all([
+    listSetsWithCounts(),
+    getCurrencyPreference(),
+  ]);
   const result = await queryFinder(
     { cardType: 'leader', onlyPriced: true },
     'price-desc',
     0,
     5,
     sets.map((s) => s.set),
+    currency,
   );
   return result.tiles;
 }

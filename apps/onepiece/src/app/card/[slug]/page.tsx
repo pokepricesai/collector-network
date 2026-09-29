@@ -296,6 +296,17 @@ export default async function LogicalCardPage({
           </div>
         </div>
 
+        <AskOnePiecePanel
+          cardId={heroCard.card.id}
+          cardName={bundle.name}
+          contextSummary={buildAiContext(bundle.name, heroCard, flat)}
+          suggestions={[
+            `What treatments of ${bundle.name} exist?`,
+            `What is the cheapest priced printing of ${bundle.name}?`,
+            `What set is ${bundle.name} from?`,
+          ]}
+        />
+
         <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
           <header>
             <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
@@ -355,17 +366,6 @@ export default async function LogicalCardPage({
             </div>
           ))}
         </section>
-
-        <AskOnePiecePanel
-          cardId={heroCard.card.id}
-          cardName={bundle.name}
-          contextSummary={buildAiContext(bundle.name, heroCard, flat)}
-          suggestions={[
-            `What treatments of ${bundle.name} exist?`,
-            `What is the cheapest priced printing of ${bundle.name}?`,
-            `Is ${bundle.name} inkable / uninkable?`.replace('inkable / uninkable', 'a Leader'),
-          ]}
-        />
 
         <Faq
           title={`About ${bundle.name}`}

@@ -5,6 +5,8 @@ import { canonicalFor } from '@/lib/seo';
 import { findArticle, OP_ARTICLES } from '@/lib/articles';
 import { queryFinder } from '@/server/finder';
 import { listSetsWithCounts } from '@/server/browse';
+import { formatPrice } from '@/lib/onepiece/currency';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -148,12 +150,15 @@ function fmt(iso: string): string {
 // ── Article bodies ───────────────────────────────────────────────
 
 async function MostValuableBody() {
-  const sets = await listSetsWithCounts();
+  const [sets, currency] = await Promise.all([
+    listSetsWithCounts(),
+    getCurrencyPreference(),
+  ]);
   const setList = sets.map((s) => s.set);
   const [topLeaders, topSecrets, topTreasures] = await Promise.all([
-    queryFinder({ cardType: 'leader', onlyPriced: true }, 'price-desc', 0, 5, setList),
-    queryFinder({ rarity: 'SEC', onlyPriced: true }, 'price-desc', 0, 5, setList),
-    queryFinder({ rarity: 'TR',  onlyPriced: true }, 'price-desc', 0, 5, setList),
+    queryFinder({ cardType: 'leader', onlyPriced: true }, 'price-desc', 0, 5, setList, currency),
+    queryFinder({ rarity: 'SEC', onlyPriced: true }, 'price-desc', 0, 5, setList, currency),
+    queryFinder({ rarity: 'TR',  onlyPriced: true }, 'price-desc', 0, 5, setList, currency),
   ]);
 
   return (
@@ -466,7 +471,7 @@ function ArticleList({ tiles }: {
               </span>
             </span>
             <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 14 }}>
-              {t.priceEur != null ? `€${t.priceEur.toFixed(2)}` : 'Unpriced'}
+              {formatPrice(t.price, t.currency)}
             </span>
           </Link>
         </li>

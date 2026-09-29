@@ -70,6 +70,7 @@ export interface MoverFlags {
 export async function getMovers(
   windowDays: MoverWindow,
   limit = 30,
+  currencyFilter?: string,
 ): Promise<{ risers: MoverEntry[]; fallers: MoverEntry[] }> {
   const supabase = getOnepieceClient();
   const gameId = await getOnepieceGameId(supabase);
@@ -113,6 +114,7 @@ export async function getMovers(
     if (Math.abs(changePct) > MAX_SANE_CHANGE) continue; // outlier guard
     const [printingId, currency] = key.split('::');
     if (!printingId) continue;
+    if (currencyFilter && currency !== currencyFilter) continue;
     printingIds.add(printingId);
     raw.push({
       printing: { id: printingId } as TcgPrinting,

@@ -5,6 +5,8 @@ import { isOpColour, OP_COLOUR_LABEL, type OpColour } from '@/lib/onepiece/colou
 import { canonicalFor } from '@/lib/seo';
 import { queryFinder, type OpSort } from '@/server/finder';
 import { listSetsWithCounts } from '@/server/browse';
+import { formatPrice } from '@/lib/onepiece/currency';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import Faq from '@/components/Faq';
 import { colourFaq } from '@/lib/faq-content';
 
@@ -50,7 +52,10 @@ export default async function ColourDetail({
     ? (sp.cardType.toLowerCase() as any)
     : undefined;
 
-  const sets = await listSetsWithCounts();
+  const [sets, currency] = await Promise.all([
+    listSetsWithCounts(),
+    getCurrencyPreference(),
+  ]);
 
   // Full colour grid + a leader-only slice for the spotlight rail.
   const [full, leaders] = await Promise.all([
@@ -60,6 +65,7 @@ export default async function ColourDetail({
       0,
       120,
       sets.map((s) => s.set),
+      currency,
     ),
     queryFinder(
       { colour: slug as OpColour, cardType: 'leader' },
@@ -67,6 +73,7 @@ export default async function ColourDetail({
       0,
       6,
       sets.map((s) => s.set),
+      currency,
     ),
   ]);
 
@@ -125,7 +132,7 @@ export default async function ColourDetail({
                     {(tile.set?.code ?? '').toUpperCase()} · {tile.collectorNumber}
                   </div>
                   <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 13, marginTop: 4 }}>
-                    {tile.priceEur != null ? `€${tile.priceEur.toFixed(2)}` : 'Unpriced'}
+                    {formatPrice(tile.price, tile.currency)}
                   </div>
                 </Link>
               ))}
@@ -177,7 +184,7 @@ export default async function ColourDetail({
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 2 }}>
                     <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 13 }}>
-                      {tile.priceEur != null ? `€${tile.priceEur.toFixed(2)}` : 'Unpriced'}
+                      {formatPrice(tile.price, tile.currency)}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                       {tile.printingCount}p

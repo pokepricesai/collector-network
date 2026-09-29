@@ -7,6 +7,8 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import SiteStructuredData from '@/components/SiteStructuredData';
 import { AccountChip } from '@/components/AccountChip';
+import { CurrencyToggle } from '@/components/CurrencyToggle';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { SITE_LAUNCHED, SITE_URL } from '@/lib/site-url';
 
 const SITE_NAME = 'OnePiecePrices';
@@ -78,7 +80,8 @@ export const viewport: Viewport = {
   themeColor: '#FBF5E6',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const currency = await getCurrencyPreference();
   return (
     <html lang="en">
       <head>
@@ -98,7 +101,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
         <SiteStructuredData />
-        <Navbar accountSlot={<AccountChip />} />
+        <Navbar
+          accountSlot={<AccountChip />}
+          currencySlot={<CurrencyToggle initial={currency} />}
+        />
         <main className="flex-1">{children}</main>
         <Footer />
         {/* Vercel Web Analytics — anonymous page-view counts + the

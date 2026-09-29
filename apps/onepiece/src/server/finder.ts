@@ -14,6 +14,9 @@ import { toOpGamedata, type OpGamedata } from '../lib/onepiece/gamedata';
 import type { OpCardType } from '../lib/onepiece/card-type';
 import type { OpColour } from '../lib/onepiece/colour';
 import { slugifyCardName, buildLogicalCardHref, baseCollectorNumber } from '../lib/onepiece/slug';
+import type { OpCurrency } from '../lib/onepiece/currency';
+import { pickHeadlinePrice, type HeadlineSignal } from '../lib/onepiece/pick-headline';
+import type { RetailQuote } from '@collector-network/market-data';
 
 // Real interactive card-finder query layer. Runs against live
 // production data (5,538 OP cards, all with populated gamedata for
@@ -52,6 +55,11 @@ export interface OpFinderFilters {
   lifeMin?: number;
   lifeMax?: number;
   attribute?: string;
+  /** Price min/max are always interpreted in the currency the caller
+   *  supplies (`queryFinder(_, _, currency)`). Legacy `priceMinEur` /
+   *  `priceMaxEur` still resolve here for backward compatibility. */
+  priceMin?: number;
+  priceMax?: number;
   priceMinEur?: number;
   priceMaxEur?: number;
   /** Skip printings for which no price observation exists. */
@@ -67,7 +75,12 @@ export interface OpFinderTile {
   set: TcgSet | null;
   imageUrl: string | null;
   href: string;
-  priceEur: number | null;
+  /** Selected-currency headline price for this family. Null when no
+   *  quote exists in the current currency. Never silently substituted
+   *  from the other currency. */
+  price: number | null;
+  currency: OpCurrency;
+  priceSignal: HeadlineSignal | null;
   printingCount: number;
 }
 
@@ -88,7 +101,12 @@ export async function queryFinder(
   page: number,
   pageSize: number,
   sets: TcgSet[],
+  currency: OpCurrency = 'EUR',
 ): Promise<OpFinderResult> {
+  // Legacy `priceMinEur` / `priceMaxEur` upgrade to the neutral fields
+  // when the caller hasn't set them explicitly.
+  if (filters.priceMin == null && filters.priceMinEur != null) filters = { ...filters, priceMin: filters.priceMinEur };
+  if (filters.priceMax == null && filters.priceMaxEur != null) filters = { ...filters, priceMax: filters.priceMaxEur };
   const supabase = getOnepieceClient();
   const gameId = await getOnepieceGameId(supabase);
 
@@ -97,23 +115,23 @@ export async function queryFinder(
   // not just an alphabetical slice. Every other sort (name, cost,
   // power, set-newest) uses the anchor-first flow below.
   //
-  // A price FILTER (priceMinEur / priceMaxEur / onlyPriced) also
-  // routes through the price-first path, because the anchor-first
-  // path can only see priced state after fetching pricing for every
-  // anchor — a 2,000+ card load that will hit the serverless timeout.
-  // Filtering the price feed first bounds the work to at most TOP_N
-  // priced rows. Non-price sorts are re-applied at the end.
+  // A price FILTER (priceMin / priceMax / onlyPriced) also routes
+  // through the price-first path, because the anchor-first path can
+  // only see priced state after fetching pricing for every anchor —
+  // a 2,000+ card load that will hit the serverless timeout. Filtering
+  // the price feed first bounds the work to at most TOP_N priced rows.
+  // Non-price sorts are re-applied at the end.
   const hasPriceFilter =
     filters.onlyPriced === true ||
-    filters.priceMinEur != null ||
-    filters.priceMaxEur != null;
+    filters.priceMin != null ||
+    filters.priceMax != null;
   if (sort === 'price-desc' || sort === 'price-asc' || hasPriceFilter) {
     const dir =
       sort === 'price-asc' ? 'asc'
       : sort === 'price-desc' ? 'desc'
       : 'desc'; // walk high→low by default when a min-price filter is set
     return queryFinderByPrice(
-      supabase, gameId, filters, dir, page, pageSize, sets, sort,
+      supabase, gameId, filters, dir, page, pageSize, sets, currency, sort,
     );
   }
 
@@ -214,7 +232,7 @@ export async function queryFinder(
   // and onlyPriced filters.
   const needsFullPricing =
     filters.onlyPriced === true ||
-    filters.priceMinEur != null || filters.priceMaxEur != null;
+    filters.priceMin != null || filters.priceMax != null;
 
   // Price-filtering must consider every priced candidate, not just an
   // alphabetical top-300 — the old 300-slice made priceMinEur=100
@@ -231,9 +249,10 @@ export async function queryFinder(
   // unrelated game cards that merely share a character name.
   async function loadPricing(anchors: TcgCard[]): Promise<{
     topByCard: Map<string, number>;
+    signalByCard: Map<string, HeadlineSignal>;
     printingsByCard: Map<string, string[]>;
   }> {
-    if (anchors.length === 0) return { topByCard: new Map(), printingsByCard: new Map() };
+    if (anchors.length === 0) return { topByCard: new Map(), signalByCard: new Map(), printingsByCard: new Map() };
     const anchorIds = new Set(anchors.map((c) => c.id));
     const anchorFamilies = new Set(anchors.map((c) => familyKey(c)));
     // Collect every card row that belongs to one of our anchor families
@@ -294,34 +313,40 @@ export async function queryFinder(
     for (const partial of await Promise.all(pricingChunkPromises)) {
       for (const [k, v] of partial.entries()) pricingMap.set(k, v);
     }
-    // Aggregate the max EUR price seen across every printing in the
-    // family (base + parallels + reprints of the same base collector).
-    // NEVER across unrelated cards that share a character name.
-    const topByFamily = new Map<string, number>();
+    // Aggregate the family headline using the selected-currency
+    // signal (avg30d preferred, priceLow next, listing/trend last —
+    // see pickHeadlinePrice). NEVER cross unrelated cards that share
+    // a character name.
+    const headlineByFamily = new Map<string, { price: number; signal: HeadlineSignal }>();
     for (const [key, printingIds] of printingsByFamily.entries()) {
-      let best: number | null = null;
-      for (const printingId of printingIds) {
-        const pricing = pricingMap.get(printingId);
-        if (!pricing) continue;
-        for (const row of pricing.market ?? []) {
-          if (row.price == null || !row.currency) continue;
-          if (row.currency !== 'EUR') continue;
-          if (best == null || row.price > best) best = row.price;
-        }
+      const quotesPerPrinting = new Map<string, readonly RetailQuote[]>();
+      for (const pid of printingIds) {
+        const pricing = pricingMap.get(pid);
+        if (pricing?.market?.length) quotesPerPrinting.set(pid, pricing.market);
       }
-      if (best != null) topByFamily.set(key, best);
+      let top: { price: number; signal: HeadlineSignal } | null = null;
+      for (const [, quotes] of quotesPerPrinting) {
+        const h = pickHeadlinePrice(quotes, currency);
+        if (!h) continue;
+        if (!top || h.price > top.price) top = { price: h.price, signal: h.signal };
+      }
+      if (top) headlineByFamily.set(key, top);
     }
     // Re-key back to card_id for the caller: each anchor gets its
-    // family-scoped max.
+    // family-scoped headline.
     const topByCard = new Map<string, number>();
+    const signalByCard = new Map<string, HeadlineSignal>();
     for (const anchor of anchors) {
-      const p = topByFamily.get(familyKey(anchor));
-      if (p != null) topByCard.set(anchor.id, p);
+      const h = headlineByFamily.get(familyKey(anchor));
+      if (h) {
+        topByCard.set(anchor.id, h.price);
+        signalByCard.set(anchor.id, h.signal);
+      }
     }
-    return { topByCard, printingsByCard };
+    return { topByCard, signalByCard, printingsByCard };
   }
 
-  function materialise(anchor: TcgCard, priceEur: number | null, printingCount: number): OpFinderTile {
+  function materialise(anchor: TcgCard, price: number | null, signal: HeadlineSignal | null, printingCount: number): OpFinderTile {
     const gamedata = toOpGamedata(anchor.gamedata);
     return {
       cardId: anchor.id,
@@ -332,20 +357,22 @@ export async function queryFinder(
       set: setsById.get(anchor.set_id) ?? null,
       imageUrl: pickImage(anchor.images),
       href: buildLogicalCardHref(anchor.collector_number, anchor.name),
-      priceEur,
+      price,
+      currency,
+      priceSignal: signal,
       printingCount,
     };
   }
 
   if (needsFullPricing) {
-    const { topByCard, printingsByCard } = await loadPricing(anchorsForPricing);
+    const { topByCard, signalByCard, printingsByCard } = await loadPricing(anchorsForPricing);
     const tiles = anchorsForPricing.map((a) =>
-      materialise(a, topByCard.get(a.id) ?? null, printingsByCard.get(a.id)?.length ?? 0),
+      materialise(a, topByCard.get(a.id) ?? null, signalByCard.get(a.id) ?? null, printingsByCard.get(a.id)?.length ?? 0),
     );
     const filteredByPrice = tiles.filter((t) => {
-      if (filters.onlyPriced && t.priceEur == null) return false;
-      if (filters.priceMinEur != null && (t.priceEur == null || t.priceEur < filters.priceMinEur)) return false;
-      if (filters.priceMaxEur != null && (t.priceEur == null || t.priceEur > filters.priceMaxEur)) return false;
+      if (filters.onlyPriced && t.price == null) return false;
+      if (filters.priceMin != null && (t.price == null || t.price < filters.priceMin)) return false;
+      if (filters.priceMax != null && (t.price == null || t.price > filters.priceMax)) return false;
       return true;
     });
     filteredByPrice.sort((a, b) => compareTiles(a, b, sort));
@@ -361,7 +388,7 @@ export async function queryFinder(
 
   // Deferred-pricing branch: sort what we can without price, slice to
   // the visible page, then fetch pricing only for that page.
-  const untilPricedTiles = dedupedAnchors.map((a) => materialise(a, null, 0));
+  const untilPricedTiles = dedupedAnchors.map((a) => materialise(a, null, null, 0));
   untilPricedTiles.sort((a, b) => compareTiles(a, b, sort));
   const total = untilPricedTiles.length;
   const start = page * pageSize;
@@ -369,9 +396,9 @@ export async function queryFinder(
   const pageAnchors = pageWindow
     .map((t) => dedupedAnchors.find((a) => a.id === t.cardId))
     .filter((a): a is TcgCard => Boolean(a));
-  const { topByCard, printingsByCard } = await loadPricing(pageAnchors);
+  const { topByCard, signalByCard, printingsByCard } = await loadPricing(pageAnchors);
   const tiles = pageAnchors.map((a) =>
-    materialise(a, topByCard.get(a.id) ?? null, printingsByCard.get(a.id)?.length ?? 0),
+    materialise(a, topByCard.get(a.id) ?? null, signalByCard.get(a.id) ?? null, printingsByCard.get(a.id)?.length ?? 0),
   );
   return { tiles, total, pageSize, page };
 }
@@ -407,38 +434,82 @@ async function queryFinderByPrice(
   page: number,
   pageSize: number,
   sets: TcgSet[],
+  currency: OpCurrency,
   outputSort: OpSort = direction === 'asc' ? 'price-asc' : 'price-desc',
 ): Promise<OpFinderResult> {
   // How many top-priced rows to consider. 3,000 comfortably covers
-  // every currently priced OP printing (the game has ~1,500 priced
-  // printings on 2026-09-27) plus headroom for future growth.
+  // every currently priced OP printing on either native feed. Order
+  // by the collector-honest signal: prefer avg_30d when populated,
+  // fall back to the top-listing `price` field so the query still
+  // returns rows on printings that lack an average.
   const TOP_N = 3000;
   const CHUNK = 1000;
+  // Column shape: we fetch every price signal so we can pick the
+  // headline post-hoc per family (see pickHeadlinePrice). Sort by the
+  // most-populated column (`price`) at the DB level; per-row headline
+  // is recomputed in JS.
   const priceChunks = Array.from({ length: Math.ceil(TOP_N / CHUNK) }, async (_, i) => {
     const from = i * CHUNK;
     const to = Math.min(from + CHUNK - 1, TOP_N - 1);
     return supabase
       .from('tcg_market_prices_current')
-      .select('tcg_printing_id, price, currency')
+      .select('tcg_printing_id, price, price_low, price_trend, avg_30d, currency, source, finish')
       .eq('game_id', gameId)
-      .eq('currency', 'EUR')
+      .eq('currency', currency)
       .not('price', 'is', null)
       .order('price', { ascending: direction === 'asc' })
       .range(from, to);
   });
   const priceResults = await Promise.all(priceChunks);
-  const priceRows: Array<{ printingId: string; price: number }> = [];
+  interface PriceRowRich {
+    printingId: string;
+    quote: RetailQuote;
+    headline: number;
+    headlineSignal: HeadlineSignal;
+  }
+  const priceRows: PriceRowRich[] = [];
   for (const { data, error } of priceResults) {
     if (error) {
       throw new Error(`[finder] queryFinderByPrice tcg_market_prices_current: ${error.message}`);
     }
-    for (const r of (data as Array<{ tcg_printing_id: string; price: number }> | null) ?? []) {
-      if (r.price == null) continue;
-      priceRows.push({ printingId: r.tcg_printing_id, price: r.price });
+    interface RawRow {
+      tcg_printing_id: string;
+      price: number | null;
+      price_low: number | null;
+      price_trend: number | null;
+      avg_30d: number | null;
+      currency: string;
+      source: string;
+      finish: string | null;
+    }
+    for (const r of (data as RawRow[] | null) ?? []) {
+      const quote: RetailQuote = {
+        printingId: r.tcg_printing_id,
+        source: r.source,
+        listType: 'retail',
+        region: 'auto',
+        currency: r.currency as OpCurrency,
+        finish: r.finish,
+        price: r.price,
+        priceLow: r.price_low,
+        priceTrend: r.price_trend,
+        avg1d: null,
+        avg7d: null,
+        avg30d: r.avg_30d,
+        updatedAt: '',
+      };
+      const h = pickHeadlinePrice([quote], currency);
+      if (!h) continue;
+      priceRows.push({
+        printingId: r.tcg_printing_id,
+        quote,
+        headline: h.price,
+        headlineSignal: h.signal,
+      });
     }
   }
-  // Re-sort across chunks so the final walk is strictly in price order.
-  priceRows.sort((a, b) => direction === 'asc' ? a.price - b.price : b.price - a.price);
+  // Re-sort across chunks by the collector-honest headline signal.
+  priceRows.sort((a, b) => direction === 'asc' ? a.headline - b.headline : b.headline - a.headline);
 
   if (priceRows.length === 0) {
     return { tiles: [], total: 0, pageSize, page };
@@ -564,10 +635,13 @@ async function queryFinderByPrice(
   // passes the row-level filter. First qualifying hit per FAMILY wins
   // (a family is base collector + name; parallels/reprints of the
   // same base collapse but different game cards named "Zoro" do NOT).
-  const bestByFamily = new Map<string, { anchor: TcgCard; priceEur: number; printingId: string }>();
+  const bestByFamily = new Map<
+    string,
+    { anchor: TcgCard; price: number; signal: HeadlineSignal; printingId: string }
+  >();
   for (const row of priceRows) {
-    if (filters.priceMinEur != null && row.price < filters.priceMinEur) continue;
-    if (filters.priceMaxEur != null && row.price > filters.priceMaxEur) continue;
+    if (filters.priceMin != null && row.headline < filters.priceMin) continue;
+    if (filters.priceMax != null && row.headline > filters.priceMax) continue;
     const printing = printingById.get(row.printingId);
     if (!printing) continue;
     const card = cardById.get(printing.tcg_card_id);
@@ -584,7 +658,8 @@ async function queryFinderByPrice(
 
     bestByFamily.set(key, {
       anchor,
-      priceEur: row.price,
+      price: row.headline,
+      signal: row.headlineSignal,
       printingId: row.printingId,
     });
   }
@@ -593,9 +668,9 @@ async function queryFinderByPrice(
 
   // Iterating bestByFamily preserves the insertion order (price walk
   // order) — pagination is a direct slice.
-  const entries: Array<{ anchor: TcgCard; priceEur: number }> = [];
+  const entries: Array<{ anchor: TcgCard; price: number; signal: HeadlineSignal }> = [];
   for (const entry of bestByFamily.values()) {
-    entries.push({ anchor: entry.anchor, priceEur: entry.priceEur });
+    entries.push({ anchor: entry.anchor, price: entry.price, signal: entry.signal });
   }
 
   // Count printings per visible tile — across every card in the same
@@ -613,7 +688,7 @@ async function queryFinderByPrice(
   // Materialise every survivor as a tile so we can re-sort the whole
   // set when the caller asked for a non-price sort (e.g. price filter
   // + sort=name). Pagination happens after the re-sort.
-  const allTiles: OpFinderTile[] = entries.map(({ anchor, priceEur }) => ({
+  const allTiles: OpFinderTile[] = entries.map(({ anchor, price, signal }) => ({
     cardId: anchor.id,
     name: anchor.name,
     collectorNumber: anchor.collector_number,
@@ -622,7 +697,9 @@ async function queryFinderByPrice(
     set: setsById.get(anchor.set_id) ?? null,
     imageUrl: pickImage(anchor.images),
     href: buildLogicalCardHref(anchor.collector_number, anchor.name),
-    priceEur,
+    price,
+    currency,
+    priceSignal: signal,
     printingCount: printingsByFamily.get(familyKey(anchor)) ?? 0,
   }));
   if (outputSort !== 'price-desc' && outputSort !== 'price-asc') {
@@ -637,9 +714,9 @@ async function queryFinderByPrice(
 function compareTiles(a: OpFinderTile, b: OpFinderTile, sort: OpSort): number {
   switch (sort) {
     case 'price-desc':
-      return (b.priceEur ?? -Infinity) - (a.priceEur ?? -Infinity);
+      return (b.price ?? -Infinity) - (a.price ?? -Infinity);
     case 'price-asc':
-      return (a.priceEur ?? Infinity) - (b.priceEur ?? Infinity);
+      return (a.price ?? Infinity) - (b.price ?? Infinity);
     case 'cost-asc':
       return (a.gamedata.cost ?? Infinity) - (b.gamedata.cost ?? Infinity) ||
         a.name.localeCompare(b.name);

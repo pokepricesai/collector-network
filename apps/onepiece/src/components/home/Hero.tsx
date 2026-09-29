@@ -1,6 +1,7 @@
 import HomeSearch from '@/components/HomeSearch';
 import Link from 'next/link';
 import type { OpFinderTile } from '@/server/finder';
+import { formatPrice } from '@/lib/onepiece/currency';
 
 // Homepage hero — nautical / adventurous framing without borrowing
 // publisher artwork or trademarks. Two-column at wide viewports:
@@ -168,7 +169,7 @@ export default function Hero({
                       </span>
                     </span>
                     <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 13 }}>
-                      €{t.priceEur?.toFixed(2)}
+                      {formatPrice(t.price, t.currency)}
                     </span>
                   </Link>
                 </li>

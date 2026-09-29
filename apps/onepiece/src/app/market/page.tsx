@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getMovers, type MoverEntry, type MoverWindow } from '@/server/market';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { buildPrintingSlug } from '@/lib/onepiece/slug';
 import { formatPrice } from '@/lib/onepiece/format-price';
 import { SITE_URL } from '@/lib/site-url';
@@ -31,7 +32,8 @@ export default async function MarketPage({
 }) {
   const { window: rawWindow } = await searchParams;
   const window = parseWindow(rawWindow);
-  const { risers, fallers } = await getMovers(window, 30);
+  const currency = await getCurrencyPreference();
+  const { risers, fallers } = await getMovers(window, 30, currency);
 
   return (
     <div style={{ padding: '32px 24px' }}>

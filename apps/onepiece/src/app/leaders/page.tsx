@@ -4,6 +4,8 @@ import { canonicalFor } from '@/lib/seo';
 import { OP_COLOURS, OP_COLOUR_LABEL, type OpColour, isOpColour } from '@/lib/onepiece/colour';
 import { queryFinder } from '@/server/finder';
 import { listSetsWithCounts } from '@/server/browse';
+import { formatPrice } from '@/lib/onepiece/currency';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import Faq from '@/components/Faq';
 import { LEADERS_FAQ } from '@/lib/faq-content';
 
@@ -36,13 +38,17 @@ export default async function LeadersPage({
   const sortRaw = sp.sort ?? 'price-desc';
   const sort = SUPPORTED_SORTS.has(sortRaw) ? sortRaw : 'price-desc';
 
-  const sets = await listSetsWithCounts();
+  const [sets, currency] = await Promise.all([
+    listSetsWithCounts(),
+    getCurrencyPreference(),
+  ]);
   const result = await queryFinder(
     { cardType: 'leader', ...(colour ? { colour } : {}) },
     sort as any,
     0,
     120,
     sets.map((s) => s.set),
+    currency,
   );
 
   return (
@@ -132,7 +138,7 @@ export default async function LeadersPage({
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
                       <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 15 }}>
-                        {tile.priceEur != null ? `€${tile.priceEur.toFixed(2)}` : 'Unpriced'}
+                        {formatPrice(tile.price, tile.currency)}
                       </div>
                       <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
                         {tile.printingCount} treatment{tile.printingCount === 1 ? '' : 's'}

@@ -54,7 +54,13 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
   },
 ];
 
-export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
+export default function Navbar({
+  accountSlot,
+  currencySlot,
+}: {
+  accountSlot?: ReactNode;
+  currencySlot?: ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname() ?? '/';
   const [menuOpen, setMenuOpen] = useState(false);
@@ -192,6 +198,12 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
         </div>
       </form>
 
+      {currencySlot && (
+        <div className="nav-currency-slot" style={{ display: 'none', flexShrink: 0 }}>
+          {currencySlot}
+        </div>
+      )}
+
       {accountSlot && (
         <div className="nav-account-slot" style={{ display: 'none', flexShrink: 0 }}>
           {accountSlot}
@@ -256,6 +268,13 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
             />
           </form>
 
+          {currencySlot && (
+            <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="label-mono" style={{ color: 'var(--gold-600)' }}>Currency</div>
+              {currencySlot}
+            </div>
+          )}
+
           {MOBILE_GROUPS.map((g) => (
             <div key={g.title} style={{ marginBottom: 20 }}>
               <div
@@ -298,14 +317,14 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
           .nav-search { display: block !important; }
           .desktop-nav-wide { display: flex !important; }
           .desktop-nav-medium { display: none !important; }
-          .nav-account-slot { display: flex !important; }
+          .nav-account-slot { display: flex !important; } .nav-currency-slot { display: flex !important; }
         }
         @media (min-width: 1080px) and (max-width: 1279px) {
           .mobile-menu-btn { display: none !important; }
           .nav-search { display: block !important; }
           .desktop-nav-wide { display: none !important; }
           .desktop-nav-medium { display: flex !important; }
-          .nav-account-slot { display: flex !important; }
+          .nav-account-slot { display: flex !important; } .nav-currency-slot { display: flex !important; }
         }
         @media (max-width: 1079px) {
           .desktop-nav-wide { display: none !important; }

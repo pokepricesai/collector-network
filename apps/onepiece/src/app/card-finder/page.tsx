@@ -4,6 +4,8 @@ import { canonicalFor } from '@/lib/seo';
 import { OP_COLOURS, OP_COLOUR_LABEL, type OpColour, isOpColour } from '@/lib/onepiece/colour';
 import { OP_CARD_TYPES, OP_CARD_TYPE_LABEL, type OpCardType, normaliseCardType } from '@/lib/onepiece/card-type';
 import { queryFinder, type OpFinderFilters, type OpSort } from '@/server/finder';
+import { formatPrice } from '@/lib/onepiece/currency';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { listSetsWithCounts } from '@/server/browse';
 import Faq from '@/components/Faq';
 import { CARD_FINDER_FAQ } from '@/lib/faq-content';
@@ -44,9 +46,12 @@ export default async function CardFinderPage({
   const sort = readSort(sp);
   const page = Math.max(0, Number(sp['page'] ?? '0') || 0);
 
-  const sets = await listSetsWithCounts();
+  const [sets, currency] = await Promise.all([
+    listSetsWithCounts(),
+    getCurrencyPreference(),
+  ]);
   const setOptions = sets.map((s) => ({ id: s.set.id, code: s.set.code, name: s.set.name }));
-  const result = await queryFinder(filters, sort, page, PAGE_SIZE, sets.map((s) => s.set));
+  const result = await queryFinder(filters, sort, page, PAGE_SIZE, sets.map((s) => s.set), currency);
 
   const hasAnyFilter = filters.q != null || filters.colour != null || filters.cardType != null ||
     filters.rarity != null || filters.setId != null || filters.attribute != null ||
@@ -54,7 +59,7 @@ export default async function CardFinderPage({
     filters.powerMin != null || filters.powerMax != null ||
     filters.counterMin != null || filters.counterMax != null ||
     filters.lifeMin != null || filters.lifeMax != null ||
-    filters.priceMinEur != null || filters.priceMaxEur != null ||
+    filters.priceMin != null || filters.priceMax != null ||
     filters.onlyPriced === true;
 
   return (
@@ -135,7 +140,7 @@ export default async function CardFinderPage({
             <RangeField label="Power" min="powerMin" max="powerMax" valueMin={filters.powerMin} valueMax={filters.powerMax} minPh="0" maxPh="15000" />
             <RangeField label="Counter" min="counterMin" max="counterMax" valueMin={filters.counterMin} valueMax={filters.counterMax} minPh="0" maxPh="2000" />
             <RangeField label="Life" min="lifeMin" max="lifeMax" valueMin={filters.lifeMin} valueMax={filters.lifeMax} minPh="1" maxPh="5" />
-            <RangeField label="Price (EUR)" min="priceMinEur" max="priceMaxEur" valueMin={filters.priceMinEur} valueMax={filters.priceMaxEur} minPh="0" maxPh="10000" />
+            <RangeField label={`Price (${currency})`} min="priceMin" max="priceMax" valueMin={filters.priceMin} valueMax={filters.priceMax} minPh="0" maxPh="10000" />
 
             <Field label="Sort">
               <select name="sort" defaultValue={sort} style={inputStyle}>
@@ -208,7 +213,7 @@ export default async function CardFinderPage({
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 2 }}>
                       <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 14 }}>
-                        {tile.priceEur != null ? `€${tile.priceEur.toFixed(2)}` : 'Unpriced'}
+                        {formatPrice(tile.price, tile.currency)}
                       </div>
                       <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
                         {tile.printingCount} printing{tile.printingCount === 1 ? '' : 's'}
@@ -259,8 +264,8 @@ function readFilters(sp: Record<string, string | undefined>): OpFinderFilters {
     counterMax: num(sp['counterMax']),
     lifeMin: num(sp['lifeMin']),
     lifeMax: num(sp['lifeMax']),
-    priceMinEur: num(sp['priceMinEur']),
-    priceMaxEur: num(sp['priceMaxEur']),
+    priceMin: num(sp['priceMin']) ?? num(sp['priceMinEur']),
+    priceMax: num(sp['priceMax']) ?? num(sp['priceMaxEur']),
     onlyPriced,
   };
   if (colour === 'multi') filters.colour = 'multi';
