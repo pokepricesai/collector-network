@@ -96,11 +96,24 @@ export async function queryFinder(
   // reflects the true top of the market across the WHOLE catalogue,
   // not just an alphabetical slice. Every other sort (name, cost,
   // power, set-newest) uses the anchor-first flow below.
-  if (sort === 'price-desc' || sort === 'price-asc') {
+  //
+  // A price FILTER (priceMinEur / priceMaxEur / onlyPriced) also
+  // routes through the price-first path, because the anchor-first
+  // path can only see priced state after fetching pricing for every
+  // anchor — a 2,000+ card load that will hit the serverless timeout.
+  // Filtering the price feed first bounds the work to at most TOP_N
+  // priced rows. Non-price sorts are re-applied at the end.
+  const hasPriceFilter =
+    filters.onlyPriced === true ||
+    filters.priceMinEur != null ||
+    filters.priceMaxEur != null;
+  if (sort === 'price-desc' || sort === 'price-asc' || hasPriceFilter) {
+    const dir =
+      sort === 'price-asc' ? 'asc'
+      : sort === 'price-desc' ? 'desc'
+      : 'desc'; // walk high→low by default when a min-price filter is set
     return queryFinderByPrice(
-      supabase, gameId, filters,
-      sort === 'price-asc' ? 'asc' : 'desc',
-      page, pageSize, sets,
+      supabase, gameId, filters, dir, page, pageSize, sets, sort,
     );
   }
 
@@ -394,6 +407,7 @@ async function queryFinderByPrice(
   page: number,
   pageSize: number,
   sets: TcgSet[],
+  outputSort: OpSort = direction === 'asc' ? 'price-asc' : 'price-desc',
 ): Promise<OpFinderResult> {
   // How many top-priced rows to consider. 3,000 comfortably covers
   // every currently priced OP printing (the game has ~1,500 priced
@@ -596,10 +610,10 @@ async function queryFinderByPrice(
     printingsByFamily.set(key, (printingsByFamily.get(key) ?? 0) + 1);
   }
 
-  const total = entries.length;
-  const start = page * pageSize;
-  const window = entries.slice(start, start + pageSize);
-  const tiles: OpFinderTile[] = window.map(({ anchor, priceEur }) => ({
+  // Materialise every survivor as a tile so we can re-sort the whole
+  // set when the caller asked for a non-price sort (e.g. price filter
+  // + sort=name). Pagination happens after the re-sort.
+  const allTiles: OpFinderTile[] = entries.map(({ anchor, priceEur }) => ({
     cardId: anchor.id,
     name: anchor.name,
     collectorNumber: anchor.collector_number,
@@ -611,6 +625,12 @@ async function queryFinderByPrice(
     priceEur,
     printingCount: printingsByFamily.get(familyKey(anchor)) ?? 0,
   }));
+  if (outputSort !== 'price-desc' && outputSort !== 'price-asc') {
+    allTiles.sort((a, b) => compareTiles(a, b, outputSort));
+  }
+  const total = allTiles.length;
+  const start = page * pageSize;
+  const tiles = allTiles.slice(start, start + pageSize);
   return { tiles, total, pageSize, page };
 }
 
