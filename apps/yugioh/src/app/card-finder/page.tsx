@@ -14,6 +14,7 @@ import {
 import { siteUrl } from '../../lib/site-url';
 import { toCardSlug } from '../../lib/slug';
 import { runYugiohCardFinder } from '../../server/card-finder';
+import { listYugiohRarityFilterOptions } from '../../server/browse';
 import { safe } from '../../server/safe';
 import Faq from '../../components/Faq';
 import { CARD_FINDER_FAQ } from '../../lib/faq-content';
@@ -69,9 +70,13 @@ export default async function CardFinderPage({ searchParams }: PageProps) {
   const raw = await searchParams;
   const rawFilters = parseFinderParams(raw);
   const filters = enrichWithSmartQuery(rawFilters);
-  const result = await safe('card-finder', () => runYugiohCardFinder(filters), {
-    timeoutMs: 15_000,
-  });
+  const [result, rarityOptionsResult] = await Promise.all([
+    safe('card-finder', () => runYugiohCardFinder(filters), { timeoutMs: 15_000 }),
+    safe('card-finder-rarity-options', () => listYugiohRarityFilterOptions(), {
+      timeoutMs: 5_000,
+    }),
+  ]);
+  const rarityOptions = rarityOptionsResult.ok ? rarityOptionsResult.value : [];
   const structured = hasStructuredFilters(rawFilters);
 
   return (
@@ -92,7 +97,7 @@ export default async function CardFinderPage({ searchParams }: PageProps) {
         </header>
 
         <div className={styles.layout}>
-          <FilterPanel filters={filters} />
+          <FilterPanel filters={filters} rarityOptions={rarityOptions} />
 
           <div className={styles.results}>
             {result.ok ? (

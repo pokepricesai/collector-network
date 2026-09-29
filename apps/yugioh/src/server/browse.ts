@@ -232,6 +232,26 @@ export const listYugiohRaritiesForDirectory = withCacheBypass(
   ),
 );
 
+// Raw rarity strings sorted by descending card count — the exact
+// values the Card Finder rarity filter accepts (finder does an
+// exact `.eq('rarity', filters.rarity)` match).
+async function _listYugiohRarityFilterOptions(): Promise<string[]> {
+  const supabase = getYugiohClient();
+  const counts = await getRarityCounts(supabase, YGO_GAME_ID);
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([rarity]) => rarity);
+}
+
+export const listYugiohRarityFilterOptions = withCacheBypass(
+  _listYugiohRarityFilterOptions,
+  unstable_cache(
+    _listYugiohRarityFilterOptions,
+    ['ygo:rarityFilterOptions', 'v1'],
+    { revalidate: CACHE_TTL.TAXONOMY_LONG, tags: [CACHE_TAGS.TAXONOMY] },
+  ),
+);
+
 export interface RarityPageCardEntry {
   card: TcgCard;
   set: TcgSet | null;

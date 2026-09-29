@@ -39,9 +39,10 @@ const BANLIST_STATES: { key: string; label: string }[] = [
 
 interface Props {
   filters: FinderFilters;
+  rarityOptions: string[];
 }
 
-export function FilterPanel({ filters }: Props) {
+export function FilterPanel({ filters, rarityOptions }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -97,6 +98,16 @@ export function FilterPanel({ filters }: Props) {
           <select id="race" name="race" defaultValue={filters.race ?? ''} className={styles.select}>
             <option value="">Any</option>
             {MONSTER_TYPES.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.fieldLabel} htmlFor="rarity">Rarity</label>
+          <select id="rarity" name="rarity" defaultValue={filters.rarity ?? ''} className={styles.select}>
+            <option value="">Any</option>
+            {rarityOptions.map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
