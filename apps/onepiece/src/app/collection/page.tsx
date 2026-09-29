@@ -2,12 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireUser } from '@collector-network/auth';
 import { listCollectionForCurrentUser } from '../../server/collection';
+import { getSetCompletionForCurrentUser } from '../../server/completion';
 import { CollectionRowActions } from './CollectionRowActions';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug } from '@/lib/onepiece/slug';
 import { pickCardImage } from '@/lib/onepiece/image';
 import Faq from '@/components/Faq';
 import { COLLECTION_FAQ } from '@/lib/faq-content';
+import { SetCompletionSection } from './SetCompletionSection';
 
 export const metadata: Metadata = {
   title: 'My One Piece Collection',
@@ -54,6 +56,15 @@ export default async function CollectionPage() {
   }
 
   const { items, summary } = result.value;
+  // Set-checklist completion runs off the same authenticated session,
+  // so it inherits the collection RLS scope. Failure is intentionally
+  // isolated from the main collection render.
+  let completion: Awaited<ReturnType<typeof getSetCompletionForCurrentUser>> | null = null;
+  try {
+    completion = await getSetCompletionForCurrentUser();
+  } catch (e) {
+    console.error('[onepiece/collection] completion read failed:', (e as Error).message);
+  }
 
   return (
     <main style={pageStyle}>
@@ -85,6 +96,10 @@ export default async function CollectionPage() {
           hint={summary.unrealisedUsd == null ? 'Acquisition values incomplete' : 'vs USD acquisition'}
         />
       </section>
+
+      {completion && completion.entries.length > 0 && (
+        <SetCompletionSection completion={completion} />
+      )}
 
       {items.length === 0 ? (
         <div style={panelStyle}>

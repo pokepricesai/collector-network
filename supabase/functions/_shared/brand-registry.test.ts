@@ -29,9 +29,14 @@ test('unknown hostname → neutral fallback (never guess a brand)', () => {
   assert.equal(brandForHostname('').siteCode, 'network');
 });
 
-test('inactive-launch hosts (onepiece/lorcana) fall back to neutral', () => {
-  // Registry deliberately omits them until domains are final.
-  assert.equal(brandForHostname('onepieceprices.io').siteCode, 'network');
+test('onepiece host resolves to the onepiece brand', () => {
+  assert.equal(brandForHostname('onepieceprices.io').siteCode, 'onepiece');
+  assert.equal(brandForHostname('www.onepieceprices.io').siteCode, 'onepiece');
+});
+
+test('inactive-launch host (lorcana) still falls back to neutral', () => {
+  // Registry deliberately omits lorcana until its production domain
+  // is final.
   assert.equal(brandForHostname('lorcana.io').siteCode, 'network');
 });
 
@@ -57,6 +62,7 @@ test('brandForRedirectUrl handles null/undefined/malformed', () => {
 test('isKnownRedirectTarget is true only for allowlisted hosts', () => {
   assert.equal(isKnownRedirectTarget('https://ygoprices.io/x'), true);
   assert.equal(isKnownRedirectTarget('https://www.mtgprices.io/x'), true);
+  assert.equal(isKnownRedirectTarget('https://onepieceprices.io/x'), true);
   assert.equal(isKnownRedirectTarget('https://attacker.example/x'), false);
   assert.equal(isKnownRedirectTarget('http://localhost:3001/x'), false);
   assert.equal(isKnownRedirectTarget(null), false);

@@ -94,10 +94,22 @@ export const BRANDS: readonly Brand[] = [
     confirmBaseUrl: 'https://pokeprices.io',
     productBlurb: 'your PokePrices account',
   },
-  // onepiece + lorcana intentionally omitted from the registry
-  // until their production hostnames are final. Auth actions from
-  // any pre-launch preview domain will fall back to NEUTRAL_BRAND
-  // (spec: never guess a brand from an arbitrary redirect URL).
+  {
+    siteCode: 'onepiece',
+    brandName: 'OnePiecePrices',
+    senderName: 'OnePiecePrices',
+    hostnames: ['onepieceprices.io', 'www.onepieceprices.io'],
+    logoUrl: null,
+    primaryColor: '#0b0d13',
+    accentColor: '#c9a24a',
+    supportUrl: 'https://onepieceprices.io',
+    confirmBaseUrl: 'https://onepieceprices.io',
+    productBlurb: 'your OnePiecePrices account and collection',
+  },
+  // lorcana intentionally omitted from the registry until its
+  // production hostname is final. Auth actions from any pre-launch
+  // preview domain will fall back to NEUTRAL_BRAND (spec: never guess
+  // a brand from an arbitrary redirect URL).
 ] as const;
 
 // Return the brand whose hostname allowlist matches the given
