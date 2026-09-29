@@ -52,45 +52,45 @@ export async function AccountChip() {
       .charAt(0)
       .toUpperCase() || 'U';
   return (
-    <Link
-      href="/account"
-      aria-label="Your account"
-      style={{
-        flexShrink: 0,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '5px 10px 5px 5px',
-        borderRadius: 999,
-        background: 'var(--surface)',
-        border: '1px solid var(--border-strong, var(--border))',
-        color: 'var(--text)',
-        textDecoration: 'none',
-        fontSize: 13,
-        fontWeight: 600,
-      }}
-    >
-      <span
-        aria-hidden
+    <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+      <Link
+        href="/account"
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 26,
-          height: 26,
-          borderRadius: '50%',
-          background: 'var(--gold-600)',
-          color: '#111',
-          fontFamily: 'Outfit, system-ui, sans-serif',
+          padding: '7px 12px',
+          borderRadius: 10,
+          background: 'transparent',
+          border: '1px solid var(--border-strong, var(--border))',
+          color: 'var(--text)',
+          textDecoration: 'none',
           fontSize: 13,
           fontWeight: 700,
         }}
       >
+        Dashboard
+      </Link>
+      <Link
+        href="/settings"
+        aria-label="Your profile and settings"
+        title="Account and settings"
+        style={{
+          flexShrink: 0,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 36,
+          height: 36,
+          borderRadius: '50%',
+          background: 'var(--gold-600)',
+          color: '#111',
+          textDecoration: 'none',
+          fontFamily: 'Outfit, system-ui, sans-serif',
+          fontSize: 15,
+          fontWeight: 800,
+          border: '1px solid var(--border-strong, var(--border))',
+        }}
+      >
         {initial}
-      </span>
-      <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        Account
-      </span>
-    </Link>
+      </Link>
+    </div>
   );
 }

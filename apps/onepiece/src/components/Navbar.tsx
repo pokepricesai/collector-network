@@ -1,86 +1,55 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-// Site navigation. Primary desktop bar exposes the surfaces One Piece
-// collectors live in: Cards, Sets, Leaders, Colours, Card Finder,
-// Movers, Insights. A Tools dropdown holds secondary utilities. On
-// narrower widths (below ~1280) Leaders + Colours + Card Finder move
-// into Tools.
-//
-// The `accountSlot` prop is populated by a server component (see
-// AccountChip.tsx) so we can render authenticated state — a client
-// component can't call getCurrentUser() directly.
+// Site navigation. Two conceptual halves:
+//   - Game discovery: Cards / Sets / Leaders / Colours / Market / Insights
+//   - Product / account: Dashboard + Collection (surfaced via the
+//     account slot when signed in)
+// The old "Tools" dropdown was hiding core surfaces (Leaders, Colours)
+// behind a vague label at narrower widths; those are now first-class.
 
 type NavItem = { label: string; href: string };
 
-// "Cards" nav item removed — Card Finder is the single primary
-// discovery surface (name search still hits /cards/search via the
-// header search bar). This eliminates the redundant top-level
-// duplicate and makes the header lighter.
 const PRIMARY_LINKS_WIDE: NavItem[] = [
   { label: 'Card Finder', href: '/card-finder' },
   { label: 'Sets',        href: '/browse' },
   { label: 'Leaders',     href: '/leaders' },
   { label: 'Colours',     href: '/colours' },
-  { label: 'Movers',      href: '/market' },
+  { label: 'Market',      href: '/market' },
   { label: 'Insights',    href: '/insights' },
 ];
 
 const PRIMARY_LINKS_MEDIUM: NavItem[] = [
   { label: 'Card Finder', href: '/card-finder' },
   { label: 'Sets',        href: '/browse' },
-  { label: 'Movers',      href: '/market' },
-  { label: 'Insights',    href: '/insights' },
-];
-
-const TOOLS_LINKS: NavItem[] = [
-  { label: 'Chase cards',    href: '/market#chase' },
-  { label: 'Secret rares',   href: '/market#secret-rares' },
-  { label: 'Treasure rares', href: '/market#treasure-rares' },
-];
-
-const MEDIUM_TOOLS_LINKS: NavItem[] = [
   { label: 'Leaders',     href: '/leaders' },
-  { label: 'Colours',     href: '/colours' },
-  { label: 'Card Finder', href: '/card-finder' },
-  ...TOOLS_LINKS,
+  { label: 'Market',      href: '/market' },
+  { label: 'Insights',    href: '/insights' },
 ];
 
 const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
   {
-    title: 'Cards & Sets',
+    title: 'Discover',
     items: [
       { label: 'Card Finder',  href: '/card-finder' },
       { label: 'Browse sets',  href: '/browse' },
       { label: 'Leaders',      href: '/leaders' },
       { label: 'Colours',      href: '/colours' },
-    ],
-  },
-  {
-    title: 'Market',
-    items: [
-      { label: 'Movers',         href: '/market' },
-      { label: 'Chase cards',    href: '/market#chase' },
-      { label: 'Secret rares',   href: '/market#secret-rares' },
-      { label: 'Treasure rares', href: '/market#treasure-rares' },
-    ],
-  },
-  {
-    title: 'Read',
-    items: [
-      { label: 'Insights', href: '/insights' },
+      { label: 'Market',       href: '/market' },
+      { label: 'Insights',     href: '/insights' },
     ],
   },
   {
     title: 'Account',
     items: [
+      { label: 'Dashboard',    href: '/account' },
       { label: 'My Collection', href: '/collection' },
-      { label: 'Account', href: '/account' },
-      { label: 'Sign in', href: '/sign-in' },
-      { label: 'Sign up', href: '/sign-up' },
+      { label: 'Settings',     href: '/settings' },
+      { label: 'Sign in',      href: '/sign-in' },
+      { label: 'Sign up',      href: '/sign-up' },
     ],
   },
 ];
@@ -165,7 +134,6 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
             {item.label}
           </Link>
         ))}
-        <ToolsDropdown items={TOOLS_LINKS} />
       </div>
       <div
         className="desktop-nav-medium"
@@ -181,7 +149,6 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
             {item.label}
           </Link>
         ))}
-        <ToolsDropdown items={MEDIUM_TOOLS_LINKS} />
       </div>
 
       <form
@@ -357,81 +324,3 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
   );
 }
 
-function ToolsDropdown({ items }: { items: NavItem[] }) {
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    function onDown(e: MouseEvent) {
-      if (!boxRef.current) return;
-      if (!boxRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    if (open) {
-      document.addEventListener('mousedown', onDown);
-      return () => document.removeEventListener('mousedown', onDown);
-    }
-    return;
-  }, [open]);
-
-  return (
-    <div ref={boxRef} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className={`nav-link${open ? ' active' : ''}`}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          color: open ? 'var(--gold-600)' : 'var(--text)',
-        }}
-      >
-        Tools
-        <span aria-hidden style={{ fontSize: 10, opacity: 0.7 }}>▾</span>
-      </button>
-      {open && (
-        <div
-          role="menu"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            minWidth: 220,
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 12,
-            boxShadow: 'var(--shadow-md)',
-            padding: 6,
-            zIndex: 101,
-          }}
-        >
-          {items.map((it) => (
-            <Link
-              key={it.href}
-              href={it.href}
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              style={{
-                display: 'block',
-                padding: '10px 12px',
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                color: 'var(--text)',
-                textDecoration: 'none',
-              }}
-            >
-              {it.label}
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
