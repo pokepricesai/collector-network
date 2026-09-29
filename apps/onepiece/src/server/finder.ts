@@ -228,14 +228,17 @@ export async function queryFinder(
     const allRelatedIds = [...relatedCardIds];
     // Chunk the .in(…) lookup to stay well inside PostgREST's URL
     // length limit — a full-catalogue colour filter can push 1,000+
-    // related IDs, which crashes a single .in() call.
+    // related IDs, which crashes a single .in() call. Chunks issued
+    // in parallel so wall time scales with the slowest chunk, not
+    // the sum.
     const PRINTING_LOOKUP_CHUNK = 200;
-    const printings: Awaited<ReturnType<typeof getPrintingsForCards>> = [];
+    const printingChunkPromises: Promise<Awaited<ReturnType<typeof getPrintingsForCards>>>[] = [];
     for (let i = 0; i < allRelatedIds.length; i += PRINTING_LOOKUP_CHUNK) {
       const slice = allRelatedIds.slice(i, i + PRINTING_LOOKUP_CHUNK);
-      const rows = await getPrintingsForCards(supabase, slice);
-      printings.push(...rows);
+      printingChunkPromises.push(getPrintingsForCards(supabase, slice));
     }
+    const printings: Awaited<ReturnType<typeof getPrintingsForCards>> = [];
+    for (const rows of await Promise.all(printingChunkPromises)) printings.push(...rows);
     // printingsByCard remains anchor-scoped for the tile "N printings"
     // count so the number matches what the user sees on the anchor
     // (highest-rarity) treatment.
@@ -261,12 +264,16 @@ export async function queryFinder(
     }
     const allPrintingIds = printings.map((p) => p.id);
     // Same URL length concern applies to the pricing lookup — the
-    // shared helper uses .in(...) with the full list.
+    // shared helper uses .in(...) with the full list. Chunks issued
+    // in parallel.
     const PRICING_CHUNK = 200;
-    const pricingMap = new Map<string, PrintingPricing>();
+    const pricingChunkPromises: Promise<Map<string, PrintingPricing>>[] = [];
     for (let i = 0; i < allPrintingIds.length; i += PRICING_CHUNK) {
       const slice = allPrintingIds.slice(i, i + PRICING_CHUNK);
-      const partial = await getPrintingPricingBatch(supabase, slice);
+      pricingChunkPromises.push(getPrintingPricingBatch(supabase, slice));
+    }
+    const pricingMap = new Map<string, PrintingPricing>();
+    for (const partial of await Promise.all(pricingChunkPromises)) {
       for (const [k, v] of partial.entries()) pricingMap.set(k, v);
     }
     // Aggregate the max EUR price seen across every printing that
@@ -420,30 +427,43 @@ async function queryFinderByPrice(
   const uniquePrintingIds = Array.from(new Set(priceRows.map((r) => r.printingId)));
   const IN_CHUNK = 200;
 
-  // Fetch printings for the priced set.
-  const printings: TcgPrinting[] = [];
+  // Fetch printings for the priced set — chunks issued in parallel
+  // so the total wall time is bounded by the slowest chunk rather
+  // than the sum. On a 3,000-row top slice this drops several hundred
+  // ms off the homepage + /leaders cold path.
+  const printingChunkPromises = [];
   for (let i = 0; i < uniquePrintingIds.length; i += IN_CHUNK) {
     const slice = uniquePrintingIds.slice(i, i + IN_CHUNK);
-    const { data, error } = await supabase
-      .from('tcg_printings')
-      .select('*')
-      .in('id', slice);
+    printingChunkPromises.push(
+      (async () => supabase.from('tcg_printings').select('*').in('id', slice))(),
+    );
+  }
+  const printingChunks = await Promise.all(printingChunkPromises);
+  const printings: TcgPrinting[] = [];
+  for (const { data, error } of printingChunks) {
     if (error) throw new Error(`[finder] queryFinderByPrice tcg_printings: ${error.message}`);
-    printings.push(...((data as TcgPrinting[] | null) ?? []));
+    if (data) printings.push(...(data as TcgPrinting[]));
   }
   const printingById = new Map(printings.map((p) => [p.id, p]));
 
-  // Fetch parent cards.
+  // Fetch parent cards — chunks issued in parallel for the same
+  // reason as above.
   const uniqueCardIds = Array.from(new Set(printings.map((p) => p.tcg_card_id)));
-  const cards: TcgCard[] = [];
+  const cardChunkPromises = [];
   for (let i = 0; i < uniqueCardIds.length; i += IN_CHUNK) {
     const slice = uniqueCardIds.slice(i, i + IN_CHUNK);
-    const { data, error } = await supabase
-      .from('tcg_cards')
-      .select('id,name,collector_number,rarity,set_id,images,gamedata,game_id')
-      .in('id', slice);
+    cardChunkPromises.push(
+      (async () => supabase
+        .from('tcg_cards')
+        .select('id,name,collector_number,rarity,set_id,images,gamedata,game_id')
+        .in('id', slice))(),
+    );
+  }
+  const cardChunks = await Promise.all(cardChunkPromises);
+  const cards: TcgCard[] = [];
+  for (const { data, error } of cardChunks) {
     if (error) throw new Error(`[finder] queryFinderByPrice tcg_cards: ${error.message}`);
-    cards.push(...((data as TcgCard[] | null) ?? []));
+    if (data) cards.push(...(data as TcgCard[]));
   }
   const cardById = new Map(cards.map((c) => [c.id, c]));
 

@@ -17,9 +17,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ONEPIECE_SYSTEM_PROMPT } from '@/lib/ai-knowledge';
+import { checkRateLimit, clientIpFrom } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// Narrow anti-abuse guard: 20 requests per minute per client IP.
+// Genuine card-page usage sits far below this ceiling; scripted
+// bursts hit 429 quickly.
+const AI_ASK_LIMIT = { windowMs: 60_000, max: 20 };
 
 const AI_URL_BASE = (process.env['AI_GATEWAY_URL'] ?? '').replace(/\/+$/, '');
 const AI_KEY = process.env['AI_GATEWAY_API_KEY'] ?? '';
@@ -42,6 +48,20 @@ export async function POST(req: NextRequest) {
           'The site owner needs to set AI_GATEWAY_URL and AI_GATEWAY_API_KEY.',
       },
       { status: 503 },
+    );
+  }
+  const ip = clientIpFrom(req.headers);
+  const rl = checkRateLimit(`ai:ask:${ip}`, AI_ASK_LIMIT);
+  if (!rl.allowed) {
+    const retryAfterSec = Math.max(1, Math.ceil(rl.retryAfterMs / 1000));
+    return NextResponse.json(
+      {
+        ok: false,
+        answer:
+          'Ask OnePiecePrices is receiving too many requests from your IP. ' +
+          'Please slow down and try again in a moment.',
+      },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSec) } },
     );
   }
   let body: {

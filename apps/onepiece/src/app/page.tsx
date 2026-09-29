@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title:
-    'OnePiecePrices — every printing, every treatment for the One Piece Card Game',
+    'OnePiecePrices. Every printing and treatment for the One Piece Card Game',
   description:
     'Live One Piece Card Game prices, treatments and sets. Parallels, secret rares, special cards and treasure rares priced individually. Full set catalogue and market movers.',
   alternates: { canonical: `${SITE_URL}/` },

@@ -16,7 +16,7 @@ const SITE_TAGLINE = 'Live One Piece Card Game prices, sets and treatments';
 // Art are not distinguishable from the generic "_p*" Parallel slot in
 // the current ingest, so we do not claim them here.
 const SITE_DESCRIPTION =
-  'OnePiecePrices. Live One Piece Card Game card prices, printings and treatments — parallels, secret rares, special cards, treasure rares and promos priced individually. Set catalogue, market movers and collector-grade price history. Free, no login required.';
+  'OnePiecePrices. Live One Piece Card Game card prices, printings and treatments. Parallels, secret rares, special cards, treasure rares and promos priced individually. Set catalogue, market movers and collector-grade price history. Free, no login required.';
 
 const LAUNCHED_ROBOTS: NonNullable<Metadata['robots']> = {
   index: true,

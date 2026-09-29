@@ -197,7 +197,7 @@ function TileRow({ tile, setCode }: { tile: OpSetTile; setCode: string }) {
           {tile.name}
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          #{tile.collectorNumber ?? '—'} · {tile.rarity ?? ''}
+          #{tile.collectorNumber ?? '–'} · {tile.rarity ?? ''}
         </div>
       </div>
       <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>

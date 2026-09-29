@@ -52,8 +52,8 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     q: 'Are Alt Art and Manga Rare treatments distinguished from Parallels?',
     a: (
       <>
-        Not reliably. In our production data — and in the underlying
-        TCGGraph feed — <em>Alt Art</em> and <em>Manga Rare</em> do not
+        Not reliably. In our production data (and in the underlying
+        TCGGraph feed) <em>Alt Art</em> and <em>Manga Rare</em> do not
         have a separate treatment tag for the One Piece Card Game.
         Cards that a player might colloquially call &quot;Alt Art&quot;
         or &quot;Manga Rare&quot; collapse into the Parallel treatment
@@ -280,7 +280,7 @@ export const COLOURS_FAQ: FaqEntry[] = [
     q: 'How many colours are there in the One Piece Card Game?',
     a: <>Six primary colours: Red, Green, Blue, Purple, Black and Yellow. Dual-colour Leaders combine two of these.</>,
     plainAnswer:
-      'Six primary colours — Red, Green, Blue, Purple, Black and Yellow. Dual-colour Leaders combine two of these.',
+      'Six primary colours: Red, Green, Blue, Purple, Black and Yellow. Dual-colour Leaders combine two of these.',
   },
   {
     q: 'What is a dual-colour Leader?',
@@ -378,7 +378,7 @@ export function colourFaq(label: string, slug: string): FaqEntry[] {
           demand.
         </>
       ),
-      plainAnswer: `${label} plays into specific gameplay archetypes — the colour is a mechanical identity, not just a palette choice. Browse the top of the ${label} market to see collector demand.`,
+      plainAnswer: `${label} plays into specific gameplay archetypes. The colour is a mechanical identity, not just a palette choice. Browse the top of the ${label} market to see collector demand.`,
     },
     {
       q: `Are ${label} Secret Rares more valuable than other ${label} rarities?`,
