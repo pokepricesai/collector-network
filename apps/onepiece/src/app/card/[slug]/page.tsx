@@ -2,11 +2,20 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentUser } from '@collector-network/auth';
-import { getCardBundleByName } from '@/server/read';
+import {
+  getCardBundleByName,
+  getCardFamilyByBaseCollector,
+  findCardsForCollectorSlug,
+} from '@/server/read';
 import { searchCards } from '@/server/search';
 import { canonicalFor } from '@/lib/seo';
-import { slugifyCardName } from '@/lib/onepiece/slug';
+import {
+  candidatePrintingSplits,
+  slugifyCardName,
+  buildPrintingSlug,
+} from '@/lib/onepiece/slug';
 import { pickCardImage } from '@/lib/onepiece/image';
+import { renderEffectText } from '@/lib/onepiece/render-effect';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import { TREATMENT_DISPLAY_ORDER } from '@/lib/onepiece/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
@@ -28,19 +37,63 @@ import type { OpCardView, OpPrintingView } from '@/server/read';
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
-// Best-effort reverse lookup: turn the slug back into a plausible
-// name. Names contain dots, ellipses and non-ASCII characters that
-// we can't fully round-trip. If the naive spaced-out slug misses, we
-// fall back to a name search and pick the exact slug match.
-async function resolveCardName(slug: string): Promise<string | null> {
+// Resolve a card family from the URL slug. The new (correct) shape is
+// `${baseCollectorSlug}-${nameSlug}` — for example
+// `op13-037-roronoa-zoro` identifies the OP13-037 Zoro (and its
+// parallels + reprints), NOT every card ever named Roronoa Zoro.
+//
+// The `candidatePrintingSplits` walk handles hyphenated collector
+// numbers by trying every plausible collector/name split until one
+// matches a real DB row. Slugs without a recognisable collector
+// prefix fall back to the legacy name-only lookup and return the
+// first family — logged as legacy behaviour that will be phased out
+// as inbound links migrate.
+interface ResolvedFamily {
+  baseCollector: string | null;
+  nameSlug: string;
+  name: string;
+}
+async function resolveFamily(slug: string): Promise<ResolvedFamily | null> {
+  const splits = candidatePrintingSplits(slug);
+  for (const { collectorSlug, nameSlug } of splits) {
+    const hits = await findCardsForCollectorSlug(collectorSlug);
+    const match = hits.find((h) => slugifyCardName(h.name) === nameSlug);
+    if (match) return { baseCollector: match.baseCollector, nameSlug, name: match.name };
+  }
+  // Legacy: name-only slug. Return the first row whose slugged name
+  // matches. This preserves any old inbound link but will surface an
+  // arbitrary family for repeated-name characters. New links no
+  // longer emit this shape.
   const naive = slug.replace(/-/g, ' ');
   const bundle = await getCardBundleByName(naive);
-  if (bundle) return bundle.name;
-  // Fallback: fuzzy search + slug re-match. Handles names with dots
-  // ("Monkey D. Luffy"), apostrophes and other characters the slug drops.
+  if (bundle) {
+    // Take the first card row as the arbitrary anchor. Its base
+    // collector becomes the canonical family.
+    const anchor = bundle.cards[0]?.card;
+    return {
+      baseCollector: anchor?.collector_number
+        ? anchor.collector_number.replace(/_(?:p|r)\d+$/i, '')
+        : null,
+      nameSlug: slug,
+      name: bundle.name,
+    };
+  }
   const candidates = await searchCards(naive.slice(0, 40), 40);
   const hit = candidates.find((c) => slugifyCardName(c.name) === slug);
-  return hit?.name ?? null;
+  if (!hit) return null;
+  return {
+    baseCollector: hit.collector_number
+      ? hit.collector_number.replace(/_(?:p|r)\d+$/i, '')
+      : null,
+    nameSlug: slug,
+    name: hit.name,
+  };
+}
+
+function canonicalSlugFor(fam: ResolvedFamily): string {
+  return fam.baseCollector
+    ? buildPrintingSlug(fam.baseCollector, fam.name)
+    : slugifyCardName(fam.name);
 }
 
 export async function generateMetadata({
@@ -49,12 +102,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const resolvedName = await resolveCardName(slug);
-  if (!resolvedName) return { title: 'Card not found' };
+  const fam = await resolveFamily(slug);
+  if (!fam) return { title: 'Card not found' };
+  const canonicalSlug = canonicalSlugFor(fam);
   return {
-    title: `${resolvedName}. Every printing, treatment and price`,
-    description: `${resolvedName} across every One Piece Card Game set. Standard, parallel, secret rare, special card and treasure rare treatments priced individually.`,
-    alternates: { canonical: canonicalFor(`/card/${slugifyCardName(resolvedName)}`) },
+    title: `${fam.name}${fam.baseCollector ? ` (${fam.baseCollector})` : ''}. Every printing, treatment and price`,
+    description: `${fam.name}${fam.baseCollector ? ` — ${fam.baseCollector}` : ''}. Every treatment (standard, parallel, reprint, secret rare, special card, treasure rare, promo) priced individually.`.replace(' — ', '. '),
+    alternates: { canonical: canonicalFor(`/card/${canonicalSlug}`) },
   };
 }
 
@@ -64,10 +118,13 @@ export default async function LogicalCardPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const resolvedName = await resolveCardName(slug);
-  if (!resolvedName) notFound();
-  const bundle = await getCardBundleByName(resolvedName);
+  const fam = await resolveFamily(slug);
+  if (!fam) notFound();
+  const bundle = fam.baseCollector
+    ? await getCardFamilyByBaseCollector(fam.baseCollector, fam.nameSlug)
+    : await getCardBundleByName(fam.name);
   if (!bundle) notFound();
+  const canonicalSlug = canonicalSlugFor(fam);
 
   // Flatten all treatment printings from every rarity row, then group by
   // treatment code so the page reads chase-first:
@@ -125,8 +182,8 @@ export default async function LogicalCardPage({
     '@context': 'https://schema.org',
     '@type': 'CreativeWork',
     name: bundle.name,
-    url: canonicalFor(`/card/${slugifyCardName(bundle.name)}`),
-    description: `${bundle.name}. Every printing and treatment.`,
+    url: canonicalFor(`/card/${canonicalSlug}`),
+    description: `${bundle.name}${fam.baseCollector ? ` (${fam.baseCollector})` : ''}. Every printing and treatment.`,
   } as const;
 
   return (
@@ -217,7 +274,7 @@ export default async function LogicalCardPage({
                   Effect
                 </div>
                 <p style={{ margin: 0, lineHeight: 1.55 }}>
-                  {heroCard.gamedata.effectText}
+                  {renderEffectText(heroCard.gamedata.effectText)}
                 </p>
                 {heroCard.gamedata.triggerText && (
                   <>
@@ -230,7 +287,7 @@ export default async function LogicalCardPage({
                       Trigger
                     </div>
                     <p style={{ margin: 0, lineHeight: 1.55 }}>
-                      {heroCard.gamedata.triggerText}
+                      {renderEffectText(heroCard.gamedata.triggerText)}
                     </p>
                   </>
                 )}

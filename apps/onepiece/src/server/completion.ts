@@ -20,7 +20,7 @@ import 'server-only';
 import type { SupabaseClient, TcgSet } from '@collector-network/database';
 import { getSetsByIds } from '@collector-network/database';
 import { createServerSupabase } from '@collector-network/auth';
-import { slugifyCardName } from '@/lib/onepiece/slug';
+import { buildPrintingSlug } from '@/lib/onepiece/slug';
 
 // Regex matches the trailing `_p<digits>` (parallel) or `_r<digits>`
 // (reprint) suffix. Everything before that is the base slot.
@@ -196,7 +196,9 @@ export async function getSetCompletionForCurrentUser(): Promise<CompletionSummar
       missingList.push({
         slot,
         cardName: meta.cardName,
-        slugName: slugifyCardName(meta.cardName),
+        // Base-collector-aware slug so repeated character names route
+        // to the correct family (see src/lib/onepiece/slug.ts).
+        slugName: buildPrintingSlug(slot, meta.cardName),
         cardId: meta.cardId,
       });
     }

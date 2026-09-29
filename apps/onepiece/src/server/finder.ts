@@ -13,7 +13,7 @@ import { getOnepieceClient, getOnepieceGameId } from './client';
 import { toOpGamedata, type OpGamedata } from '../lib/onepiece/gamedata';
 import type { OpCardType } from '../lib/onepiece/card-type';
 import type { OpColour } from '../lib/onepiece/colour';
-import { slugifyCardName } from '../lib/onepiece/slug';
+import { slugifyCardName, buildLogicalCardHref, baseCollectorNumber } from '../lib/onepiece/slug';
 
 // Real interactive card-finder query layer. Runs against live
 // production data (5,538 OP cards, all with populated gamedata for
@@ -167,20 +167,27 @@ export async function queryFinder(
     return true;
   });
 
-  // Deduplicate to logical cards (one entry per name) so parallels
-  // of the same card don't flood the finder. Prefer the highest-
-  // rarity row so the surfaced tile carries the chase price.
+  // Deduplicate to logical cards. A logical card = one base collector
+  // number (its parallels and reprints collapse into it). Different
+  // game cards that happen to share a character name (e.g. the 30+
+  // distinct "Roronoa Zoro" cards across sets) remain SEPARATE tiles.
+  // Prefer the highest-rarity row within a family as the tile anchor.
   const rarityRank: Record<string, number> = {
     TR: 8, SEC: 7, 'SP CARD': 6, SR: 5, L: 4, R: 3, UC: 2, C: 1, P: 3,
   };
-  const byName = new Map<string, TcgCard[]>();
+  const familyKey = (c: TcgCard): string => {
+    const base = baseCollectorNumber(c.collector_number) ?? c.id;
+    return `${base}|${c.name}`;
+  };
+  const byFamily = new Map<string, TcgCard[]>();
   for (const c of filtered) {
-    const bucket = byName.get(c.name);
+    const key = familyKey(c);
+    const bucket = byFamily.get(key);
     if (bucket) bucket.push(c);
-    else byName.set(c.name, [c]);
+    else byFamily.set(key, [c]);
   }
   const dedupedAnchors: TcgCard[] = [];
-  for (const bucket of byName.values()) {
+  for (const bucket of byFamily.values()) {
     const sorted = [...bucket].sort((a, b) =>
       (rarityRank[(b.rarity ?? '').toUpperCase()] ?? 0) -
       (rarityRank[(a.rarity ?? '').toUpperCase()] ?? 0));
@@ -196,33 +203,31 @@ export async function queryFinder(
     filters.onlyPriced === true ||
     filters.priceMinEur != null || filters.priceMaxEur != null;
 
-  // For price-based ranking we cap the candidate set so the pricing
-  // join stays bounded and — importantly — so the `IN (…)` list on
-  // the printings lookup fits inside PostgREST's URL length limit
-  // (~2 KB → roughly 400 UUIDs). Priced cards skew heavily to
-  // Leaders and chase treatments, so 300 unique names is enough to
-  // surface the true top of the market for OP's current catalogue.
-  const anchorsForPricing = needsFullPricing
-    ? dedupedAnchors.slice(0, 300)
-    : dedupedAnchors;
+  // Price-filtering must consider every priced candidate, not just an
+  // alphabetical top-300 — the old 300-slice made priceMinEur=100
+  // return zero cards whenever the €100+ items happened to sit
+  // alphabetically outside the first 300 anchors. loadPricing already
+  // chunks the IN(…) lookups with a PostgREST-safe size, so the URL
+  // length concern that motivated the old cap no longer applies.
+  const anchorsForPricing = dedupedAnchors;
 
   const setsById = new Map(sets.map((s) => [s.id, s]));
 
-  // Pricing across ALL cards sharing a name (parallels, reprints,
-  // secret-rare variants) — never just the anchor's own printings.
-  // Otherwise a logical card would price at its base row and miss the
-  // Parallel's premium.
+  // Pricing across ALL cards in the same family (base + parallels +
+  // reprints of the anchor's base collector number). Never across
+  // unrelated game cards that merely share a character name.
   async function loadPricing(anchors: TcgCard[]): Promise<{
     topByCard: Map<string, number>;
     printingsByCard: Map<string, string[]>;
   }> {
     if (anchors.length === 0) return { topByCard: new Map(), printingsByCard: new Map() };
     const anchorIds = new Set(anchors.map((c) => c.id));
-    const anchorNames = new Set(anchors.map((c) => c.name));
-    // Collect every card row that shares a name with one of our anchors.
+    const anchorFamilies = new Set(anchors.map((c) => familyKey(c)));
+    // Collect every card row that belongs to one of our anchor families
+    // (same base collector + same name).
     const relatedCardIds = new Set<string>();
-    for (const [name, bucket] of byName.entries()) {
-      if (!anchorNames.has(name)) continue;
+    for (const [key, bucket] of byFamily.entries()) {
+      if (!anchorFamilies.has(key)) continue;
       for (const c of bucket) relatedCardIds.add(c.id);
     }
     const allRelatedIds = [...relatedCardIds];
@@ -241,13 +246,13 @@ export async function queryFinder(
     for (const rows of await Promise.all(printingChunkPromises)) printings.push(...rows);
     // printingsByCard remains anchor-scoped for the tile "N printings"
     // count so the number matches what the user sees on the anchor
-    // (highest-rarity) treatment.
+    // (highest-rarity) treatment within THIS family.
     const printingsByCard = new Map<string, string[]>();
-    const printingsByName = new Map<string, string[]>();
-    // Build a card_id → name lookup for the price aggregation.
-    const cardIdToName = new Map<string, string>();
-    for (const [name, bucket] of byName.entries()) {
-      for (const c of bucket) cardIdToName.set(c.id, name);
+    const printingsByFamily = new Map<string, string[]>();
+    // Build a card_id → family-key lookup for the price aggregation.
+    const cardIdToFamily = new Map<string, string>();
+    for (const [key, bucket] of byFamily.entries()) {
+      for (const c of bucket) cardIdToFamily.set(c.id, key);
     }
     for (const p of printings) {
       if (anchorIds.has(p.tcg_card_id)) {
@@ -255,11 +260,11 @@ export async function queryFinder(
         if (bucket) bucket.push(p.id);
         else printingsByCard.set(p.tcg_card_id, [p.id]);
       }
-      const name = cardIdToName.get(p.tcg_card_id);
-      if (name) {
-        const bucket = printingsByName.get(name);
+      const key = cardIdToFamily.get(p.tcg_card_id);
+      if (key) {
+        const bucket = printingsByFamily.get(key);
         if (bucket) bucket.push(p.id);
-        else printingsByName.set(name, [p.id]);
+        else printingsByFamily.set(key, [p.id]);
       }
     }
     const allPrintingIds = printings.map((p) => p.id);
@@ -276,10 +281,11 @@ export async function queryFinder(
     for (const partial of await Promise.all(pricingChunkPromises)) {
       for (const [k, v] of partial.entries()) pricingMap.set(k, v);
     }
-    // Aggregate the max EUR price seen across every printing that
-    // shares the anchor's name — surfaces the Parallel premium.
-    const topByName = new Map<string, number>();
-    for (const [name, printingIds] of printingsByName.entries()) {
+    // Aggregate the max EUR price seen across every printing in the
+    // family (base + parallels + reprints of the same base collector).
+    // NEVER across unrelated cards that share a character name.
+    const topByFamily = new Map<string, number>();
+    for (const [key, printingIds] of printingsByFamily.entries()) {
       let best: number | null = null;
       for (const printingId of printingIds) {
         const pricing = pricingMap.get(printingId);
@@ -290,13 +296,13 @@ export async function queryFinder(
           if (best == null || row.price > best) best = row.price;
         }
       }
-      if (best != null) topByName.set(name, best);
+      if (best != null) topByFamily.set(key, best);
     }
-    // Re-key back to card_id for the caller: each anchor gets the
-    // name-scoped max.
+    // Re-key back to card_id for the caller: each anchor gets its
+    // family-scoped max.
     const topByCard = new Map<string, number>();
     for (const anchor of anchors) {
-      const p = topByName.get(anchor.name);
+      const p = topByFamily.get(familyKey(anchor));
       if (p != null) topByCard.set(anchor.id, p);
     }
     return { topByCard, printingsByCard };
@@ -312,7 +318,7 @@ export async function queryFinder(
       gamedata,
       set: setsById.get(anchor.set_id) ?? null,
       imageUrl: pickImage(anchor.images),
-      href: `/card/${slugifyCardName(anchor.name)}`,
+      href: buildLogicalCardHref(anchor.collector_number, anchor.name),
       priceEur,
       printingCount,
     };
@@ -467,12 +473,19 @@ async function queryFinderByPrice(
   }
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
-  // Group cards by name (logical card family).
-  const byName = new Map<string, TcgCard[]>();
+  // Group cards by FAMILY (base collector + name). A "family" bundles
+  // the base card with its parallels and reprints. Cards that merely
+  // share a character name across different sets are separate families.
+  const familyKey = (c: TcgCard): string => {
+    const base = baseCollectorNumber(c.collector_number) ?? c.id;
+    return `${base}|${c.name}`;
+  };
+  const byFamily = new Map<string, TcgCard[]>();
   for (const c of cards) {
-    const bucket = byName.get(c.name);
+    const key = familyKey(c);
+    const bucket = byFamily.get(key);
     if (bucket) bucket.push(c);
-    else byName.set(c.name, [c]);
+    else byFamily.set(key, [c]);
   }
 
   // Filter check applied at ROW level (not name-group level). A
@@ -534,8 +547,10 @@ async function queryFinderByPrice(
     )[0]!;
 
   // Walk price rows in order. Only consider rows whose parent card
-  // passes the row-level filter. First qualifying hit per name wins.
-  const bestByName = new Map<string, { anchor: TcgCard; priceEur: number; printingId: string }>();
+  // passes the row-level filter. First qualifying hit per FAMILY wins
+  // (a family is base collector + name; parallels/reprints of the
+  // same base collapse but different game cards named "Zoro" do NOT).
+  const bestByFamily = new Map<string, { anchor: TcgCard; priceEur: number; printingId: string }>();
   for (const row of priceRows) {
     if (filters.priceMinEur != null && row.price < filters.priceMinEur) continue;
     if (filters.priceMaxEur != null && row.price > filters.priceMaxEur) continue;
@@ -544,15 +559,16 @@ async function queryFinderByPrice(
     const card = cardById.get(printing.tcg_card_id);
     if (!card) continue;
     if (!rowMatches(card)) continue;
-    if (bestByName.has(card.name)) continue;
+    const key = familyKey(card);
+    if (bestByFamily.has(key)) continue;
 
-    // Anchor: highest-rarity card in the name group that ALSO matches
-    // the filter. Falls back to `card` itself if nothing else matches.
-    const bucket = byName.get(card.name) ?? [card];
+    // Anchor: highest-rarity card in the FAMILY that also matches the
+    // filter. Falls back to `card` itself if nothing else matches.
+    const bucket = byFamily.get(key) ?? [card];
     const matchingInBucket = bucket.filter(rowMatches);
     const anchor = matchingInBucket.length > 0 ? chooseAnchor(matchingInBucket) : card;
 
-    bestByName.set(card.name, {
+    bestByFamily.set(key, {
       anchor,
       priceEur: row.price,
       printingId: row.printingId,
@@ -561,22 +577,23 @@ async function queryFinderByPrice(
 
   const setsById = new Map(sets.map((s) => [s.id, s]));
 
-  // Iterating bestByName preserves the insertion order (which is the
-  // price walk order) — pagination is a direct slice.
+  // Iterating bestByFamily preserves the insertion order (price walk
+  // order) — pagination is a direct slice.
   const entries: Array<{ anchor: TcgCard; priceEur: number }> = [];
-  for (const entry of bestByName.values()) {
+  for (const entry of bestByFamily.values()) {
     entries.push({ anchor: entry.anchor, priceEur: entry.priceEur });
   }
 
-  // Count printings per visible tile — across every card in the name
-  // group, from the printings we already fetched. Some parallels not
+  // Count printings per visible tile — across every card in the same
+  // FAMILY, from the printings we already fetched. Some parallels not
   // yet priced still count as printings; the count is only accurate
-  // for name groups that were touched by the top-N price fetch.
-  const printingsByName = new Map<string, number>();
+  // for families that were touched by the top-N price fetch.
+  const printingsByFamily = new Map<string, number>();
   for (const p of printings) {
     const card = cardById.get(p.tcg_card_id);
     if (!card) continue;
-    printingsByName.set(card.name, (printingsByName.get(card.name) ?? 0) + 1);
+    const key = familyKey(card);
+    printingsByFamily.set(key, (printingsByFamily.get(key) ?? 0) + 1);
   }
 
   const total = entries.length;
@@ -590,9 +607,9 @@ async function queryFinderByPrice(
     gamedata: toOpGamedata(anchor.gamedata),
     set: setsById.get(anchor.set_id) ?? null,
     imageUrl: pickImage(anchor.images),
-    href: `/card/${slugifyCardName(anchor.name)}`,
+    href: buildLogicalCardHref(anchor.collector_number, anchor.name),
     priceEur,
-    printingCount: printingsByName.get(anchor.name) ?? 0,
+    printingCount: printingsByFamily.get(familyKey(anchor)) ?? 0,
   }));
   return { tiles, total, pageSize, page };
 }

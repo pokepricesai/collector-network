@@ -1,13 +1,24 @@
 // URL slug helpers.
 //
-// Card-name → slug is the shape that shows up in URLs everywhere:
-//   /card/monkey-d-luffy
-//   /set/op01/card/op01-001-monkey-d-luffy
+// One Piece names are heavily reused across distinct game cards
+// ("Roronoa Zoro" is 30+ separate cards). The logical-card URL MUST
+// disambiguate by base collector number:
+//   /card/op13-037-roronoa-zoro                    (Zoro from OP13)
+//   /card/op01-001-roronoa-zoro                    (a different Zoro)
+//   /set/op13/card/op13-037-roronoa-zoro           (exact printing)
 //
-// Card names contain apostrophes, ellipses, dots and Japanese
-// characters; we lower-case, strip non-word characters, collapse runs
-// of whitespace, and de-duplicate hyphens. Round-tripping isn't
-// guaranteed — the slug is a lookup key, not a canonical form.
+// A "logical card" is one base card plus its parallels (_p1, _p2, ...)
+// and reprints (_r1, _r2, ...). Two cards with the same character
+// name but different base collector numbers are DIFFERENT logical
+// cards and must not share a URL.
+
+/** Strip the trailing `_p<n>` (parallel) or `_r<n>` (reprint) suffix
+ *  from a collector number so `OP13-037_p1` and `OP13-037_r1` both
+ *  reduce to `OP13-037` — the underlying "base" checklist slot. */
+export function baseCollectorNumber(collector: string | null | undefined): string | null {
+  if (!collector) return null;
+  return collector.replace(/_(?:p|r)\d+$/i, '');
+}
 
 export function slugifyCardName(name: string): string {
   return (name ?? '')
@@ -29,6 +40,18 @@ export function buildPrintingSlug(collectorNumber: string | null, name: string):
   const cn = (collectorNumber ?? '').trim();
   if (!cn) return slug;
   return `${slugifyCollector(cn)}-${slug}`;
+}
+
+/** Logical-card URL builder. A "logical card" is one base card plus
+ *  its parallels (_p*) and reprints (_r*) — NOT every card that
+ *  happens to share a character name. The href is
+ *  `/card/${baseCollectorSlug}-${nameSlug}`. Cards with no collector
+ *  number fall back to a name-only slug (legacy behaviour) so promos
+ *  without a printed number still work. */
+export function buildLogicalCardHref(collectorNumber: string | null, name: string): string {
+  const base = baseCollectorNumber(collectorNumber);
+  const slug = buildPrintingSlug(base, name);
+  return `/card/${slug}`;
 }
 
 export function slugifyCollector(cn: string): string {

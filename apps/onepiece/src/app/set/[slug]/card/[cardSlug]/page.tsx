@@ -7,6 +7,7 @@ import { getCardBundleByCardId } from '@/server/read';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug, candidatePrintingSplits, slugifyCardName } from '@/lib/onepiece/slug';
 import { pickCardImage } from '@/lib/onepiece/image';
+import { renderEffectText } from '@/lib/onepiece/render-effect';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
@@ -236,7 +237,7 @@ export default async function PrintingPage({
                   Effect
                 </div>
                 <p style={{ margin: 0, lineHeight: 1.55 }}>
-                  {anchorCardView.gamedata.effectText}
+                  {renderEffectText(anchorCardView.gamedata.effectText)}
                 </p>
               </div>
             )}

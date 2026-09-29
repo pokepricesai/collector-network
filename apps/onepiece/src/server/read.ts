@@ -10,6 +10,7 @@ import {
   type TcgPrinting,
   type TcgSet,
 } from '@collector-network/database';
+import { baseCollectorNumber, slugifyCardName } from '../lib/onepiece/slug';
 import {
   getPrintingPricingBatch,
   type PrintingPricing,
@@ -57,7 +58,10 @@ export interface OpCardBundle {
   cards: OpCardView[];
 }
 
-/** Load every priced printing for the exact card name. */
+/** LEGACY: load every printing for the exact card name. This
+ *  aggregates ALL distinct game cards sharing a name (dozens of
+ *  Roronoa Zoros across sets) and MUST NOT be used for the logical-
+ *  card page. Kept for admin/diagnostic callers only. */
 export async function getCardBundleByName(
   name: string,
   supabase: SupabaseClient = getOnepieceClient(),
@@ -69,6 +73,84 @@ export async function getCardBundleByName(
   });
   if (cards.length === 0) return null;
   return composeBundle(supabase, name, cards);
+}
+
+/** Load a logical card family scoped to a single base collector
+ *  number. The family is: the base card row (collector_number =
+ *  baseCollector) plus every parallel (_p<n>) and reprint (_r<n>) of
+ *  the same base. Different game cards with the same character name
+ *  live in DIFFERENT families and are never merged here.
+ *
+ *  Name is passed only to disambiguate the rare case where two rows
+ *  share a normalised collector-slug (unlikely; kept as a safety
+ *  filter). Match uses the DB `name` column so treatments/artworks
+ *  of the same slot but different DB names never accidentally merge.
+ */
+export async function getCardFamilyByBaseCollector(
+  baseCollector: string,
+  nameSlug: string,
+  supabase: SupabaseClient = getOnepieceClient(),
+): Promise<OpCardBundle | null> {
+  const gameId = await getOnepieceGameId(supabase);
+  const upper = baseCollector.toUpperCase();
+  // Match base + `_p*` + `_r*` via ilike prefix. The upper() form is
+  // what the DB stores.
+  const { data, error } = await supabase
+    .from('tcg_cards')
+    .select('*')
+    .eq('game_id', gameId)
+    .or(
+      `collector_number.eq.${upper},collector_number.ilike.${upper}\\_p%,collector_number.ilike.${upper}\\_r%`,
+    );
+  if (error) {
+    console.error('[onepiece/read] getCardFamilyByBaseCollector query', error);
+    return null;
+  }
+  const rows = (data as TcgCard[] | null) ?? [];
+  if (rows.length === 0) return null;
+  // Same base collector CAN in principle be reused in a different set
+  // (starter set + main set share `ST01-001` shape sometimes) — filter
+  // by the name-slug to keep the family cohesive when that happens.
+  const matched = rows.filter((c) => slugifyCardName(c.name) === nameSlug);
+  const family = matched.length > 0 ? matched : rows;
+  const name = family[0]!.name;
+  return composeBundle(supabase, name, family);
+}
+
+/** Reverse-lookup: given a base collector slug (e.g. `op13-037`), find
+ *  every matching base collector number and return one candidate per
+ *  distinct name. Used by the /card/[slug] route to pick the family
+ *  when the user's slug has a collector prefix but the split between
+ *  collector and name is ambiguous. */
+export async function findCardsForCollectorSlug(
+  collectorSlug: string,
+  supabase: SupabaseClient = getOnepieceClient(),
+): Promise<Array<{ baseCollector: string; name: string }>> {
+  const gameId = await getOnepieceGameId(supabase);
+  // The slug uses hyphens where the DB collector has hyphens; only
+  // difference is case. Reconstruct the base collector by upper-casing.
+  const target = collectorSlug.toUpperCase();
+  const { data, error } = await supabase
+    .from('tcg_cards')
+    .select('name,collector_number')
+    .eq('game_id', gameId)
+    .eq('collector_number', target)
+    .limit(50);
+  if (error) {
+    console.error('[onepiece/read] findCardsForCollectorSlug', error);
+    return [];
+  }
+  const rows = (data as { name: string; collector_number: string }[] | null) ?? [];
+  const seen = new Set<string>();
+  const out: Array<{ baseCollector: string; name: string }> = [];
+  for (const r of rows) {
+    const base = baseCollectorNumber(r.collector_number) ?? r.collector_number;
+    const key = `${base}|${slugifyCardName(r.name)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ baseCollector: base, name: r.name });
+  }
+  return out;
 }
 
 /** Load a card family starting from a single tcg_cards row id. Useful
