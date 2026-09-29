@@ -55,7 +55,7 @@ export default function LogicalAddToCollection(props: LogicalAddToCollectionProp
             letterSpacing: '0.02em',
           }}
         >
-          Add to collection — create free account
+          Add to collection. Create free account
         </Link>
         <Link
           href={`/sign-in?returnTo=${returnParam}`}
@@ -112,7 +112,7 @@ export default function LogicalAddToCollection(props: LogicalAddToCollectionProp
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-strong)' }}>
           {picked
-            ? `Adding ${props.cardName} — ${picked.treatmentLabel}${picked.variantIndex != null ? ` #${picked.variantIndex}` : ''}${picked.finish && picked.finish !== 'nonfoil' ? ` · ${picked.finish}` : ''}${picked.collectorNumber ? ` · ${picked.collectorNumber}` : ''}`
+            ? `Adding ${props.cardName}, ${picked.treatmentLabel}${picked.variantIndex != null ? ` #${picked.variantIndex}` : ''}${picked.finish && picked.finish !== 'nonfoil' ? ` · ${picked.finish}` : ''}${picked.collectorNumber ? ` · ${picked.collectorNumber}` : ''}`
             : `Which printing of ${props.cardName} do you own?`}
         </div>
         <button

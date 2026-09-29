@@ -6,7 +6,7 @@ import Faq from '@/components/Faq';
 import { COLOURS_FAQ } from '@/lib/faq-content';
 
 export const metadata: Metadata = {
-  title: 'One Piece card colours — Red, Green, Blue, Purple, Black, Yellow',
+  title: 'One Piece card colours. Red, Green, Blue, Purple, Black, Yellow',
   description:
     'Browse One Piece Card Game cards by colour. Six colours (Red, Green, Blue, Purple, Black, Yellow) plus every multi-colour Leader pairing.',
   alternates: { canonical: canonicalFor('/colours') },

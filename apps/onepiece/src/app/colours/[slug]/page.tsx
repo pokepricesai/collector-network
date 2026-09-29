@@ -24,7 +24,7 @@ export async function generateMetadata({
   if (!isOpColour(slug)) return { title: 'Colour not found' };
   const label = OP_COLOUR_LABEL[slug];
   return {
-    title: `${label} One Piece cards — Leaders, chase cards and live prices`,
+    title: `${label} One Piece cards. Leaders, chase cards and live prices`,
     description: `Every ${label} One Piece Card Game card from every set, ranked by live retail price. Includes ${label} Leaders and multi-colour cards containing ${label}.`,
     alternates: { canonical: canonicalFor(`/colours/${slug}`) },
   };
@@ -166,7 +166,7 @@ export default async function ColourDetail({
                 <div style={{ display: 'grid', gap: 4 }}>
                   <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.3 }}>{tile.name}</div>
                   <div className="label-mono" style={{ fontSize: 10.5 }}>
-                    {(tile.set?.code ?? '').toUpperCase() || '—'} · {tile.collectorNumber ?? '—'} · {tile.rarity ?? '—'}
+                    {(tile.set?.code ?? '').toUpperCase() || '–'} · {tile.collectorNumber ?? '–'} · {tile.rarity ?? '–'}
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
                     {tile.gamedata.colours.map((c) => (

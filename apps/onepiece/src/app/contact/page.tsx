@@ -17,7 +17,7 @@ export default function ContactPage() {
         <h1 style={{ margin: 0, fontSize: 30 }}>Get in touch</h1>
         <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           Corrections, missing sets, price-feed regressions and partnership
-          enquiries — send them to{' '}
+          enquiries. Send them to{' '}
           <a href="mailto:hello@onepieceprices.io">hello@onepieceprices.io</a>.
         </p>
         <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.6 }}>

@@ -16,7 +16,7 @@ export default function NotFound() {
           404 · Card not found
         </span>
         <h1 style={{ margin: 0, fontSize: 34 }}>
-          This treasure isn't on the map — yet
+          This treasure isn't on the map. Yet
         </h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 16 }}>
           The card, set or page you're looking for doesn't exist. It may not have

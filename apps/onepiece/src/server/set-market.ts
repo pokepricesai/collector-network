@@ -69,7 +69,7 @@ export async function getSetMarketForOp(
       mostValuable: [],
       cheapest: [],
       historyWindowNote:
-        'History building — 7-day risers/fallers unlock once OP daily retail crosses the coverage bar.',
+        'History building, 7-day risers/fallers unlock once OP daily retail crosses the coverage bar.',
     };
   }
 

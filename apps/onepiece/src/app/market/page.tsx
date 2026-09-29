@@ -18,7 +18,7 @@ function parseWindow(v: string | undefined): MoverWindow {
 }
 
 export const metadata: Metadata = {
-  title: 'One Piece movers — 7-, 30- and 90-day price change board',
+  title: 'One Piece movers, 7-, 30- and 90-day price change board',
   description:
     'Live One Piece Card Game market movers filtered to signal. Risers and fallers by printing across 7, 30 and 90 days.',
   alternates: { canonical: `${SITE_URL}/market` },
@@ -58,7 +58,7 @@ export default async function MarketPage({
                 maxWidth: 640,
               }}
             >
-              Filtered to signal — a mover requires at least three observed days
+              Filtered to signal. A mover requires at least three observed days
               and a headline price of $2 or higher. Prices are always shown in
               their native currency; nothing is auto-converted.
             </p>
@@ -173,7 +173,7 @@ function Column({
                       {m.card.name}
                     </span>
                     <span className="label-mono">
-                      {setCode.toUpperCase() || 'SET'} · #{m.printing.collector_number ?? '—'}
+                      {setCode.toUpperCase() || 'SET'} · #{m.printing.collector_number ?? '–'}
                     </span>
                   </span>
                   <span style={{ display: 'grid', gap: 2, textAlign: 'right' }}>

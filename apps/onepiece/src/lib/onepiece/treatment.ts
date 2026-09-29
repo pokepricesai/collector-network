@@ -92,13 +92,13 @@ export const OP_TREATMENTS: Record<OpTreatment, OpTreatmentInfo> = {
     code: 'promo',
     label: 'Promo',
     short: 'PROMO',
-    description: 'Promotional printing — event, tournament or launch pack.',
+    description: 'Promotional printing. Event, tournament or launch pack.',
   },
   leader: {
     code: 'leader',
     label: 'Leader',
     short: 'L',
-    description: 'A Leader card — anchors deck construction.',
+    description: 'A Leader card. Anchors deck construction.',
   },
 };
 

@@ -84,7 +84,7 @@ export default function Hero({
                 <>
                   {formatNumber(cardCount)} One Piece Card Game cards across{' '}
                   {formatNumber(setCount)} sets. Standards, parallels, secret
-                  rares, special cards and treasure rares — each priced
+                  rares, special cards and treasure rares. Each priced
                   individually.
                 </>
               ) : (
@@ -113,8 +113,8 @@ export default function Hero({
           </div>
 
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13, maxWidth: 520, lineHeight: 1.55 }}>
-            A free account lets you save any exact printing — foil, treatment
-            and grade — with live valuation on the same data the rest of the
+            A free account lets you save any exact printing. Foil, treatment
+            and grade. With live valuation on the same data the rest of the
             site uses. Only you see your holdings.
           </p>
 
@@ -252,7 +252,7 @@ const leaderRowStyle: React.CSSProperties = {
 };
 
 function formatNumber(n: number): string {
-  if (n <= 0) return '—';
+  if (n <= 0) return '–';
   if (n >= 1000) return new Intl.NumberFormat('en-US').format(n);
   return String(n);
 }

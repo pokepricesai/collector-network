@@ -37,7 +37,7 @@ export default function TreatmentsBand() {
               lineHeight: 1.6,
             }}
           >
-            Card number is a gameplay identifier — not a collector one. Every
+            Card number is a gameplay identifier. Not a collector one. Every
             parallel, secret rare, special card, treasure rare and promo is its
             own priced entity on OnePiecePrices, so a chase card is never
             buried under its base printing.

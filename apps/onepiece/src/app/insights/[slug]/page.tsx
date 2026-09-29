@@ -130,7 +130,7 @@ export default async function ArticlePage({
           Prices are shown in EUR from the current live Cardmarket EU
           feed. OnePiecePrices never applies a hardcoded FX conversion.
           Any &quot;Find on eBay&quot; buttons elsewhere on the site are
-          affiliate links — we may earn a commission at no cost to you.
+          affiliate links. We may earn a commission at no cost to you.
         </p>
       </div>
     </div>
@@ -166,13 +166,13 @@ async function MostValuableBody() {
         <em>Parallel</em>, <em>Secret Rare</em>, <em>Special Card</em>,{' '}
         <em>Treasure Rare</em>) it carries, and whether it&apos;s a
         marquee character. This piece walks through the current top of
-        the market — live-priced against the same feed the rest of
+        the market. Live-priced against the same feed the rest of
         OnePiecePrices uses.
       </p>
 
       <h2>Top-value Leaders right now</h2>
       <p>
-        Leaders anchor a One Piece deck. They also anchor the market —
+        Leaders anchor a One Piece deck. They also anchor the market –
         a Parallel print of a marquee Leader routinely outprices any
         Character in the same set. Below are the five dearest live
         Leader printings across the whole catalogue at the time of this
@@ -187,7 +187,7 @@ async function MostValuableBody() {
       <h2>Top-value Secret Rares</h2>
       <p>
         Secret Rares (rarity code <code>SEC</code>) are the standard
-        chase tier — every booster set ships a handful, always in{' '}
+        chase tier. Every booster set ships a handful, always in{' '}
         alternate-frame or holo treatments. The top Secret Rares hover
         in the hundreds of euros; a genuine mint copy can meaningfully
         outprice the box that produced it.
@@ -196,7 +196,7 @@ async function MostValuableBody() {
 
       <h2>Treasure Rares are a step above</h2>
       <p>
-        Treasure Rares (<code>TR</code>) sit above Secret Rares — the
+        Treasure Rares (<code>TR</code>) sit above Secret Rares. The
         rarest chase tier the base OP release schedule prints. Sets
         typically produce just a few Treasure Rares each, and their
         parallel treatments are the top of the whole market when they
@@ -217,7 +217,7 @@ async function MostValuableBody() {
         For a rolling view of who&apos;s moving today, see{' '}
         <Link href="/market">the movers board</Link>. To dig into
         Parallels for a specific character, open their logical card
-        page (e.g. <Link href="/card/monkey-d-luffy">/card/monkey-d-luffy</Link>) —
+        page (e.g. <Link href="/card/monkey-d-luffy">/card/monkey-d-luffy</Link>) –
         every treatment is listed with its live price.
       </p>
     </>
@@ -230,7 +230,7 @@ function RaritiesBody() {
       <p>
         The One Piece Card Game uses two axes at once: a{' '}
         <strong>rarity code</strong> printed on the card, and a{' '}
-        <strong>treatment</strong> — the physical finish and art
+        <strong>treatment</strong>: the physical finish and art
         variant. Understanding both is what separates a collector from
         a player. This guide sticks to what we ingest and display; we
         deliberately don&apos;t invent categories.
@@ -238,32 +238,32 @@ function RaritiesBody() {
 
       <h2>The rarity codes you&apos;ll see</h2>
       <ul>
-        <li><strong>C</strong> — Common. The bulk of any set.</li>
-        <li><strong>UC</strong> — Uncommon.</li>
-        <li><strong>R</strong> — Rare.</li>
-        <li><strong>SR</strong> — Super Rare. Above Rare; below chase.</li>
-        <li><strong>L</strong> — Leader. A structural rarity — every
+        <li><strong>C</strong>: Common. The bulk of any set.</li>
+        <li><strong>UC</strong>: Uncommon.</li>
+        <li><strong>R</strong>: Rare.</li>
+        <li><strong>SR</strong>: Super Rare. Above Rare; below chase.</li>
+        <li><strong>L</strong>: Leader. A structural rarity. Every
           deck must include exactly one Leader.</li>
-        <li><strong>SEC</strong> — Secret Rare. The standard chase tier.</li>
-        <li><strong>SP CARD</strong> — Special Card. Limited-run
+        <li><strong>SEC</strong>: Secret Rare. The standard chase tier.</li>
+        <li><strong>SP CARD</strong>: Special Card. Limited-run
           alternates (event promos, campaigns).</li>
-        <li><strong>TR</strong> — Treasure Rare. The rarest chase tier
+        <li><strong>TR</strong>: Treasure Rare. The rarest chase tier
           in a booster set today.</li>
-        <li><strong>P</strong> — Promo. Event, tournament and launch
+        <li><strong>P</strong>: Promo. Event, tournament and launch
           distribution.</li>
       </ul>
 
-      <h2>Parallels and Reprints — the suffix system</h2>
+      <h2>Parallels and Reprints. The suffix system</h2>
       <p>
         Every printing has a <strong>collector number</strong> like{' '}
         <code>OP01-001</code>. When Bandai releases a variant of that
         same card, it appears with a suffix:
       </p>
       <ul>
-        <li><code>OP01-001_p1</code> — Parallel print #1</li>
-        <li><code>OP01-001_p2</code> — Parallel print #2</li>
+        <li><code>OP01-001_p1</code>. Parallel print #1</li>
+        <li><code>OP01-001_p2</code>. Parallel print #2</li>
         <li><code>OP01-001_p3</code>, and so on for further parallels</li>
-        <li><code>OP01-001_r1</code> — Reprint (subsequent print run)</li>
+        <li><code>OP01-001_r1</code>. Reprint (subsequent print run)</li>
       </ul>
       <p>
         A Parallel almost always uses an alternate frame or holo
@@ -272,10 +272,10 @@ function RaritiesBody() {
         entities and never collapsed into the base.
       </p>
 
-      <h2>Alt Art and Manga Rare — why we don&apos;t infer them</h2>
+      <h2>Alt Art and Manga Rare. Why we don&apos;t infer them</h2>
       <p>
         Collectors talk about <em>Alt Art</em> and{' '}
-        <em>Manga Rare</em> printings all the time — and rightly so;
+        <em>Manga Rare</em> printings all the time. And rightly so;
         they exist in the physical game. But the ingested data feed we
         use today does <strong>not</strong> tag either of those
         distinctly. If we labelled every <code>_p1</code> or{' '}
@@ -293,10 +293,10 @@ function RaritiesBody() {
         family:
       </p>
       <ul>
-        <li><code>OP##</code> — Booster Pack</li>
-        <li><code>EB##</code> — Extra Booster</li>
-        <li><code>ST##</code> — Starter Deck</li>
-        <li><code>PRB##</code> — &quot;Best-of&quot; reprint booster</li>
+        <li><code>OP##</code>. Booster Pack</li>
+        <li><code>EB##</code>. Extra Booster</li>
+        <li><code>ST##</code>. Starter Deck</li>
+        <li><code>PRB##</code>, &quot;Best-of&quot; reprint booster</li>
       </ul>
       <p>
         For every set the catalogue holds, see{' '}
@@ -324,7 +324,7 @@ function CollectingGuideBody() {
   return (
     <>
       <p>
-        Starting a One Piece Card Game collection can feel busy — new
+        Starting a One Piece Card Game collection can feel busy. New
         booster sets ship every few months, chase treatments compound
         fast, and Leader picks change the shape of everything. This
         guide is a short opinionated map of the territory using only
@@ -355,18 +355,18 @@ function CollectingGuideBody() {
         the aggressive Straw Hats identity, Red is your anchor. If you
         want engine-heavy control, Blue and Purple pair up well. The
         colour landing pages show the top-value Leader and every card
-        that carries that colour — a good filter to stay coherent.
+        that carries that colour. A good filter to stay coherent.
       </p>
 
       <h2>Understand the set codes</h2>
       <p>
         <code>OP01</code> through <code>OP##</code> are the main
-        booster line — one Leader-focused set every few months.{' '}
-        <code>EB##</code> sets are Extra Boosters — smaller
+        booster line. One Leader-focused set every few months.{' '}
+        <code>EB##</code> sets are Extra Boosters. Smaller
         distribution around specific archetypes. <code>ST##</code> are
         Starter Decks; each one comes tuned around one Leader and is
         the cheapest way to start playing. <code>PRB01</code> is the
-        &quot;Best of&quot; reprint booster — a curated remix of past
+        &quot;Best of&quot; reprint booster. A curated remix of past
         chase treatments.
       </p>
       <p>
@@ -378,14 +378,14 @@ function CollectingGuideBody() {
         The chase ladder above the base rarities looks like:
       </p>
       <ul>
-        <li><strong>Parallel</strong> — every set. Alt-frame / holo
+        <li><strong>Parallel</strong>: every set. Alt-frame / holo
           treatments of existing cards. The most common form of chase.</li>
-        <li><strong>Super Rare (SR)</strong> — mid-tier rarity.</li>
-        <li><strong>Secret Rare (SEC)</strong> — standard chase tier.
+        <li><strong>Super Rare (SR)</strong>: mid-tier rarity.</li>
+        <li><strong>Secret Rare (SEC)</strong>: standard chase tier.
           Prices scale with the Leader.</li>
-        <li><strong>Special Card (SP CARD)</strong> — event / limited
+        <li><strong>Special Card (SP CARD)</strong>: event / limited
           run printings.</li>
-        <li><strong>Treasure Rare (TR)</strong> — the rarest tier in a
+        <li><strong>Treasure Rare (TR)</strong>: the rarest tier in a
           normal booster set today.</li>
       </ul>
       <p>
@@ -409,7 +409,7 @@ function CollectingGuideBody() {
         on every treatment panel opens a targeted eBay search that
         already has the exact card name, set code and treatment tokens
         in the query. On set pages there&apos;s also a{' '}
-        &quot;Find sealed on eBay&quot; button — that one targets
+        &quot;Find sealed on eBay&quot; button. That one targets
         booster boxes and starter decks for the set. Both are affiliate
         links; OnePiecePrices may earn a commission at no cost to you.
       </p>
@@ -417,7 +417,7 @@ function CollectingGuideBody() {
       <h2>Track what you own</h2>
       <p>
         A free OnePiecePrices account lets you save any exact printing
-        to your collection — raw or graded, foil or nonfoil, with
+        to your collection. Raw or graded, foil or nonfoil, with
         condition and purchase price. Live valuation runs on the same
         Cardmarket data as the rest of the site. Everything is
         Row-Level-Security-scoped so only you can see your holdings.{' '}

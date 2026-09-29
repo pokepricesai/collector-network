@@ -121,7 +121,7 @@ function Cell({ c, hero }: { c: GradedCell; hero?: boolean }) {
         </span>
         {c.attribution === 'card' && (
           <span
-            title="Family estimate — this quote is tied to the card family, not this exact printing."
+            title="Family estimate. This quote is tied to the card family, not this exact printing."
             style={{
               padding: '1px 6px',
               borderRadius: 6,

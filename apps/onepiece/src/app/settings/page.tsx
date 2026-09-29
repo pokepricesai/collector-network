@@ -33,7 +33,7 @@ export default async function SettingsPage() {
       <h1 style={{ margin: '6px 0 0', fontSize: 28, color: 'var(--text-strong)' }}>Settings</h1>
       <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 6, lineHeight: 1.55 }}>
         Manage your OnePiecePrices account and identity. One Collector
-        Network login covers Yu-Gi-Oh, One Piece and Lorcana — changes
+        Network login covers Yu-Gi-Oh, One Piece and Lorcana. Changes
         apply everywhere.
       </p>
 

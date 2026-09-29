@@ -16,7 +16,7 @@ export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'One Piece card finder — filter every card by colour, type, cost, power and more',
+  title: 'One Piece card finder. Filter every card by colour, type, cost, power and more',
   description:
     'Filter every ingested One Piece Card Game card by colour, card type, rarity, cost, power, counter, life, attribute, set and live price.',
   alternates: { canonical: canonicalFor('/card-finder') },
@@ -68,7 +68,7 @@ export default async function CardFinderPage({
             </h1>
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, maxWidth: 640, lineHeight: 1.55 }}>
               Colour, card type, rarity, gameplay stats and live retail price. Every
-              filter is URL-driven — copy the address bar to share a view.
+              filter is URL-driven. Copy the address bar to share a view.
             </p>
           </div>
         </header>
@@ -117,7 +117,7 @@ export default async function CardFinderPage({
               <select name="setId" defaultValue={filters.setId ?? ''} style={inputStyle}>
                 <option value="">Any set</option>
                 {setOptions.map((s) => (
-                  <option key={s.id} value={s.id}>{s.code.toUpperCase()} — {s.name}</option>
+                  <option key={s.id} value={s.id}>{s.code.toUpperCase()}, {s.name}</option>
                 ))}
               </select>
             </Field>
@@ -197,7 +197,7 @@ export default async function CardFinderPage({
                   <div style={{ display: 'grid', gap: 4 }}>
                     <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3 }}>{tile.name}</div>
                     <div className="label-mono" style={{ fontSize: 10.5 }}>
-                      {(tile.set?.code ?? '').toUpperCase() || '—'} · {tile.collectorNumber ?? '—'} · {tile.rarity ?? '—'}
+                      {(tile.set?.code ?? '').toUpperCase() || '–'} · {tile.collectorNumber ?? '–'} · {tile.rarity ?? '–'}
                     </div>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
                       {tile.gamedata.colours.map((c) => (
@@ -223,7 +223,7 @@ export default async function CardFinderPage({
 
         <Paginator page={result.page} pageSize={result.pageSize} total={result.total} searchParams={sp} />
 
-        <Faq title="Card Finder — what you can search" entries={CARD_FINDER_FAQ} />
+        <Faq title="Card Finder. What you can search" entries={CARD_FINDER_FAQ} />
       </div>
     </div>
   );

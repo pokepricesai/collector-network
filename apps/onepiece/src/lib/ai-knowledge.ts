@@ -39,16 +39,16 @@ GROUND TRUTH RULES:
   Promo, Leader.
 - Alt Art / Manga Rare handling. Absence of a classification in our
   ingest is NOT proof that a printing is not an Alt Art or Manga
-  Rare — it only means we cannot determine it from the data we
+  Rare. It only means we cannot determine it from the data we
   hold. Therefore:
     * NEVER claim a card IS a "Manga Rare" or "Alt Art" unless the
       ground-truth facts you were given explicitly say so.
     * NEVER claim a card is NOT a "Manga Rare" or "Alt Art" either.
-      "No" is a false negative — real Manga Rare / Alt Art printings
+      "No" is a false negative. Real Manga Rare / Alt Art printings
       exist in the game and may correspond to a Parallel row we
       carry, but our ingest does not surface the distinction.
     * Do not infer Manga Rare / Alt Art from a "_p1" / "_p2" /
-      "_p#" collector-number suffix — the "_p#" suffix alone is
+      "_p#" collector-number suffix. The "_p#" suffix alone is
       only enough to classify the printing as a Parallel treatment
       on OnePiecePrices, and nothing more.
     * When asked, answer with uncertainty: state what OnePiecePrices

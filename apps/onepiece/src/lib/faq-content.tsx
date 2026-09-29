@@ -26,7 +26,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
       <>
         Prices come from a daily live retail feed (Cardmarket EU) mapped
         onto our shared TCG schema. We display the current price per
-        exact printing — never an averaged number — and never convert
+        exact printing. Never an averaged number. And never convert
         currencies silently.
       </>
     ),
@@ -38,7 +38,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     a: (
       <>
         Parallels are alternate-frame or holo variants of an existing
-        card — recognisable by a <code>_p1</code>, <code>_p2</code> or
+        card. Recognisable by a <code>_p1</code>, <code>_p2</code> or
         higher suffix on the collector number. Secret Rares (SEC) and
         Treasure Rares (TR) are chase overprints released above the
         base rarity ladder. Every treatment is priced individually on
@@ -93,7 +93,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     q: 'Are the current card images clean?',
     a: (
       <>
-        No — the images we ingest today carry a baked-in SAMPLE
+        No. The images we ingest today carry a baked-in SAMPLE
         watermark that the upstream feed applies. OnePiecePrices does
         not remove or crop watermarks; if a clean, licensed image
         source becomes available we will source it directly rather
@@ -108,7 +108,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     a: (
       <>
         We don&apos;t sell cards. Card pages carry a &quot;Find on
-        eBay&quot; button — an affiliate link that opens a targeted
+        eBay&quot; button. An affiliate link that opens a targeted
         eBay search for the exact printing. OnePiecePrices may earn a
         commission on qualifying purchases at no cost to you.
       </>
@@ -124,7 +124,7 @@ export const CARD_FINDER_FAQ: FaqEntry[] = [
     a: (
       <>
         Colour, card type (Leader / Character / Event / Stage / DON!!),
-        rarity, treatment, cost and power ranges — plus the language
+        rarity, treatment, cost and power ranges. Plus the language
         axis. Filters are URL-driven so any view is shareable.
       </>
     ),
@@ -189,7 +189,7 @@ export const MARKET_FAQ: FaqEntry[] = [
     a: (
       <>
         Today&apos;s live One Piece feed is Cardmarket EU (EUR). We
-        rank within a single currency — never with a hardcoded FX
+        rank within a single currency. Never with a hardcoded FX
         rate. When additional currencies arrive we surface them
         explicitly.
       </>
@@ -315,14 +315,14 @@ export const LEADERS_FAQ: FaqEntry[] = [
     q: 'How does a Leader card work?',
     a: (
       <>
-        A Leader is the anchor of a One Piece deck — it dictates the
+        A Leader is the anchor of a One Piece deck. It dictates the
         deck&apos;s colour identity, contributes its Power and Life,
         and often carries a passive or activated effect. Every deck
         must include exactly one Leader.
       </>
     ),
     plainAnswer:
-      "A Leader anchors a One Piece deck — it dictates the deck's colour identity, contributes its Power and Life, and often carries an effect. Every deck must include exactly one Leader.",
+      "A Leader anchors a One Piece deck. It dictates the deck's colour identity, contributes its Power and Life, and often carries an effect. Every deck must include exactly one Leader.",
   },
   {
     q: 'Are Leader Parallels priced separately?',
@@ -372,7 +372,7 @@ export function colourFaq(label: string, slug: string): FaqEntry[] {
       a: (
         <>
           Beyond value, {label} plays into specific gameplay
-          archetypes — the colour is a mechanical identity, not just
+          archetypes. The colour is a mechanical identity, not just
           a palette choice. Browse the top of the {label} market
           above to see which characters carry the most collector
           demand.
@@ -414,13 +414,13 @@ export function setFaq(setName: string, setCode: string): FaqEntry[] {
       a: (
         <>
           {setName} ({setCode.toUpperCase()}) contains every card
-          released in this print run — base rarities plus any
+          released in this print run. Base rarities plus any
           Parallels, Secret Rares, Treasure Rares and Special Cards
           that shipped with the set. Every treatment is priced
           individually.
         </>
       ),
-      plainAnswer: `${setName} (${setCode.toUpperCase()}) contains every card released in this print run — base rarities plus any Parallels, Secret Rares, Treasure Rares and Special Cards. Every treatment is priced individually.`,
+      plainAnswer: `${setName} (${setCode.toUpperCase()}) contains every card released in this print run. Base rarities plus any Parallels, Secret Rares, Treasure Rares and Special Cards. Every treatment is priced individually.`,
     },
     {
       q: `Where can I buy sealed ${setName} product?`,
@@ -444,7 +444,7 @@ export function setFaq(setName: string, setCode: string): FaqEntry[] {
           Parallels).
         </>
       ),
-      plainAnswer: `Chase cards are the highest-priced treatments in this set — Secret Rare, Treasure Rare, Special Card and marquee Parallels. They appear at the top of the priced grid.`,
+      plainAnswer: `Chase cards are the highest-priced treatments in this set. Secret Rare, Treasure Rare, Special Card and marquee Parallels. They appear at the top of the priced grid.`,
     },
   ];
 }

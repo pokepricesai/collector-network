@@ -19,7 +19,7 @@ export default function TreatmentPanel({
   linkToPrinting: boolean;
 }) {
   const { treatment, pricing, printing, set, variantIndex } = printingView;
-  const setLabel = set?.code?.toUpperCase() ?? '—';
+  const setLabel = set?.code?.toUpperCase() ?? '–';
   const finishLabel = printing.finish?.toUpperCase() ?? null;
   // The variant index (`_p2` → 2) is the collector-relevant fingerprint
   // when it exists. Chase treatments (SEC / SP CARD / TR) don't have it.
@@ -27,7 +27,7 @@ export default function TreatmentPanel({
     variantIndex != null ? `${treatment.short}${variantIndex}` : treatment.short;
   const fingerprint = [
     setLabel,
-    printing.collector_number ?? '—',
+    printing.collector_number ?? '–',
     treatmentToken,
     ...(finishLabel ? [finishLabel] : []),
     printing.language?.toUpperCase() ?? 'EN',

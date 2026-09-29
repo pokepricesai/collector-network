@@ -110,7 +110,7 @@ export function AddToCollection({ cardId, printingId, cardName, isSignedIn }: Pr
             setMessage(`Added ${quantity} × ${cardName} to your collection.`);
             setOpen(false);
           } else if (r.tableMissing) {
-            setError('Collection storage is being provisioned — try again shortly.');
+            setError('Collection storage is being provisioned. Try again shortly.');
           } else {
             setError(r.error ?? 'Something went wrong. Try again.');
           }

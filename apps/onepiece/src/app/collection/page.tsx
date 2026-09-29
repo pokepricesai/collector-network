@@ -32,7 +32,7 @@ export default async function CollectionPage() {
           </div>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--text-muted)' }}>
             Collection storage is being provisioned for OnePiecePrices. This page will start working
-            automatically once the shared-schema migration has been applied. Your account is unaffected —
+            automatically once the shared-schema migration has been applied. Your account is unaffected –
             you can still browse cards, sets and market data in the meantime.
           </p>
         </div>
@@ -46,7 +46,7 @@ export default async function CollectionPage() {
         <PageHeader />
         <div style={{ ...panelStyle, borderColor: 'rgba(177,42,47,0.35)' }}>
           <p style={{ margin: 0, color: 'var(--text)' }}>
-            Sorry — we couldn&apos;t load your collection right now. Reload the page in a moment.
+            Sorry. We couldn&apos;t load your collection right now. Reload the page in a moment.
           </p>
         </div>
       </main>
@@ -79,7 +79,7 @@ export default async function CollectionPage() {
           label="Realised P/L"
           value={
             summary.unrealisedUsd == null
-              ? '—'
+              ? '–'
               : `${summary.unrealisedUsd >= 0 ? '+' : ''}$${summary.unrealisedUsd.toFixed(0)}`
           }
           hint={summary.unrealisedUsd == null ? 'Acquisition values incomplete' : 'vs USD acquisition'}

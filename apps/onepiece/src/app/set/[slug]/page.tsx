@@ -74,7 +74,7 @@ export async function generateMetadata({
   if (!bundle) return { title: 'Set not found' };
   const setLabel = bundle.set.name;
   return {
-    title: `${setLabel} — every card, treatment and market price`,
+    title: `${setLabel}. Every card, treatment and market price`,
     description: `Complete One Piece ${setLabel} set (${bundle.set.code.toUpperCase()}). Every card, treatment, live retail price, set value and top-value chase cards.`,
     alternates: {
       canonical: canonicalFor(`/set/${encodeURIComponent(bundle.set.code.toLowerCase())}`),
@@ -146,7 +146,7 @@ export default async function SetPage({
   const collectionLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: `${set.name} — One Piece Card Game`,
+    name: `${set.name}. One Piece Card Game`,
     url: canonical,
     hasPart: uniqueNames.slice(0, 100).map((name) => ({
       '@type': 'CreativeWork',
@@ -182,7 +182,7 @@ export default async function SetPage({
           <Link href="/browse" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Sets</Link>
           <span aria-hidden>›</span>
           <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>
-            {set.code.toUpperCase()} — {set.name}
+            {set.code.toUpperCase()}, {set.name}
           </span>
         </nav>
 

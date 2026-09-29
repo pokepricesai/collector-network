@@ -7,7 +7,7 @@ export const revalidate = 3600;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'One Piece Card Game — every set catalogued',
+  title: 'One Piece Card Game. Every set catalogued',
   description:
     'Complete One Piece Card Game set directory. Every main set, starter deck, promo pack and event product with card counts, treatment tallies and release dates.',
   alternates: { canonical: `${SITE_URL}/browse` },
@@ -43,7 +43,7 @@ export default async function BrowsePage() {
                   cards and treasure rares.
                 </>
               ) : (
-                <>Sets are on their way — every main product, starter deck and promo pack.</>
+                <>Sets are on their way. Every main product, starter deck and promo pack.</>
               )}
             </p>
           </div>

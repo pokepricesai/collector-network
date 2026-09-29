@@ -52,7 +52,7 @@ export async function generateMetadata({
   const resolvedName = await resolveCardName(slug);
   if (!resolvedName) return { title: 'Card not found' };
   return {
-    title: `${resolvedName} — every printing, treatment and price`,
+    title: `${resolvedName}. Every printing, treatment and price`,
     description: `${resolvedName} across every One Piece Card Game set. Standard, parallel, secret rare, special card and treasure rare treatments priced individually.`,
     alternates: { canonical: canonicalFor(`/card/${slugifyCardName(resolvedName)}`) },
   };
@@ -126,7 +126,7 @@ export default async function LogicalCardPage({
     '@type': 'CreativeWork',
     name: bundle.name,
     url: canonicalFor(`/card/${slugifyCardName(bundle.name)}`),
-    description: `${bundle.name} — every printing and treatment.`,
+    description: `${bundle.name}. Every printing and treatment.`,
   } as const;
 
   return (
@@ -350,7 +350,7 @@ function buildAiContext(
     const cheapest = pickCheapestLive(printingView);
     if (cheapest) {
       priceRows.push(
-        `  ${printingView.set?.code?.toUpperCase() ?? '—'} ${printingView.printing.collector_number ?? '—'} ${printingView.treatment.short}${printingView.variantIndex != null ? `#${printingView.variantIndex}` : ''} ${printingView.printing.finish ?? 'nonfoil'}: ${cheapest}`,
+        `  ${printingView.set?.code?.toUpperCase() ?? '–'} ${printingView.printing.collector_number ?? '–'} ${printingView.treatment.short}${printingView.variantIndex != null ? `#${printingView.variantIndex}` : ''} ${printingView.printing.finish ?? 'nonfoil'}: ${cheapest}`,
       );
     }
   }
@@ -366,7 +366,7 @@ function buildAiContext(
     g.types && g.types.length > 0 ? `Types: ${g.types.join(', ')}` : null,
     g.type ? `Card type: ${g.type}` : null,
     stats.length > 0 ? `Gameplay stats: ${stats.join(', ')}` : null,
-    `Treatments: ${treatmentLine || '—'}`,
+    `Treatments: ${treatmentLine || '–'}`,
     `Total priced printings: ${flat.length}`,
     priceRows.length > 0 ? `Cheapest live prices:\n${priceRows.join('\n')}` : null,
   ]

@@ -178,14 +178,14 @@ export function SetGridClient({ entries }: Props) {
             </div>
             <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.25 }}>{e.name}</div>
             <div className="label-mono" style={{ color: 'var(--text-muted)' }}>
-              {e.collectorNumber ?? '—'} · {e.rarityLabel}
+              {e.collectorNumber ?? '–'} · {e.rarityLabel}
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {e.treatmentCount > 1 && (
                 <span
                   className="chip chip-gold"
                   style={{ width: 'fit-content' }}
-                  title="Multiple treatments — parallel, secret rare, special card, treasure rare, promo or reprint"
+                  title="Multiple treatments. Parallel, secret rare, special card, treasure rare, promo or reprint"
                 >
                   +{e.treatmentCount - 1} treatments
                 </span>

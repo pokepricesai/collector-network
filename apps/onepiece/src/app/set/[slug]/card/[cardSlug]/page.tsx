@@ -84,7 +84,7 @@ export async function generateMetadata({
   const bundle = await getCardBundleByCardId(resolved.cardId);
   if (!bundle) return { title: 'Card not found' };
   return {
-    title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '—'} — priced treatments`,
+    title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '–'}. Priced treatments`,
     description: `${bundle.name} from ${slug.toUpperCase()}. Every treatment (standard, parallel, secret rare, special card, treasure rare) with live prices.`,
     alternates: {
       canonical: canonicalFor(
@@ -191,7 +191,7 @@ export default async function PrintingPage({
           <div style={{ display: 'grid', gap: 14 }}>
             <div>
               <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-                {canonicalSetLabel} · #{resolved.matched.collector_number ?? '—'} · {anchorCardView.rarity.label}
+                {canonicalSetLabel} · #{resolved.matched.collector_number ?? '–'} · {anchorCardView.rarity.label}
               </div>
               <h1
                 style={{
@@ -360,7 +360,7 @@ export default async function PrintingPage({
                           className="label-mono"
                           style={{ color: 'var(--text-muted)' }}
                         >
-                          {setCode.toUpperCase()} · #{printingView.printing.collector_number ?? '—'} · {cardView.rarity.label}
+                          {setCode.toUpperCase()} · #{printingView.printing.collector_number ?? '–'} · {cardView.rarity.label}
                         </span>
                       </span>
                       <span
@@ -465,7 +465,7 @@ function Breadcrumbs({
       </Link>
       <span aria-hidden>›</span>
       <Link href={setPath} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-        {setCode} — {setName}
+        {setCode}, {setName}
       </Link>
       <span aria-hidden>›</span>
       <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>

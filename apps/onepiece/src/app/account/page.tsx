@@ -80,7 +80,7 @@ export default async function AccountPage() {
             Add cards to your collection
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Every card page has an Add to collection button — pick the exact treatment and finish.
+            Every card page has an Add to collection button. Pick the exact treatment and finish.
           </div>
           <div style={{ marginTop: 6 }}>
             <Link href="/card-finder" style={primaryBtnStyle}>Find cards</Link>

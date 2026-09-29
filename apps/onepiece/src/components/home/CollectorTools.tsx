@@ -14,7 +14,7 @@ const TOOLS = [
   {
     title: 'Movers Board',
     description:
-      '7-, 30- and 90-day movers filtered to signal — headline price ≥ $2 with three or more observations.',
+      '7-, 30- and 90-day movers filtered to signal. Headline price ≥ $2 with three or more observations.',
     href: '/market',
     accent: 'gold' as const,
   },

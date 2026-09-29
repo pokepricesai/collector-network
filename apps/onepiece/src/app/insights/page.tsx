@@ -7,7 +7,7 @@ import { OP_ARTICLES } from '@/lib/articles';
 // their publish/update dates, category and excerpt.
 
 export const metadata: Metadata = {
-  title: 'One Piece market insights — articles, guides and analysis',
+  title: 'One Piece market insights. Articles, guides and analysis',
   description:
     'Editorial coverage of the One Piece Card Game market: which cards are most valuable, how the rarity ladder works, and how to start a serious collection.',
   alternates: { canonical: canonicalFor('/insights') },

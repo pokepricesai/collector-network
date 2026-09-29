@@ -16,7 +16,7 @@ export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'One Piece Leaders — every Leader card, sorted by colour, set and price',
+  title: 'One Piece Leaders. Every Leader card, sorted by colour, set and price',
   description:
     'Directory of every One Piece Card Game Leader. Sort by colour, life, power and current market price.',
   alternates: { canonical: canonicalFor('/leaders') },
@@ -113,7 +113,7 @@ export default async function LeadersPage({
                   <div style={{ display: 'grid', gap: 4 }}>
                     <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3 }}>{tile.name}</div>
                     <div className="label-mono" style={{ fontSize: 10.5 }}>
-                      {(tile.set?.code ?? '').toUpperCase() || '—'} · {tile.collectorNumber ?? '—'}
+                      {(tile.set?.code ?? '').toUpperCase() || '–'} · {tile.collectorNumber ?? '–'}
                     </div>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
                       {tile.gamedata.colours.map((c) => (

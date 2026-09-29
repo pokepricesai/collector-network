@@ -95,7 +95,7 @@ function MoverColumn({
             textAlign: 'center',
           }}
         >
-          No movers yet — price history arrives with the ingest cadence.
+          No movers yet. Price history arrives with the ingest cadence.
         </div>
       ) : (
         <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
@@ -122,7 +122,7 @@ function MoverColumn({
                   <span style={{ display: 'grid', gap: 2 }}>
                     <span style={{ fontWeight: 700, fontSize: 14 }}>{m.card.name}</span>
                     <span className="label-mono">
-                      {setCode.toUpperCase() || 'SET'} · {m.printing.collector_number ?? '—'}
+                      {setCode.toUpperCase() || 'SET'} · {m.printing.collector_number ?? '–'}
                     </span>
                   </span>
                   <span style={{ display: 'grid', gap: 2, textAlign: 'right' }}>

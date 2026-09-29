@@ -37,7 +37,7 @@ export const OP_ARTICLES: OpArticleMeta[] = [
     readingMinutes: 7,
     category: 'Reference',
     excerpt:
-      'From Common to Secret Rare to Treasure Rare — and why a _p1 suffix is not the same as an Alt Art or Manga Rare.',
+      'From Common to Secret Rare to Treasure Rare. And why a _p1 suffix is not the same as an Alt Art or Manga Rare.',
   },
   {
     slug: 'collecting-guide-sets-leaders-parallels-prices',

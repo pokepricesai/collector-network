@@ -69,7 +69,7 @@ export default function AskOnePiecePanel(props: AskOnePiecePanelProps) {
         Grounded answers about {props.cardName}
       </h2>
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.55 }}>
-        Answers use this card&apos;s live database facts — price,
+        Answers use this card&apos;s live database facts. Price,
         printings, rarity, colours, stats. OnePiecePrices AI does not
         invent card details.
       </p>
