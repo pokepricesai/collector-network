@@ -246,14 +246,15 @@ export default async function SetPage({
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
-                      padding: '9px 14px',
+                      padding: '10px 16px',
                       borderRadius: 10,
-                      background: 'linear-gradient(180deg, #f5c518 0%, #e0b21b 100%)',
-                      color: '#1a1a1a',
-                      fontWeight: 700,
+                      background: 'linear-gradient(135deg, var(--gold-200) 0%, var(--gold-300) 100%)',
+                      color: 'var(--palette-navy)',
+                      fontWeight: 800,
                       fontSize: 13,
                       textDecoration: 'none',
-                      border: '1px solid rgba(0, 0, 0, 0.15)',
+                      border: '1px solid var(--gold-400)',
+                      boxShadow: '0 2px 6px rgba(228,195,23,0.30)',
                     }}
                   >
                     <span>Find sealed {set.name} on eBay<sup style={{ fontSize: '0.8em', marginLeft: 2 }}>*</sup></span>

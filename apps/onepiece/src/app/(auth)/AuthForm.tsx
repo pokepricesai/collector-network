@@ -68,18 +68,19 @@ const inputStyle: React.CSSProperties = {
 };
 
 const submitStyle: React.CSSProperties = {
-  padding: '11px 14px',
+  padding: '12px 14px',
   borderRadius: 10,
-  border: '1px solid var(--gold-600)',
-  background: 'var(--gold-600)',
-  color: '#111',
+  border: '1px solid var(--primary)',
+  background: 'linear-gradient(135deg, var(--ocean-400) 0%, var(--ocean-500) 100%)',
+  color: 'var(--palette-white)',
   fontFamily: 'inherit',
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 800,
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
   cursor: 'pointer',
   marginTop: 4,
+  boxShadow: '0 2px 6px rgba(9,55,134,0.20)',
 };
 
 export function AuthForm({ mode }: Props) {

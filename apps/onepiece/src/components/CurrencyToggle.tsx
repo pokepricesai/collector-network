@@ -59,14 +59,14 @@ export function CurrencyToggle({ initial }: { initial: OpCurrency }) {
               padding: '0 12px',
               height: '100%',
               border: 'none',
-              background: active ? 'var(--gold-600)' : 'transparent',
-              color: active ? '#111' : 'var(--text-muted)',
+              background: active ? 'var(--gold-300)' : 'transparent',
+              color: active ? 'var(--palette-navy)' : 'var(--text-muted)',
               fontFamily: 'inherit',
               fontSize: 12,
               fontWeight: 800,
               letterSpacing: '0.06em',
               cursor: pending ? 'wait' : 'pointer',
-              transition: 'background 120ms',
+              transition: 'background 120ms, color 120ms',
             }}
           >
             {c}

@@ -35,7 +35,7 @@ export default function Footer() {
     <footer
       style={{
         background:
-          'linear-gradient(180deg, var(--surface) 0%, var(--bg-light) 100%)',
+          'linear-gradient(180deg, var(--bg-light) 0%, var(--bg) 60%, #F5EBCD 100%)',
         borderTop: '1px solid var(--border-light)',
         padding: '48px 24px 32px',
         marginTop: 60,
@@ -52,7 +52,8 @@ export default function Footer() {
           right: 0,
           height: 2,
           background:
-            'linear-gradient(90deg, transparent 0%, rgba(233,178,58,0.35) 20%, rgba(233,178,58,0.35) 80%, transparent 100%)',
+            'linear-gradient(90deg, transparent 0%, var(--gold-300) 20%, var(--gold-300) 80%, transparent 100%)',
+          opacity: 0.7,
         }}
       />
 

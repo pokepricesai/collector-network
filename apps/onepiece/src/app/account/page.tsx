@@ -156,12 +156,14 @@ const quickLinksStyle: React.CSSProperties = {
 
 const primaryBtnStyle: React.CSSProperties = {
   display: 'inline-block',
-  padding: '8px 14px', borderRadius: 8,
-  background: 'var(--gold-600)', color: '#111',
-  border: '1px solid var(--gold-600)',
-  fontSize: 13, fontWeight: 700,
+  padding: '9px 14px', borderRadius: 8,
+  background: 'linear-gradient(135deg, var(--ocean-400) 0%, var(--ocean-500) 100%)',
+  color: 'var(--palette-white)',
+  border: '1px solid var(--primary)',
+  fontSize: 13, fontWeight: 800,
   textDecoration: 'none',
   letterSpacing: '0.02em',
+  boxShadow: '0 2px 6px rgba(9,55,134,0.20)',
 };
 
 const ghostBtnStyle: React.CSSProperties = {

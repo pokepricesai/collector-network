@@ -78,11 +78,13 @@ export default async function ResetPasswordPage({ searchParams }: {
             type="submit"
             formAction="/account/reset-password?sent=1"
             style={{
-              padding: '10px 16px', borderRadius: 8,
-              background: 'var(--gold-600)', color: '#111',
-              border: '1px solid var(--gold-600)',
-              fontFamily: 'inherit', fontWeight: 700, fontSize: 13,
+              padding: '11px 16px', borderRadius: 8,
+              background: 'linear-gradient(135deg, var(--ocean-400) 0%, var(--ocean-500) 100%)',
+              color: 'var(--palette-white)',
+              border: '1px solid var(--primary)',
+              fontFamily: 'inherit', fontWeight: 800, fontSize: 13,
               cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(9,55,134,0.20)',
             }}
           >Send reset email</button>
           <Link href="/settings" style={{ fontSize: 12, color: 'var(--text-muted)' }}>← Back to settings</Link>

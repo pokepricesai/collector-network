@@ -86,9 +86,10 @@ export default function Navbar({
   return (
     <nav
       style={{
-        background: 'rgba(255,255,255,0.94)',
-        backdropFilter: 'saturate(1.1) blur(8px)',
-        WebkitBackdropFilter: 'saturate(1.1) blur(8px)',
+        background:
+          'linear-gradient(180deg, rgba(254,254,254,0.96) 0%, rgba(253,247,236,0.92) 100%)',
+        backdropFilter: 'saturate(1.15) blur(10px)',
+        WebkitBackdropFilter: 'saturate(1.15) blur(10px)',
         borderBottom: '1px solid var(--border)',
         padding: '0 24px',
         height: 68,
@@ -99,6 +100,7 @@ export default function Navbar({
         top: 0,
         zIndex: 100,
         gap: 16,
+        boxShadow: '0 4px 24px rgba(11,48,117,0.05)',
       }}
     >
       <Link

@@ -1,68 +1,96 @@
-/* OnePiecePrices — collector design system.
-   Sunlit sea-map palette: cream page, deep-navy ink, "straw hat" gold
-   as the primary brand accent, sky blue as the interactive secondary,
-   coral as a restrained hot accent. The six One Piece card colours
-   (Red / Green / Blue / Purple / Black / Yellow) live under --hue-* and
-   are used sparingly on chips, filters and treatment badges. */
+/* OnePiecePrices — collector design system (2026-09-29 refresh).
+   Grand Line palette: deep-navy ink, ocean-blue primary CTA, straw-hat
+   gold-yellow highlights, sky-blue hover glow, coral-red accent, dark-
+   brown secondary surface. Layered warm-white → cream page background
+   with faint low-opacity nautical motifs (compass rose, wave curves,
+   rope loops, coin circles). No copyrighted publisher art anywhere.
+   The six One Piece card colours (Red / Green / Blue / Purple / Black /
+   Yellow) live under --hue-* and are used sparingly on chips, filters
+   and treatment badges. */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
+  /* ── Palette (spec) ─────────────────────────────────────────── */
+  --palette-coral:      #C8472C;   /* accent, hot highlights */
+  --palette-brown:      #412A1E;   /* secondary text / secondary buttons */
+  --palette-gold:       #F8DE3C;   /* chips, badges, pills, key accents */
+  --palette-white:      #FEFEFE;   /* soft white, button ink on dark */
+  --palette-sky:        #58ACF4;   /* hover glow, subtle accent */
+  --palette-ocean:      #105EDD;   /* primary CTA */
+  --palette-navy:       #0B3075;   /* headings, body ink */
+
   /* ── Foundation ─────────────────────────────────────────────── */
-  --bg:               #FBF5E6;   /* pale parchment / sun-bleached paper */
-  --bg-light:         #F3E9CE;   /* mild inset behind surfaces */
-  --bg-strong:        #EADFB7;
-  --surface:          #FFFFFF;
-  --surface-raised:   #FFFCF3;
-  --card:             #FFFFFF;
+  --bg:               #FBF7EC;   /* warm cream page */
+  --bg-light:         #FDF3D0;   /* pale gold-warm inset */
+  --bg-strong:        #EBE1C8;
+  --surface:          #FEFEFE;
+  --surface-raised:   #FFFFFF;
+  --card:             #FEFEFE;
 
-  --text:             #0F2140;   /* deep navy ink */
-  --text-strong:      #071431;
-  --text-muted:       #5A6683;
-  --text-subtle:      #8892AB;
+  --text:             var(--palette-navy);         /* Deep Navy */
+  --text-strong:      #071E52;
+  --text-muted:       #2E4471;
+  --text-subtle:      #566C93;
+  --text-brown:       var(--palette-brown);        /* secondary text */
 
-  /* ── Brand — straw-hat gold (primary interactive) ───────────── */
-  --gold-50:          #FDF3D9;
-  --gold-100:         #FBE5A9;
-  --gold-200:         #F6D073;
-  --gold-300:         #E9B23A;
-  --gold-400:         #C88C1A;
-  --gold-500:         #96660F;
-  --gold-600:         #66450A;
+  /* ── Straw-hat gold (accent) ────────────────────────────────── */
+  --gold-50:          #FEF9D7;
+  --gold-100:         #FDEE9C;
+  --gold-200:         #FBE461;
+  --gold-300:         var(--palette-gold);         /* #F8DE3C */
+  --gold-400:         #E4C317;
+  --gold-500:         #A48800;
+  --gold-600:         #715D00;
 
-  --accent:           var(--gold-400);
-  --accent-hover:     var(--gold-500);
-  --accent-soft:      rgba(233,178,58,0.16);
-  --accent-border:    rgba(200,140,26,0.35);
+  --accent:           var(--gold-300);
+  --accent-hover:     var(--gold-400);
+  --accent-soft:      rgba(248,222,60,0.24);
+  --accent-border:    rgba(228,195,23,0.55);
 
-  /* Primary CTA = ocean blue (deep, saturated, legible) */
-  --ocean-50:         #E4F0FA;
-  --ocean-100:        #B7D5EE;
-  --ocean-200:        #79AEDA;
-  --ocean-300:        #3F86C3;
-  --ocean-400:        #1F65A6;
-  --ocean-500:        #124E85;
-  --ocean-600:        #0A2F5A;
-  --ocean-700:        #061E3D;
+  /* ── Ocean blue (primary CTA) ───────────────────────────────── */
+  --ocean-50:         #E7F0FE;
+  --ocean-100:        #B9D2FA;
+  --ocean-200:        #7DA9F1;
+  --ocean-300:        #3A81E4;
+  --ocean-400:        var(--palette-ocean);        /* #105EDD */
+  --ocean-500:        #0C4CB6;
+  --ocean-600:        #093786;
+  --ocean-700:        #05204F;
 
   --primary:          var(--ocean-400);
   --primary-hover:    var(--ocean-500);
   --primary-strong:   var(--ocean-600);
-  --primary-soft:     rgba(31,101,166,0.12);
-  --primary-border:   rgba(10,47,90,0.28);
+  --primary-soft:     rgba(16,94,221,0.10);
+  --primary-border:   rgba(9,55,134,0.32);
 
-  /* Ember — coral hot accent (limited use) */
-  --coral-300:        #F27A4E;
-  --coral-400:        #E85A2C;
-  --coral-500:        #C4441B;
-  --coral-soft:       rgba(232,90,44,0.14);
+  /* ── Sky blue (hover glow / subtle accent) ──────────────────── */
+  --sky-100:          #DCEEFD;
+  --sky-200:          #B4DAFB;
+  --sky-300:          #86C4F9;
+  --sky-400:          var(--palette-sky);          /* #58ACF4 */
+  --sky-500:          #3390DA;
+  --sky-soft:         rgba(88,172,244,0.14);
 
-  /* Deep midnight — dark surfaces (dark treatment panels, footers) */
-  --midnight:         #071431;
-  --midnight-2:       #0B1D42;
-  --midnight-3:       #142C56;
+  /* ── Coral (limited accent) ─────────────────────────────────── */
+  --coral-300:        #E37154;
+  --coral-400:        var(--palette-coral);        /* #C8472C */
+  --coral-500:        #A63920;
+  --coral-soft:       rgba(200,71,44,0.12);
+
+  /* ── Dark brown (secondary button / dark accent) ────────────── */
+  --brown-400:        #5C3A28;
+  --brown-500:        var(--palette-brown);        /* #412A1E */
+  --brown-600:        #2C1C14;
+  --brown-soft:       rgba(65,42,30,0.08);
+
+  /* Legacy midnight aliases — still used by dark chase panel /
+     footer. Retuned to match new navy family. */
+  --midnight:         #071E52;
+  --midnight-2:       var(--palette-navy);
+  --midnight-3:       #12408F;
 
   /* ── Status ────────────────────────────────────────────────── */
   --green:            #2A8459;
@@ -73,13 +101,13 @@
   --amber-soft:       rgba(168,120,26,0.15);
 
   /* ── Structural ────────────────────────────────────────────── */
-  --border:           #E4DAC1;
-  --border-light:     #D6C8A6;
-  --border-strong:    #B9A87C;
-  --shadow-sm:        0 1px 2px rgba(7,20,49,0.06);
-  --shadow-md:        0 6px 18px rgba(7,20,49,0.10), 0 2px 4px rgba(7,20,49,0.04);
-  --shadow-lg:        0 18px 44px rgba(7,20,49,0.14), 0 4px 10px rgba(7,20,49,0.06);
-  --shadow-gold:      0 8px 24px rgba(200,140,26,0.20);
+  --border:           #E4D9BC;
+  --border-light:     #D5C6A0;
+  --border-strong:    #B5A17A;
+  --shadow-sm:        0 1px 2px rgba(11,48,117,0.07);
+  --shadow-md:        0 6px 18px rgba(11,48,117,0.10), 0 2px 4px rgba(11,48,117,0.04);
+  --shadow-lg:        0 18px 44px rgba(11,48,117,0.14), 0 4px 10px rgba(11,48,117,0.06);
+  --shadow-gold:      0 8px 24px rgba(228,195,23,0.24);
 
   --radius-sm:        8px;
   --radius:           12px;
@@ -126,10 +154,80 @@ body {
   font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   font-size: 15px;
   line-height: 1.55;
-  background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+
+  /* Layered page background:
+       1. soft-white → warm cream vertical gradient (base)
+       2. pale sky glow washed in from top-left
+       3. faint gold warmth washed in from bottom-right
+     The result is never flat but stays soft enough that content always
+     reads first. Motif watermarks (compass, waves, coins, rope) sit on
+     a separate ::before layer so we can tune opacity independently. */
+  background:
+    radial-gradient(1000px 700px at 8% -10%, rgba(88,172,244,0.10) 0%, rgba(88,172,244,0) 55%),
+    radial-gradient(1200px 800px at 100% 105%, rgba(248,222,60,0.10) 0%, rgba(248,222,60,0) 55%),
+    linear-gradient(180deg, var(--palette-white) 0%, var(--bg) 60%, var(--bg-light) 100%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Nautical motif watermark. Tiled once per viewport, low opacity (~4%),
+   fixed so scroll doesn't drag it around. Combines a compass rose,
+   wave ripples, rope loop and coin rings — each a lightweight inline
+   SVG so we ship no extra network requests and no raster assets.
+   `prefers-reduced-motion` doesn't need special-casing here (no
+   animation), but `prefers-contrast: more` blanks the layer entirely
+   so the motif never fights text. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    /* Compass rose — top left */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200' fill='none' stroke='%230B3075' stroke-width='0.8'><circle cx='100' cy='100' r='72'/><circle cx='100' cy='100' r='54'/><circle cx='100' cy='100' r='36'/><g><path d='M100 20 L106 100 L100 116 L94 100 Z' fill='%230B3075' fill-opacity='0.15'/><path d='M100 180 L106 100 L100 84 L94 100 Z' fill='%230B3075' fill-opacity='0.10'/><path d='M20 100 L100 106 L116 100 L100 94 Z' fill='%230B3075' fill-opacity='0.10'/><path d='M180 100 L100 106 L84 100 L100 94 Z' fill='%230B3075' fill-opacity='0.10'/></g><path d='M44 44 L88 88 M156 44 L112 88 M44 156 L88 112 M156 156 L112 112' stroke-opacity='0.5'/></svg>"),
+    /* Wave ripples — repeating */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 60'><path d='M0 30 Q30 12 60 30 T120 30 T180 30 T240 30' fill='none' stroke='%23105EDD' stroke-opacity='0.55' stroke-width='1'/><path d='M0 46 Q30 28 60 46 T120 46 T180 46 T240 46' fill='none' stroke='%2358ACF4' stroke-opacity='0.35' stroke-width='0.8'/></svg>"),
+    /* Coin circles — bottom right cluster */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160' fill='none' stroke='%23A48800' stroke-width='0.9'><circle cx='58' cy='58' r='22'/><circle cx='58' cy='58' r='14' stroke-opacity='0.6'/><circle cx='108' cy='96' r='26'/><circle cx='108' cy='96' r='16' stroke-opacity='0.5'/><circle cx='72' cy='120' r='16' stroke-opacity='0.7'/></svg>"),
+    /* Rope loop — subtle rope curve */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40'><path d='M0 20 C 30 0, 50 40, 80 20 S 130 0, 160 20 S 200 40, 220 20' fill='none' stroke='%23412A1E' stroke-opacity='0.4' stroke-width='1.2' stroke-linecap='round' stroke-dasharray='3 2'/></svg>");
+  background-repeat:
+    no-repeat,
+    repeat-x,
+    no-repeat,
+    repeat-x;
+  background-position:
+    -70px -70px,
+    0 30%,
+    right -30px bottom -30px,
+    0 78%;
+  background-size:
+    340px 340px,
+    240px 60px,
+    260px 260px,
+    200px 40px;
+  opacity: 0.06;
+}
+@media (prefers-contrast: more) {
+  body::before { display: none; }
+}
+@media (max-width: 720px) {
+  /* Mobile: hide the corner motifs entirely (small screens read
+     cleaner without them). Keep only the very faint tiled waves. */
+  body::before {
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 60'><path d='M0 30 Q30 12 60 30 T120 30 T180 30 T240 30' fill='none' stroke='%23105EDD' stroke-opacity='0.55' stroke-width='1'/></svg>");
+    background-repeat: repeat-x;
+    background-position: 0 45%;
+    background-size: 240px 60px;
+    opacity: 0.05;
+  }
 }
 
 h1, h2, h3, h4, p, span, div {
@@ -144,17 +242,17 @@ h1, h2, h3, h4 {
 }
 
 /* Page-hero band used by index pages (Sets, Movers, Card Finder, etc.).
-   Uses padding rather than a negative-margin bleed so mobile viewports
-   never overflow their container width. */
+   Layered: sky-blue glow top-left, gold warmth bottom-right, cream
+   base. A very faint gold hairline sits at the bottom edge. */
 .op-page-hero {
   position: relative;
   padding: 24px 20px 22px;
   border-radius: 18px;
   margin-bottom: 24px;
   background:
-    radial-gradient(70% 90% at 0% 0%, rgba(233,178,58,0.10) 0%, transparent 60%),
-    radial-gradient(60% 80% at 100% 100%, rgba(31,101,166,0.08) 0%, transparent 60%),
-    linear-gradient(180deg, #FEF8E4 0%, var(--bg) 100%);
+    radial-gradient(75% 90% at 0% 0%, rgba(88,172,244,0.14) 0%, transparent 60%),
+    radial-gradient(65% 80% at 100% 100%, rgba(248,222,60,0.12) 0%, transparent 60%),
+    linear-gradient(180deg, var(--palette-white) 0%, var(--bg-light) 100%);
   border: 1px solid var(--border);
   overflow: hidden;
   isolation: isolate;
@@ -164,7 +262,7 @@ h1, h2, h3, h4 {
   position: absolute;
   left: 24px; right: 24px; bottom: -1px;
   height: 1px;
-  background: linear-gradient(to right, transparent 0%, rgba(233,178,58,0.55) 50%, transparent 100%);
+  background: linear-gradient(to right, transparent 0%, var(--gold-300) 50%, transparent 100%);
   opacity: 0.6;
 }
 @media (min-width: 640px) {
@@ -215,45 +313,74 @@ a:hover { color: var(--primary-hover); }
   border: 1px solid transparent; text-decoration: none;
   transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease, color 150ms ease, border-color 150ms ease;
 }
+/* Primary CTA: Ocean Blue with Soft White text. */
 .btn-primary {
   background: linear-gradient(135deg, var(--ocean-400) 0%, var(--ocean-500) 100%);
-  color: #FFFFFF;
-  box-shadow: 0 2px 4px rgba(10,47,90,0.15), inset 0 1px 0 rgba(255,255,255,0.15);
+  color: var(--palette-white);
+  box-shadow: 0 2px 4px rgba(9,55,134,0.20), inset 0 1px 0 rgba(255,255,255,0.18);
 }
-.btn-primary:hover { color: #FFFFFF; box-shadow: 0 6px 18px rgba(10,47,90,0.25), inset 0 1px 0 rgba(255,255,255,0.2); transform: translateY(-1px); }
+.btn-primary:hover {
+  color: var(--palette-white);
+  background: linear-gradient(135deg, var(--sky-400) 0%, var(--ocean-400) 100%);
+  box-shadow: 0 8px 22px rgba(16,94,221,0.28), inset 0 1px 0 rgba(255,255,255,0.22);
+  transform: translateY(-1px);
+}
+/* Gold highlight: Gold Yellow with Deep Navy text (spec). */
 .btn-gold {
-  background: linear-gradient(135deg, var(--gold-300) 0%, var(--gold-400) 100%);
-  color: #2A1A05;
-  box-shadow: 0 2px 4px rgba(200,140,26,0.20), inset 0 1px 0 rgba(255,255,255,0.35);
+  background: linear-gradient(135deg, var(--gold-200) 0%, var(--gold-300) 100%);
+  color: var(--palette-navy);
+  box-shadow: 0 2px 4px rgba(228,195,23,0.28), inset 0 1px 0 rgba(255,255,255,0.5);
+  border-color: rgba(228,195,23,0.55);
 }
-.btn-gold:hover { color: #2A1A05; box-shadow: var(--shadow-gold), inset 0 1px 0 rgba(255,255,255,0.4); transform: translateY(-1px); }
+.btn-gold:hover {
+  color: var(--palette-navy);
+  background: linear-gradient(135deg, var(--gold-300) 0%, var(--gold-400) 100%);
+  box-shadow: var(--shadow-gold), inset 0 1px 0 rgba(255,255,255,0.55);
+  transform: translateY(-1px);
+}
 .btn-ghost {
   background: transparent;
   color: var(--text);
   border-color: var(--border-strong);
 }
-.btn-ghost:hover { background: var(--surface); border-color: var(--primary-border); color: var(--primary); }
-.btn-dark {
-  background: linear-gradient(180deg, var(--midnight-2) 0%, var(--midnight) 100%);
-  color: #F6EED9;
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 0 2px 4px rgba(7,20,49,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
+.btn-ghost:hover {
+  background: var(--sky-soft);
+  border-color: var(--sky-400);
+  color: var(--palette-navy);
 }
-.btn-dark:hover { color: #FFFFFF; }
+/* Secondary button: Dark Brown with Soft White text (spec — replaces
+   the previous almost-black midnight look which produced the muddy
+   dark-on-dark contrast reported). */
+.btn-dark, .btn-secondary {
+  background: linear-gradient(180deg, var(--brown-400) 0%, var(--brown-500) 100%);
+  color: var(--palette-white);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 2px 4px rgba(44,28,20,0.28), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.btn-dark:hover, .btn-secondary:hover {
+  color: var(--palette-white);
+  background: linear-gradient(180deg, var(--brown-500) 0%, var(--brown-600) 100%);
+  box-shadow: 0 8px 22px rgba(44,28,20,0.35), inset 0 1px 0 rgba(255,255,255,0.10);
+}
 .btn-sm { padding: 8px 12px; font-size: 12.5px; border-radius: 8px; }
 .btn-lg { padding: 14px 22px; font-size: 15px; border-radius: 12px; }
 
 /* ── Chips ───────────────────────────────────────────────────── */
+/* Highlight chips carry the Gold Yellow → Deep Navy pairing per the
+   refresh spec. Other chip families keep their semantic hue but are
+   retuned to the new palette so contrast reads cleanly on cream. */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 10px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
-  background: var(--bg-light); color: var(--text);
-  border: 1px solid var(--border);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.01em;
+  background: var(--gold-300); color: var(--palette-navy);
+  border: 1px solid var(--accent-border);
 }
-.chip-gold   { background: var(--accent-soft); color: var(--gold-600); border-color: var(--accent-border); }
+.chip-gold   { background: var(--gold-300); color: var(--palette-navy); border-color: var(--accent-border); }
 .chip-ocean  { background: var(--primary-soft); color: var(--primary-strong); border-color: var(--primary-border); }
-.chip-coral  { background: var(--coral-soft); color: var(--coral-500); border-color: rgba(196,68,27,0.30); }
+.chip-sky    { background: var(--sky-soft); color: var(--ocean-600); border-color: var(--sky-400); }
+.chip-coral  { background: var(--coral-soft); color: var(--coral-500); border-color: rgba(200,71,44,0.32); }
+.chip-brown  { background: var(--brown-soft); color: var(--palette-brown); border-color: rgba(65,42,30,0.25); }
 .chip-ivy    { background: var(--green-soft); color: var(--green); border-color: rgba(42,132,89,0.30); }
 
 /* One Piece six-colour chips. Use on colour filters and card colour
@@ -291,14 +418,14 @@ details summary::marker { display: none; }
   padding: 6px 16px; font-size: 13px; font-weight: 600; color: var(--text-muted);
   cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
-.sort-btn:hover { background: var(--accent-soft); color: var(--gold-600); border-color: var(--accent-border); }
-.sort-btn.active { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
+.sort-btn:hover { background: var(--sky-soft); color: var(--palette-navy); border-color: var(--sky-400); }
+.sort-btn.active { background: var(--primary); color: var(--palette-white); border-color: var(--primary); }
 
-/* ── Prestige badge ──────────────────────────────────────────── */
+/* ── Prestige badge (Gold Yellow + Deep Navy per spec) ───────── */
 .badge-prestige {
-  display: inline-block; background: var(--accent-soft); color: var(--gold-600);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.03em;
-  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent-border);
+  display: inline-block; background: var(--gold-300); color: var(--palette-navy);
+  font-size: 12px; font-weight: 800; letter-spacing: 0.03em;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--gold-400);
 }
 
 .label-mono {
@@ -308,7 +435,7 @@ details summary::marker { display: none; }
 }
 
 :focus-visible {
-  outline: 2px solid var(--gold-300);
+  outline: 2px solid var(--sky-400);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -321,9 +448,9 @@ details summary::marker { display: none; }
 .hero-shell {
   position: relative;
   background:
-    radial-gradient(90% 80% at 10% -10%, rgba(233,178,58,0.16) 0%, rgba(233,178,58,0) 60%),
-    radial-gradient(70% 90% at 100% 110%, rgba(31,101,166,0.10) 0%, rgba(31,101,166,0) 60%),
-    linear-gradient(180deg, #FEF8E4 0%, var(--bg) 100%);
+    radial-gradient(90% 80% at 10% -10%, rgba(248,222,60,0.18) 0%, rgba(248,222,60,0) 60%),
+    radial-gradient(70% 90% at 100% 110%, rgba(88,172,244,0.14) 0%, rgba(88,172,244,0) 60%),
+    linear-gradient(180deg, var(--palette-white) 0%, var(--bg) 100%);
   overflow: hidden;
   isolation: isolate;
 }
@@ -339,9 +466,9 @@ details summary::marker { display: none; }
 .feature-shell {
   position: relative;
   background:
-    radial-gradient(70% 70% at 8% 0%, rgba(233,178,58,0.10) 0%, rgba(233,178,58,0) 60%),
-    radial-gradient(60% 80% at 100% 100%, rgba(31,101,166,0.08) 0%, rgba(31,101,166,0) 60%),
-    linear-gradient(180deg, #FCF6DF 0%, #F5ECD1 100%);
+    radial-gradient(70% 70% at 8% 0%, rgba(88,172,244,0.10) 0%, rgba(88,172,244,0) 60%),
+    radial-gradient(60% 80% at 100% 100%, rgba(248,222,60,0.10) 0%, rgba(248,222,60,0) 60%),
+    linear-gradient(180deg, #FDF7DE 0%, #F5EBCD 100%);
   overflow: hidden;
   isolation: isolate;
   border-top: 1px solid var(--border);
@@ -351,8 +478,8 @@ details summary::marker { display: none; }
 .ivory-band {
   position: relative;
   background:
-    radial-gradient(60% 80% at 10% 0%, rgba(233,178,58,0.08) 0%, rgba(233,178,58,0) 60%),
-    radial-gradient(50% 70% at 100% 100%, rgba(31,101,166,0.06) 0%, rgba(31,101,166,0) 60%),
+    radial-gradient(60% 80% at 10% 0%, rgba(248,222,60,0.08) 0%, rgba(248,222,60,0) 60%),
+    radial-gradient(50% 70% at 100% 100%, rgba(88,172,244,0.08) 0%, rgba(88,172,244,0) 60%),
     var(--bg);
   overflow: hidden;
   isolation: isolate;
@@ -471,17 +598,20 @@ details summary::marker { display: none; }
 button.nav-link, button.btn, button.chip {
   font-family: 'Figtree', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
-.nav-link:hover { color: var(--gold-600); background: transparent; }
+.nav-link:hover {
+  color: var(--palette-navy);
+  background: var(--sky-soft);
+}
 .nav-link.active {
-  color: var(--gold-600);
+  color: var(--palette-navy);
   background: transparent;
 }
 .nav-link.active::after {
   content: '';
   position: absolute;
   left: 12px; right: 12px; bottom: 4px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--gold-300), var(--gold-500));
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold-200), var(--gold-400));
   border-radius: 2px;
 }
 

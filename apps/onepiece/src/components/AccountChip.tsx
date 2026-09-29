@@ -31,14 +31,15 @@ export async function AccountChip() {
         <Link
           href="/sign-up"
           style={{
-            padding: '7px 12px',
+            padding: '7px 14px',
             borderRadius: 10,
-            background: 'var(--gold-600)',
-            color: '#111',
+            background: 'var(--primary)',
+            color: 'var(--palette-white)',
             textDecoration: 'none',
             fontSize: 13,
             fontWeight: 800,
             letterSpacing: '0.02em',
+            boxShadow: '0 2px 6px rgba(9,55,134,0.20)',
           }}
         >
           Sign up
@@ -80,13 +81,14 @@ export async function AccountChip() {
           width: 36,
           height: 36,
           borderRadius: '50%',
-          background: 'var(--gold-600)',
-          color: '#111',
+          background: 'var(--gold-300)',
+          color: 'var(--palette-navy)',
           textDecoration: 'none',
           fontFamily: 'Outfit, system-ui, sans-serif',
           fontSize: 15,
           fontWeight: 800,
-          border: '1px solid var(--border-strong, var(--border))',
+          border: '1px solid var(--gold-400)',
+          boxShadow: '0 2px 8px rgba(228,195,23,0.30)',
         }}
       >
         {initial}

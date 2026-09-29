@@ -137,7 +137,7 @@ const pStyle: React.CSSProperties = {
 const primaryBtnStyle: React.CSSProperties = {
   display: 'inline-block',
   padding: '9px 14px', borderRadius: 8,
-  background: 'var(--gold-600)', color: '#111',
+  background: 'linear-gradient(135deg, var(--ocean-400) 0%, var(--ocean-500) 100%)', color: 'var(--palette-white)',
   border: '1px solid var(--gold-600)',
   fontSize: 13, fontWeight: 700, textDecoration: 'none',
   letterSpacing: '0.02em',

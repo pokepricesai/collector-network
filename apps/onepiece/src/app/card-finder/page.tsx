@@ -395,9 +395,9 @@ const inputStyle: React.CSSProperties = {
 const primaryButtonStyle: React.CSSProperties = {
   padding: '9px 16px',
   borderRadius: 10,
-  background: 'var(--gold-600)',
-  color: '#111',
-  border: '1px solid var(--gold-600)',
+  background: 'linear-gradient(135deg, var(--ocean-400) 0%, var(--ocean-500) 100%)',
+  color: 'var(--palette-white)',
+border: '1px solid var(--primary)',
   fontFamily: 'inherit',
   fontSize: 13,
   fontWeight: 700,
