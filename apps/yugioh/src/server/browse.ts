@@ -2,6 +2,7 @@ import { unstable_cache } from 'next/cache';
 import {
   countCardsAndUniqueInSets,
   getCardsBySet,
+  getPrintingsBySet,
   getPrintingsForCards,
   getRarityCounts,
   getSetByCodeInsensitive,
@@ -89,10 +90,21 @@ export interface SetPageData {
 
 async function _getYugiohSetBySlug(slug: string): Promise<SetPageData | null> {
   const supabase = getYugiohClient();
-  const set = await getSetByCodeInsensitive(supabase, YGO_GAME_ID, slug);
+
+  // The set ID is deterministic from the URL slug (`ygo:set:<code>`)
+  // and the canonical set URL always uses `code.toLowerCase()`. Deriving
+  // the ID lets us fetch set metadata, cards and printings in parallel
+  // instead of chaining `set → cards → printings`, cutting two round
+  // trips off the cold-hit critical path. The metadata call still
+  // gates existence (`set == null → notFound`).
+  const predictedSetId = `${YGO_GAME_ID}:set:${slug.trim().toLowerCase()}`;
+  const [set, cards, printings] = await Promise.all([
+    getSetByCodeInsensitive(supabase, YGO_GAME_ID, slug),
+    getCardsBySet(supabase, predictedSetId),
+    getPrintingsBySet(supabase, predictedSetId),
+  ]);
   if (!set) return null;
 
-  const cards = await getCardsBySet(supabase, set.id);
   if (cards.length === 0) {
     return {
       set,
@@ -106,8 +118,6 @@ async function _getYugiohSetBySlug(slug: string): Promise<SetPageData | null> {
     };
   }
 
-  const cardIds = cards.map((c) => c.id);
-  const printings = await getPrintingsForCards(supabase, cardIds);
   const printingIds = printings.map((p) => p.id);
   const printingsByCardId = new Map<string, TcgPrinting[]>();
   for (const p of printings) {

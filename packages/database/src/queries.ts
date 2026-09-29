@@ -225,3 +225,21 @@ export async function getPrintingsForCards(
     context: 'getPrintingsForCards',
   });
 }
+
+// Every printing that belongs to a given set. Lets callers fetch a
+// set's cards and its printings in parallel rather than chaining
+// `cards → cardIds → printings` — used by the set page render path.
+export async function getPrintingsBySet(
+  supabase: SupabaseClient,
+  setId: string,
+): Promise<TcgPrinting[]> {
+  const { data, error } = await supabase
+    .from('tcg_printings')
+    .select('*')
+    .eq('set_id', setId);
+  return throwOnError<TcgPrinting[]>({
+    data: (data as TcgPrinting[] | null) ?? [],
+    error,
+    context: `getPrintingsBySet(${setId})`,
+  });
+}
