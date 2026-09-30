@@ -22,6 +22,7 @@ import Faq from '@/components/Faq';
 import { variantFaq } from '@/lib/faq-content';
 import { getVariantHistory } from '@/server/history';
 import { getGradedRowsForAnchor } from '@/server/graded';
+import { buildGradedView } from '@/lib/onepiece/graded-view';
 import type { OpCardView, OpPrintingView } from '@/server/read';
 import type { TcgCard } from '@collector-network/database';
 import type { RetailQuote } from '@collector-network/market-data';
@@ -396,7 +397,12 @@ function pickSourceHeadlineFromPrintings(
 async function gradedHasRows(printingIds: string[], cardId: string): Promise<boolean> {
   try {
     const rows = await getGradedRowsForAnchor({ printingIds, cardId });
-    return rows.length > 0;
+    // Must match what GradedPricesPanel actually renders: raw / any
+    // grader rows are filtered out inside buildGradedView. If nothing
+    // slabbed survives, the panel is hidden — the FAQ should mirror
+    // that so it never promises a panel that doesn't render.
+    const view = buildGradedView(rows);
+    return view.hasSlabbedData;
   } catch { return false; }
 }
 
