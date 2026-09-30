@@ -45,7 +45,16 @@
 export const CACHE_TTL = {
   TAXONOMY_LONG: 21_600,
   ENTITY_MEDIUM: 1_800,
-  MARKET_SHORT: 900,
+  // Bumped from 900 (15m) to 21_600 (6h) 2026-09-30. The finder cold
+  // path scans the whole catalogue (~10s wall time) and a 15-minute
+  // TTL was letting the cache expire between crons, so real users
+  // routinely hit that cold render. Prewarm now runs hourly (see
+  // vercel.json) which keeps the cache warm indefinitely; the 6h TTL
+  // is a safety net that stops the cache going permanently stale if
+  // prewarm ever fails. Freshness is not sacrificed — price ingest
+  // completion should call `revalidateTag(CACHE_TAGS.MARKET)` to
+  // force an immediate refresh when new prices land.
+  MARKET_SHORT: 21_600,
   FNL_HOURLY: 3_600,
   SITEMAP_DAILY: 86_400,
 } as const;

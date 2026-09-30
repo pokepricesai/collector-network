@@ -23,6 +23,16 @@ export const maxDuration = 60;
 
 const ALLOWLIST: readonly string[] = [
   '/',
+  // Card Finder cold hits ran ~11s in production QC1 because the
+  // scan + hydrate work per identity was rebuilt from scratch each
+  // time the 15m cache expired. Hourly prewarm on these three
+  // finder cache keys keeps them warm inside the new 6h TTL so real
+  // users almost never hit the cold path. Different query strings
+  // produce different unstable_cache keys — each entry warms its own
+  // ISR slot.
+  '/card-finder',
+  '/card-finder?sort=price-desc',
+  '/card-finder?sort=price-asc',
   '/market',
   '/market/most-valuable',
   '/market/most-valuable?currency=EUR',
