@@ -289,8 +289,11 @@ export default async function PrintingPage({
             printingIds={anchorCardView.printings.map((p) => p.printing.id)}
             cardId={anchorCardView.card.id}
             setCode={canonicalSetLabel}
-            collectorNumber={resolved.matched.collector_number}
-            finish={anchorPrinting.printing.finish}
+            collectorLabel={
+              variantLabel.treatmentLabel
+                ? `${variantLabel.base} ${variantLabel.treatmentLabel}${variantLabel.variantIndex != null ? ` #${variantLabel.variantIndex}` : ''}`
+                : variantLabel.base
+            }
           />
         )}
 
@@ -501,14 +504,14 @@ async function GradedPanelForVariant({
   printingIds,
   cardId,
   setCode,
-  collectorNumber,
-  finish,
+  collectorLabel,
 }: {
   printingIds: string[];
   cardId: string;
   setCode: string;
-  collectorNumber: string | null;
-  finish: string | null;
+  /** Human-facing identifier, e.g. "OP07-038 Parallel #2" — passed
+   *  down to the Fingerprint chip so it never renders `_p2`. */
+  collectorLabel: string;
 }) {
   const rows = await getGradedRowsForAnchor({ printingIds, cardId });
   if (rows.length === 0) return null;
@@ -517,8 +520,8 @@ async function GradedPanelForVariant({
       <GradedPricesPanel
         rows={rows}
         setCode={setCode}
-        collectorNumber={collectorNumber}
-        finish={finish}
+        collectorNumber={collectorLabel}
+        finish={null}
       />
     </div>
   );
