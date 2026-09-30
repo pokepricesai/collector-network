@@ -5,23 +5,26 @@ import { getCurrentUser } from '@collector-network/auth';
 import { getSetBundle } from '@/server/browse';
 import { getVariantBundle, getSiblingVariants } from '@/server/read';
 import { canonicalFor } from '@/lib/seo';
-import { buildLogicalCardHref, buildVariantHref, candidatePrintingSplits, slugifyCardName } from '@/lib/onepiece/slug';
+import { buildLogicalCardHref, buildVariantHref, candidatePrintingSplits, slugifyCardName, baseCollectorNumber as computeBaseCollector } from '@/lib/onepiece/slug';
 import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { CURRENCY_SOURCE_NAME, formatPrice } from '@/lib/onepiece/currency';
-import { HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
+import { pickHeadlinePrice, HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
 import { pickCardImage } from '@/lib/onepiece/image';
 import { renderEffectText } from '@/lib/onepiece/render-effect';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
 import CardStatGrid from '@/components/card/CardStatGrid';
-import TreatmentPanel from '@/components/card/TreatmentPanel';
+import VariantMarketPanel from '@/components/card/VariantMarketPanel';
 import PriceHistorySpark from '@/components/card/PriceHistorySpark';
 import { AddToCollection } from '@/components/AddToCollection';
 import { GradedPricesPanel } from '@/components/GradedPricesPanel';
 import EbayAffiliateDisclosure from '@/components/EbayAffiliateDisclosure';
-import { getPrintingHistory } from '@/server/history';
+import Faq from '@/components/Faq';
+import { variantFaq } from '@/lib/faq-content';
+import { getVariantHistory } from '@/server/history';
 import { getGradedRowsForAnchor } from '@/server/graded';
 import type { OpCardView, OpPrintingView } from '@/server/read';
 import type { TcgCard } from '@collector-network/database';
+import type { RetailQuote } from '@collector-network/market-data';
 
 // Specific-printing page. URL: /set/{code}/card/{cn-slug}. Resolves to
 // a single tcg_cards row + all its treatment printings from that set,
@@ -115,15 +118,9 @@ export default async function PrintingPage({
   // price. Cross-set concerns don't apply either — a Level B variant
   // belongs to exactly one set.
   const anchorCardView: OpCardView = bundle.cards[0]!;
-  const variantPrintings: Array<{ cardView: OpCardView; printingView: OpPrintingView }> =
-    anchorCardView.printings.map((p) => ({ cardView: anchorCardView, printingView: p }));
-
+  const anchorPrinting = anchorCardView.printings[0];
   const currency = await getCurrencyPreference();
-  // Sibling variants: base + other parallels + reprints in the same
-  // family. Own image, own headline price, own /set/.../card/... link.
   const siblings = await getSiblingVariants(resolved.cardId, currency);
-
-  const anchorPrinting = variantPrintings[0]?.printingView;
   const heroImage = pickCardImage(anchorCardView.card.images);
 
   const canonicalSetLabel =
@@ -255,6 +252,13 @@ export default async function PrintingPage({
           </div>
         </div>
 
+        <VariantMarketPanel
+          cardName={bundle.name}
+          collectorNumber={resolved.matched.collector_number}
+          variantPrintings={anchorCardView.printings}
+          fallbackCurrency={currency}
+        />
+
         {anchorPrinting && (
           <GradedPanelForVariant
             printingIds={anchorCardView.printings.map((p) => p.printing.id)}
@@ -265,57 +269,9 @@ export default async function PrintingPage({
           />
         )}
 
-        <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
-          <header>
-            <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-              This variant
-            </div>
-            <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
-              {canonicalSetLabel} #{resolved.matched.collector_number ?? '–'}, priced rows
-            </h2>
-            <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5 }}>
-              Only rows tied to <strong>{resolved.matched.collector_number ?? bundle.name}</strong>.
-              Sibling parallels and reprints are listed further down.
-            </p>
-          </header>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
-              gap: 12,
-            }}
-          >
-            {variantPrintings.length === 0 ? (
-              <div
-                style={{
-                  gridColumn: '1 / -1',
-                  padding: '18px',
-                  background: 'var(--surface)',
-                  border: '1px dashed var(--border-strong)',
-                  borderRadius: 12,
-                  color: 'var(--text-muted)',
-                }}
-              >
-                No priced marketplace rows recorded for this variant yet.
-              </div>
-            ) : (
-              variantPrintings.map(({ cardView, printingView }) => (
-                <TreatmentPanel
-                  key={printingView.printing.id}
-                  cardView={cardView}
-                  printingView={printingView}
-                  linkToPrinting={false}
-                  currency={currency}
-                />
-              ))
-            )}
-          </div>
-
-          {variantPrintings[0] && (
-            <PriceHistoryBlock printingId={variantPrintings[0].printingView.printing.id} />
-          )}
-        </section>
+        <VariantHistoryBlock
+          printingIds={anchorCardView.printings.map((p) => p.printing.id)}
+        />
 
         {siblings.length > 0 && (
           <section style={{ marginTop: 40, display: 'grid', gap: 16 }}>
@@ -401,9 +357,99 @@ export default async function PrintingPage({
           </section>
         )}
 
+        <VariantFaqBlock
+          bundle={bundle}
+          anchorCardView={anchorCardView}
+          matched={resolved.matched}
+          setLabel={anchorPrinting?.set?.name ?? anchorCardView.set?.name ?? canonicalSetLabel}
+          setCode={canonicalSetLabel}
+          siblingsCount={siblings.length}
+          hasGraded={await gradedHasRows(anchorCardView.printings.map((p) => p.printing.id), anchorCardView.card.id)}
+        />
+
         <EbayAffiliateDisclosure />
       </div>
     </div>
+  );
+}
+
+// Extract per-source headline from all printings of this variant so
+// the FAQ can quote actual figures. Uses the same pickHeadlinePrice
+// selector as the market panel, so answers stay in lockstep with
+// what the user sees on screen.
+function pickSourceHeadlineFromPrintings(
+  printings: readonly OpPrintingView[],
+  wantSource: 'cardmarket' | 'tcgplayer',
+  currency: 'EUR' | 'USD',
+): { price: number; currency: 'EUR' | 'USD'; signal: 'avg30d' | 'priceLow' | 'trend' } | null {
+  const quotes: RetailQuote[] = [];
+  for (const p of printings) {
+    for (const q of (p.pricing.market ?? []) as readonly RetailQuote[]) {
+      if ((q.source ?? '').toLowerCase().includes(wantSource)) quotes.push(q);
+    }
+  }
+  if (quotes.length === 0) return null;
+  const h = pickHeadlinePrice(quotes, currency);
+  return h ? { price: h.price, currency: h.currency, signal: h.signal } : null;
+}
+
+async function gradedHasRows(printingIds: string[], cardId: string): Promise<boolean> {
+  try {
+    const rows = await getGradedRowsForAnchor({ printingIds, cardId });
+    return rows.length > 0;
+  } catch { return false; }
+}
+
+function VariantFaqBlock({
+  bundle,
+  anchorCardView,
+  matched,
+  setLabel,
+  setCode,
+  siblingsCount,
+  hasGraded,
+}: {
+  bundle: { name: string };
+  anchorCardView: OpCardView;
+  matched: TcgCard;
+  setLabel: string;
+  setCode: string;
+  siblingsCount: number;
+  hasGraded: boolean;
+}) {
+  const cn = matched.collector_number ?? '';
+  const base = computeBaseCollector(cn) ?? cn;
+  const isParallel = /_p\d+$/i.test(cn);
+  const isReprint = /_r\d+$/i.test(cn);
+  const variantIndexMatch = cn.match(/_[pr](\d+)$/i);
+  const variantIndex = variantIndexMatch ? Number.parseInt(variantIndexMatch[1]!, 10) : null;
+  const anchorPrinting = anchorCardView.printings[0];
+  const treatmentLabel = anchorPrinting?.treatment.label ?? (isParallel ? 'Parallel' : isReprint ? 'Reprint' : 'Standard');
+  const cardmarketHeadline = pickSourceHeadlineFromPrintings(anchorCardView.printings, 'cardmarket', 'EUR');
+  const tcgplayerHeadline = pickSourceHeadlineFromPrintings(anchorCardView.printings, 'tcgplayer', 'USD');
+  const entries = variantFaq({
+    cardName: bundle.name,
+    collectorNumber: cn || base,
+    baseCollectorNumber: base,
+    setLabel,
+    setCode,
+    treatmentLabel,
+    variantIndex,
+    rarityLabel: anchorCardView.rarity.label,
+    hasCardmarketQuote: cardmarketHeadline != null,
+    hasTcgplayerQuote: tcgplayerHeadline != null,
+    cardmarketHeadline,
+    tcgplayerHeadline,
+    hasGraded,
+    isParallel,
+    isReprint,
+    siblingCount: siblingsCount,
+  });
+  return (
+    <Faq
+      title={`FAQ: ${bundle.name} ${cn || base}`}
+      entries={entries}
+    />
   );
 }
 
@@ -434,10 +480,10 @@ async function GradedPanelForVariant({
   );
 }
 
-async function PriceHistoryBlock({ printingId }: { printingId: string }) {
+async function VariantHistoryBlock({ printingIds }: { printingIds: string[] }) {
   let history;
   try {
-    history = await getPrintingHistory(printingId);
+    history = await getVariantHistory(printingIds);
   } catch {
     return null;
   }

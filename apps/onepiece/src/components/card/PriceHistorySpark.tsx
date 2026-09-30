@@ -1,6 +1,14 @@
 import type { HistoryBundle, HistorySeries } from '@/server/history';
 import { formatPrice } from '@/lib/onepiece/format-price';
 
+function friendlySource(raw: string): string {
+  const s = (raw ?? '').toLowerCase();
+  if (s.includes('cardmarket')) return 'Cardmarket';
+  if (s.includes('tcgplayer')) return 'TCGPlayer';
+  if (s.includes('manapool')) return 'Manapool';
+  return raw;
+}
+
 // Compact per-series sparkline. Renders one line per (source, currency,
 // finish) so the collector reads the trend in their preferred currency
 // without merging conflicting series.
@@ -88,7 +96,7 @@ function SeriesRow({ series }: { series: HistorySeries }) {
             whiteSpace: 'nowrap',
           }}
         >
-          {series.source} · {series.currency}
+          {friendlySource(series.source)} · {series.currency}
           {series.finish ? ` · ${series.finish}` : ''}
         </span>
         <span style={{ fontWeight: 700 }}>
