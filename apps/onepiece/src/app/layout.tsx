@@ -68,6 +68,12 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: SITE_URL },
   robots: SITE_LAUNCHED ? LAUNCHED_ROBOTS : PRE_LAUNCH_ROBOTS,
+  // Google Search Console site verification. Next's Metadata.verification.google
+  // emits `<meta name="google-site-verification" content="..."/>` with the
+  // canonical attribute name Google's crawler expects.
+  verification: {
+    google: 'BuMAHDsugfH7ccQ2SWQ5xhgQ4gLaT1r2RwvvJdh1s8E',
+  },
 };
 
 // Next 15 pulls viewport out of metadata; without this every page ships
