@@ -3,6 +3,8 @@
 // mirrors apps/yugioh/src/lib/collection-types.ts 1:1 so future
 // convergence into @collector-network/collection stays cheap.
 
+import type { LorcanaCurrency } from './currency';
+
 export const CONDITION_VALUES = [
   'mint',
   'near-mint',
@@ -162,36 +164,40 @@ function validateDate(s: string | null): string | null {
 
 export interface PricedItem {
   row: CollectionItemRow;
-  unitValueUsd: number | null;
-  valueUsdSource: 'printing-graded' | 'card-graded-family' | 'printing-retail' | 'none';
-  currency: 'USD';
+  unitValue: number | null;
+  valueSource: 'printing-graded' | 'card-graded-family' | 'printing-retail' | 'none';
+  currency: LorcanaCurrency;
 }
 
 export interface CollectionSummary {
-  totalCurrentUsd: number;
-  totalAcquisitionUsd: number | null;
-  unrealisedUsd: number | null;
+  currency: LorcanaCurrency;
+  totalCurrent: number;
+  totalAcquisition: number | null;
+  unrealised: number | null;
   totalCopies: number;
   uniqueHoldings: number;
   uniqueCards: number;
   rawCount: number;
   gradedCount: number;
-  rawValueUsd: number;
-  gradedValueUsd: number;
+  rawValue: number;
+  gradedValue: number;
   missingPriceCount: number;
 }
 
-export function summarise(items: readonly PricedItem[]): CollectionSummary {
-  let totalCurrentUsd = 0;
-  let totalAcquisitionUsd = 0;
+export function summarise(
+  items: readonly PricedItem[],
+  currency: LorcanaCurrency = 'USD',
+): CollectionSummary {
+  let totalCurrent = 0;
+  let totalAcquisition = 0;
   let acquisitionCovered = true;
   let unrealisedCovered = true;
   let totalCopies = 0;
   const cardIds = new Set<string>();
   let rawCount = 0;
   let gradedCount = 0;
-  let rawValueUsd = 0;
-  let gradedValueUsd = 0;
+  let rawValue = 0;
+  let gradedValue = 0;
   let missingPriceCount = 0;
 
   for (const p of items) {
@@ -201,39 +207,40 @@ export function summarise(items: readonly PricedItem[]): CollectionSummary {
     if (p.row.is_graded) gradedCount += q;
     else rawCount += q;
 
-    if (p.unitValueUsd == null) {
+    if (p.unitValue == null) {
       missingPriceCount += 1;
       unrealisedCovered = false;
     } else {
-      const holdingValue = p.unitValueUsd * q;
-      totalCurrentUsd += holdingValue;
-      if (p.row.is_graded) gradedValueUsd += holdingValue;
-      else rawValueUsd += holdingValue;
+      const holdingValue = p.unitValue * q;
+      totalCurrent += holdingValue;
+      if (p.row.is_graded) gradedValue += holdingValue;
+      else rawValue += holdingValue;
     }
 
-    if (p.row.purchase_price != null && p.row.purchase_currency === 'USD') {
-      totalAcquisitionUsd += p.row.purchase_price * q;
+    if (p.row.purchase_price != null && p.row.purchase_currency === currency) {
+      totalAcquisition += p.row.purchase_price * q;
     } else if (p.row.purchase_price != null) {
       acquisitionCovered = false;
       unrealisedCovered = false;
     }
   }
 
-  const acquisition = acquisitionCovered ? totalAcquisitionUsd : null;
+  const acquisition = acquisitionCovered ? totalAcquisition : null;
   const unrealised =
-    acquisitionCovered && unrealisedCovered ? totalCurrentUsd - totalAcquisitionUsd : null;
+    acquisitionCovered && unrealisedCovered ? totalCurrent - totalAcquisition : null;
 
   return {
-    totalCurrentUsd,
-    totalAcquisitionUsd: acquisition,
-    unrealisedUsd: unrealised,
+    currency,
+    totalCurrent,
+    totalAcquisition: acquisition,
+    unrealised,
     totalCopies,
     uniqueHoldings: items.length,
     uniqueCards: cardIds.size,
     rawCount,
     gradedCount,
-    rawValueUsd,
-    gradedValueUsd,
+    rawValue,
+    gradedValue,
     missingPriceCount,
   };
 }

@@ -18,17 +18,21 @@ type NavItem = { label: string; href: string };
 const PRIMARY_LINKS_WIDE: NavItem[] = [
   { label: 'Cards',       href: '/cards/search' },
   { label: 'Sets',        href: '/browse' },
+  { label: 'Characters',  href: '/characters' },
   { label: 'Inks',        href: '/inks' },
   { label: 'Card Finder', href: '/card-finder' },
   { label: 'Movers',      href: '/market' },
+  { label: 'AI',          href: '/ai' },
   { label: 'Insights',    href: '/insights' },
 ];
 
 const PRIMARY_LINKS_MEDIUM: NavItem[] = [
-  { label: 'Cards',    href: '/cards/search' },
-  { label: 'Sets',     href: '/browse' },
-  { label: 'Movers',   href: '/market' },
-  { label: 'Insights', href: '/insights' },
+  { label: 'Cards',      href: '/cards/search' },
+  { label: 'Sets',       href: '/browse' },
+  { label: 'Characters', href: '/characters' },
+  { label: 'Movers',     href: '/market' },
+  { label: 'AI',         href: '/ai' },
+  { label: 'Insights',   href: '/insights' },
 ];
 
 const TOOLS_LINKS: NavItem[] = [
@@ -48,6 +52,7 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { label: 'Card Finder',  href: '/card-finder' },
       { label: 'Browse sets',  href: '/browse' },
+      { label: 'Characters',   href: '/characters' },
       { label: 'Inks',         href: '/inks' },
     ],
   },
@@ -60,18 +65,21 @@ const MOBILE_GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: 'Read',
+    title: 'Tools',
     items: [
-      { label: 'Insights', href: '/insights' },
+      { label: 'Lorcana AI',  href: '/ai' },
+      { label: 'Insights',    href: '/insights' },
     ],
   },
   {
     title: 'Account',
     items: [
-      { label: 'My Collection', href: '/collection' },
-      { label: 'Account',       href: '/account' },
-      { label: 'Settings',      href: '/settings' },
-      { label: 'Sign in',       href: '/sign-in' },
+      { label: 'Dashboard',      href: '/dashboard' },
+      { label: 'My Collection',  href: '/collection' },
+      { label: 'Watchlist',      href: '/watchlist' },
+      { label: 'Account',        href: '/account' },
+      { label: 'Settings',       href: '/settings' },
+      { label: 'Sign in',        href: '/sign-in' },
       { label: 'Create account', href: '/sign-up' },
     ],
   },

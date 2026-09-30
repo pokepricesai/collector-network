@@ -8,6 +8,8 @@ import { buildPrintingSlug } from '@/lib/lorcana/slug';
 import { pickCardImage } from '@/lib/lorcana/image';
 import Faq from '@/components/Faq';
 import { COLLECTION_FAQ } from '@/lib/faq-content';
+import { getLorcanaCurrency } from '../../lib/currency-server';
+import { formatPrice, CURRENCY_SYMBOL, CURRENCY_SOURCE_NAME } from '../../lib/currency';
 
 export const metadata: Metadata = {
   title: 'My Lorcana Collection',
@@ -20,7 +22,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function CollectionPage() {
   await requireUser('/collection');
-  const result = await listCollectionForCurrentUser();
+  const currency = await getLorcanaCurrency();
+  const result = await listCollectionForCurrentUser(currency);
 
   if (!result.ok && result.reason === 'table-missing') {
     return (
@@ -83,8 +86,8 @@ export default async function CollectionPage() {
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
         <StatTile
           label="Current value"
-          value={`$${summary.totalCurrentUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
-          hint={summary.missingPriceCount > 0 ? `USD · ${summary.missingPriceCount} unpriced` : 'USD'}
+          value={`${CURRENCY_SYMBOL[currency]}${summary.totalCurrent.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+          hint={summary.missingPriceCount > 0 ? `${currency} · ${summary.missingPriceCount} unpriced` : `${currency} · ${CURRENCY_SOURCE_NAME[currency]}`}
         />
         <StatTile
           label="Total copies"
@@ -94,16 +97,16 @@ export default async function CollectionPage() {
         <StatTile
           label="Raw / Graded"
           value={`${summary.rawCount} · ${summary.gradedCount}`}
-          hint={`$${summary.rawValueUsd.toFixed(0)} raw · $${summary.gradedValueUsd.toFixed(0)} graded`}
+          hint={`${CURRENCY_SYMBOL[currency]}${summary.rawValue.toFixed(0)} raw · ${CURRENCY_SYMBOL[currency]}${summary.gradedValue.toFixed(0)} graded`}
         />
         <StatTile
           label="Realised P/L"
           value={
-            summary.unrealisedUsd == null
+            summary.unrealised == null
               ? '—'
-              : `${summary.unrealisedUsd >= 0 ? '+' : ''}$${summary.unrealisedUsd.toFixed(0)}`
+              : `${summary.unrealised >= 0 ? '+' : ''}${CURRENCY_SYMBOL[currency]}${summary.unrealised.toFixed(0)}`
           }
-          hint={summary.unrealisedUsd == null ? 'Acquisition values incomplete' : 'vs USD acquisition'}
+          hint={summary.unrealised == null ? 'Acquisition values incomplete' : `vs ${currency} acquisition`}
         />
       </section>
 
@@ -153,15 +156,15 @@ export default async function CollectionPage() {
               ? `/set/${encodeURIComponent((set?.code ?? '').toLowerCase())}/card/${encodeURIComponent(buildPrintingSlug(card.collector_number, card.name))}`
               : null;
             const priceLabel =
-              priced.unitValueUsd != null
-                ? `$${(priced.unitValueUsd * row.quantity).toFixed(2)}`
+              priced.unitValue != null
+                ? formatPrice(priced.unitValue * row.quantity, currency)
                 : 'Unpriced';
             const priceHint =
-              priced.valueUsdSource === 'printing-retail'
-                ? 'Retail · this printing'
-                : priced.valueUsdSource === 'printing-graded'
+              priced.valueSource === 'printing-retail'
+                ? `Retail · this printing · ${CURRENCY_SOURCE_NAME[currency]}`
+                : priced.valueSource === 'printing-graded'
                 ? `${row.grader?.toUpperCase() ?? ''} ${row.grade ?? ''} · this printing`
-                : priced.valueUsdSource === 'card-graded-family'
+                : priced.valueSource === 'card-graded-family'
                 ? `${row.grader?.toUpperCase() ?? ''} ${row.grade ?? ''} · family estimate`
                 : 'No market data on this basis';
             return (

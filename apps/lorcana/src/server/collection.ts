@@ -37,6 +37,7 @@ import {
   type CollectionSummary,
   type PricedItem,
 } from '../lib/collection-types';
+import { CURRENCY_SOURCE_KEY, type LorcanaCurrency } from '../lib/currency';
 
 // Translate the "table missing" error into a distinct code so the UI
 // can render a friendly "schema pending" panel until the shared-
@@ -89,9 +90,9 @@ export interface CollectionPageData {
 
 // ── List + hydrate + price ───────────────────────────────────────
 
-export async function listCollectionForCurrentUser(): Promise<
-  CollectionResult<CollectionPageData>
-> {
+export async function listCollectionForCurrentUser(
+  currency: LorcanaCurrency = 'USD',
+): Promise<CollectionResult<CollectionPageData>> {
   const supabase = await createServerSupabase();
   const { data, error } = await supabase
     .from(TABLE)
@@ -105,7 +106,7 @@ export async function listCollectionForCurrentUser(): Promise<
   if (rows.length === 0) {
     return {
       ok: true,
-      value: { items: [], summary: summarise([]) },
+      value: { items: [], summary: summarise([], currency) },
     };
   }
 
@@ -120,7 +121,7 @@ export async function listCollectionForCurrentUser(): Promise<
   const sets = await getSetsByIds(supabase, setIds);
   const setsById = new Map(sets.map((s) => [s.id, s]));
 
-  const priced = await priceHoldings(supabase, rows, printingsById);
+  const priced = await priceHoldings(supabase, rows, printingsById, currency);
 
   const items: CollectionListItem[] = rows.map((row, i) => {
     const card = cardsById.get(row.tcg_card_id) ?? null;
@@ -131,7 +132,7 @@ export async function listCollectionForCurrentUser(): Promise<
 
   return {
     ok: true,
-    value: { items, summary: summarise(priced) },
+    value: { items, summary: summarise(priced, currency) },
   };
 }
 
@@ -156,10 +157,11 @@ async function fetchCardsById(
 
 // ── Valuation ────────────────────────────────────────────────────
 
-async function priceHoldings(
+export async function priceHoldings(
   supabase: SupabaseClient,
   rows: readonly CollectionItemRow[],
   _printingsById: Map<string, TcgPrinting>,
+  currency: LorcanaCurrency = 'USD',
 ): Promise<PricedItem[]> {
   const rawPrintingIds = new Set<string>();
   const gradedPrintingIds = new Set<string>();
@@ -173,17 +175,38 @@ async function priceHoldings(
     }
   }
 
-  const retailByPrinting = new Map<string, ReturnType<typeof selectPreferredRetailQuote>>();
+  const retailByPrinting = new Map<string, { price: number } | null>();
   if (rawPrintingIds.size > 0) {
-    const quotes = await getRetailQuotesForPrintings(supabase, [...rawPrintingIds]);
-    const byPrinting = new Map<string, typeof quotes>();
-    for (const q of quotes) {
-      const b = byPrinting.get(q.printingId) ?? [];
-      b.push(q);
-      byPrinting.set(q.printingId, b);
-    }
-    for (const pid of rawPrintingIds) {
-      retailByPrinting.set(pid, selectPreferredRetailQuote(byPrinting.get(pid) ?? [], 'USD'));
+    if (currency === 'EUR') {
+      // EUR requires native Cardmarket quotes. Never FX-convert.
+      const { data, error } = await supabase
+        .from('tcg_market_prices_current')
+        .select('tcg_printing_id, source, currency, price')
+        .in('tcg_printing_id', [...rawPrintingIds])
+        .eq('source', CURRENCY_SOURCE_KEY.EUR)
+        .eq('currency', 'EUR');
+      if (!error) {
+        interface RetailRow {
+          tcg_printing_id: string;
+          price: number | null;
+        }
+        for (const row of (data as RetailRow[] | null) ?? []) {
+          if (row.price == null) continue;
+          retailByPrinting.set(row.tcg_printing_id, { price: row.price });
+        }
+      }
+    } else {
+      const quotes = await getRetailQuotesForPrintings(supabase, [...rawPrintingIds]);
+      const byPrinting = new Map<string, typeof quotes>();
+      for (const q of quotes) {
+        const b = byPrinting.get(q.printingId) ?? [];
+        b.push(q);
+        byPrinting.set(q.printingId, b);
+      }
+      for (const pid of rawPrintingIds) {
+        const preferred = selectPreferredRetailQuote(byPrinting.get(pid) ?? [], 'USD');
+        retailByPrinting.set(pid, preferred && preferred.price != null ? { price: preferred.price } : null);
+      }
     }
   }
 
@@ -203,7 +226,7 @@ async function priceHoldings(
       .select('tcg_printing_id, tcg_card_id, attribution, grader, grade, currency, price')
       .in('tcg_printing_id', [...gradedPrintingIds])
       .eq('attribution', 'printing')
-      .eq('currency', 'USD')
+      .eq('currency', currency)
       .not('price', 'is', null);
     if (!error) {
       for (const row of (data as GradedRow[] | null) ?? []) {
@@ -219,7 +242,7 @@ async function priceHoldings(
       .select('tcg_printing_id, tcg_card_id, attribution, grader, grade, currency, price')
       .in('tcg_card_id', [...gradedCardIds])
       .eq('attribution', 'card')
-      .eq('currency', 'USD')
+      .eq('currency', currency)
       .not('price', 'is', null);
     if (!error) {
       for (const row of (data as GradedRow[] | null) ?? []) {
@@ -236,9 +259,9 @@ async function priceHoldings(
       if (p?.price != null) {
         return {
           row,
-          unitValueUsd: p.price,
-          valueUsdSource: 'printing-graded',
-          currency: 'USD',
+          unitValue: p.price,
+          valueSource: 'printing-graded',
+          currency,
         };
       }
       const cardKey = `${row.tcg_card_id}|${row.grader}|${row.grade}`;
@@ -246,23 +269,23 @@ async function priceHoldings(
       if (c?.price != null) {
         return {
           row,
-          unitValueUsd: c.price,
-          valueUsdSource: 'card-graded-family',
-          currency: 'USD',
+          unitValue: c.price,
+          valueSource: 'card-graded-family',
+          currency,
         };
       }
-      return { row, unitValueUsd: null, valueUsdSource: 'none', currency: 'USD' };
+      return { row, unitValue: null, valueSource: 'none', currency };
     }
     const retail = retailByPrinting.get(row.tcg_printing_id);
     if (retail?.price != null) {
       return {
         row,
-        unitValueUsd: retail.price,
-        valueUsdSource: 'printing-retail',
-        currency: 'USD',
+        unitValue: retail.price,
+        valueSource: 'printing-retail',
+        currency,
       };
     }
-    return { row, unitValueUsd: null, valueUsdSource: 'none', currency: 'USD' };
+    return { row, unitValue: null, valueSource: 'none', currency };
   });
 }
 

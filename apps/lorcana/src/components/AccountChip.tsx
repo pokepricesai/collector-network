@@ -1,17 +1,30 @@
 import Link from 'next/link';
 import { getCurrentUser } from '@collector-network/auth';
+import { getLorcanaCurrency } from '../lib/currency-server';
+import { AccountMenu } from './AccountMenu';
+import { CurrencyToggle } from './CurrencyToggle';
 
-// Auth chip rendered inside the Navbar. Server component so we can
-// read the session cookie on every request.
+// Right-side navbar slot. Server component so we can read the auth
+// session and the currency cookie on every request.
 //
-// Signed-out state:  Sign in (secondary link) + Create account (primary CTA).
-// Signed-in state:   User chip → /account.
+// Signed-out state:
+//   [ CurrencyToggle ]  Sign in  Sign up
+//
+// Signed-in state:
+//   [ CurrencyToggle ]  Dashboard  [avatar-dropdown]
+//
+// The dropdown holds Dashboard / Collection / Watchlist / Account /
+// Settings / Sign out so the primary public nav stays uncluttered.
 
 export async function AccountChip() {
-  const user = await getCurrentUser();
+  const [user, currency] = await Promise.all([
+    getCurrentUser(),
+    getLorcanaCurrency(),
+  ]);
   if (!user) {
     return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <CurrencyToggle initial={currency} />
         <Link
           href="/sign-in"
           className="nav-link"
@@ -44,51 +57,31 @@ export async function AccountChip() {
       </div>
     );
   }
-  const initial =
-    (user.email ?? user.user_metadata?.['full_name'] ?? 'U')
-      .toString()
-      .charAt(0)
-      .toUpperCase() || 'U';
+  const displayName =
+    (user.user_metadata?.['full_name'] as string | undefined) ??
+    (user.user_metadata?.['name'] as string | undefined) ??
+    user.email ??
+    'Account';
+  const initial = String(displayName).trim().charAt(0).toUpperCase() || 'U';
   return (
-    <Link
-      href="/account"
-      aria-label="Your account"
-      style={{
-        flexShrink: 0,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '5px 12px 5px 5px',
-        borderRadius: 999,
-        background: 'var(--surface)',
-        border: '1px solid var(--border-strong, var(--border))',
-        color: 'var(--text)',
-        textDecoration: 'none',
-        fontSize: 13,
-        fontWeight: 600,
-      }}
-    >
-      <span
-        aria-hidden
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <CurrencyToggle initial={currency} />
+      <Link
+        href="/dashboard"
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 26,
-          height: 26,
-          borderRadius: '50%',
-          background: 'var(--accent-2)',
-          color: '#111',
-          fontFamily: 'Outfit, system-ui, sans-serif',
-          fontSize: 13,
+          padding: '7px 14px',
+          borderRadius: 10,
+          background: 'var(--primary, #6A43BE)',
+          color: '#fff',
+          textDecoration: 'none',
+          fontSize: 13.5,
           fontWeight: 700,
+          border: '1px solid transparent',
         }}
       >
-        {initial}
-      </span>
-      <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        Account
-      </span>
-    </Link>
+        Dashboard
+      </Link>
+      <AccountMenu displayName={displayName} initial={initial} />
+    </div>
   );
 }
