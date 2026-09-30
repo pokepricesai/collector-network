@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import {
   countCardsAndUniqueInSets,
   getCardsBySet,
@@ -21,7 +22,11 @@ export interface OpSetSummary {
   uniqueCardCount: number;
 }
 
-export async function listSetsWithCounts(): Promise<OpSetSummary[]> {
+// Data-Cache wrapped: sets + per-set counts change on catalogue
+// ingest (weeks apart), never per-request. Every Card Finder page
+// load calls this, so a warm cache saves 1-2 DB round trips per
+// visit. `keyParts` version bumps invalidate stale entries.
+const _listSetsWithCounts_impl = async (): Promise<OpSetSummary[]> => {
   const supabase = getOnepieceClient();
   const gameId = await getOnepieceGameId(supabase);
   const sets = await listAllSets(supabase, gameId);
@@ -34,7 +39,12 @@ export async function listSetsWithCounts(): Promise<OpSetSummary[]> {
       uniqueCardCount: counts.get(set.id)?.uniqueCardCount ?? 0,
     }))
     .sort(byReleaseDateDesc);
-}
+};
+export const listSetsWithCounts: () => Promise<OpSetSummary[]> = unstable_cache(
+  _listSetsWithCounts_impl,
+  ['op:setsWithCounts:v1'],
+  { revalidate: 3600, tags: ['op-sets'] },
+);
 
 /** Same as listSetsWithCounts but limited to the N most recent. Used
  *  by the homepage. */
