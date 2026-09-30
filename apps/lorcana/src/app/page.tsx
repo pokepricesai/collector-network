@@ -4,9 +4,11 @@ import LatestSets from '@/components/home/LatestSets';
 import MostValuable from '@/components/home/MostValuable';
 import EnchantedSpotlight from '@/components/home/EnchantedSpotlight';
 import InksExplorer from '@/components/home/InksExplorer';
+import ExploreStrip from '@/components/home/ExploreStrip';
 import Faq from '@/components/Faq';
 import { HOMEPAGE_FAQ } from '@/lib/faq-content';
 import { getHomepageData } from '@/server/homepage';
+import { getLorcanaCurrency } from '@/lib/currency-server';
 import { SITE_URL } from '@/lib/site-url';
 
 // Revalidate every 15 minutes. Long enough that peaks don't hammer
@@ -23,7 +25,8 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  const payload = await getHomepageData();
+  const currency = await getLorcanaCurrency();
+  const payload = await getHomepageData(currency);
   return (
     <>
       <Hero
@@ -31,12 +34,14 @@ export default async function HomePage() {
         setCount={payload.stats.setCount}
         enchantedCount={payload.stats.enchantedCount}
         mostValuable={payload.mostValuable}
+        currency={currency}
       />
+      <ExploreStrip />
       <EnchantedSpotlight
         tiles={payload.enchantedSpotlight}
         iconic={payload.iconicSpotlight}
       />
-      <MostValuable tiles={payload.mostValuable} />
+      <MostValuable tiles={payload.mostValuable} currency={currency} />
       <LatestSets sets={payload.latestSets} />
       <InksExplorer />
       <div className="lc-container" style={{ maxWidth: 900 }}>

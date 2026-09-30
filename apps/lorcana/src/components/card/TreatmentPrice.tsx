@@ -1,17 +1,32 @@
 import type { PrintingPricing } from '@collector-network/market-data';
 import { formatPrice } from '@/lib/lorcana/format-price';
+import { formatPrice as formatSelected } from '@/lib/currency';
 import { selectPreferredRetailQuote } from '@collector-network/market-data';
+import {
+  CURRENCY_SOURCE_KEY,
+  DEFAULT_CURRENCY,
+  type LorcanaCurrency,
+} from '@/lib/currency';
 
 // Price summary for a single priced printing. Reads the caller's
 // PrintingPricing (retail + attribution='printing' graded) and renders
-// only the buckets that have data. Never mixes currencies.
+// only the buckets that have data. Never mixes currencies. When
+// `currency` is supplied we ONLY consider retail rows in that currency's
+// native source (USD → TCGplayer, EUR → Cardmarket) — missing = show
+// "No current price", never silently fall back to the other market.
 
 export default function TreatmentPrice({
   pricing,
+  currency = DEFAULT_CURRENCY,
 }: {
   pricing: PrintingPricing;
+  currency?: LorcanaCurrency;
 }) {
-  const preferred = selectPreferredRetailQuote(pricing.market, 'USD');
+  const nativeSource = CURRENCY_SOURCE_KEY[currency];
+  const currencyScopedRetail = pricing.market.filter(
+    (q) => q.currency === currency && q.source === nativeSource,
+  );
+  const preferred = selectPreferredRetailQuote(currencyScopedRetail, currency);
 
   const rawFloor = pickLowestNonNull(
     pricing.raw.map((r) => ({ price: r.price, currency: r.currency })),
@@ -46,11 +61,18 @@ export default function TreatmentPrice({
         gap: 6,
       }}
     >
-      {preferred && (
+      {preferred ? (
         <PriceRow
           label="Retail"
           headline={formatPrice(preferred.price, preferred.currency)}
           detail={`${preferred.source}${preferred.finish ? ' · ' + preferred.finish : ''}`}
+        />
+      ) : (
+        <PriceRow
+          label="Retail"
+          headline={formatSelected(null, currency)}
+          detail={`Native ${currency} feed`}
+          muted
         />
       )}
       {rawFloor && (

@@ -6,6 +6,9 @@ import { canonicalFor, SITE_ORIGIN } from '@/lib/seo';
 import { findArticle, LORCANA_ARTICLES } from '@/lib/insights';
 import { getPricedTiles } from '@/server/discovery';
 import { slugifyCardName } from '@/lib/lorcana/slug';
+import { getLorcanaCurrency } from '@/lib/currency-server';
+import { formatPrice as formatCurrencyPrice } from '@/lib/lorcana/format-price';
+import { CURRENCY_SOURCE_NAME, type LorcanaCurrency } from '@/lib/currency';
 
 export const revalidate = 3600;
 export const dynamic = 'force-dynamic';
@@ -69,10 +72,11 @@ export default async function ArticlePage({
     ],
   };
 
+  const currency = await getLorcanaCurrency();
   let body: React.ReactElement;
   switch (article.slug) {
     case 'most-valuable-disney-lorcana-cards':
-      body = await MostValuableBody();
+      body = await MostValuableBody(currency);
       break;
     case 'lorcana-rarities-explained':
       body = <RaritiesExplainedBody />;
@@ -119,8 +123,8 @@ export default async function ArticlePage({
 // data-hydrated at request time from the same query the homepage uses.
 // ─────────────────────────────────────────────────────────────
 
-async function MostValuableBody(): Promise<React.ReactElement> {
-  const top = await getPricedTiles({ limit: 10, cardCandidates: 3000 });
+async function MostValuableBody(currency: LorcanaCurrency): Promise<React.ReactElement> {
+  const top = await getPricedTiles({ limit: 10, cardCandidates: 3000, currency });
   return (
     <div style={{ fontSize: 17, lineHeight: 1.7 }}>
       <p>
@@ -134,11 +138,12 @@ async function MostValuableBody(): Promise<React.ReactElement> {
       </p>
       <h2 style={{ marginTop: 28 }}>Live top ten</h2>
       <p>
-        The list below is generated at page-render time from the same live
-        Cardmarket EU retail feed powering the rest of the site. Prices are
+        The list below is generated at page-render time from the live{' '}
+        {CURRENCY_SOURCE_NAME[currency]} retail feed ({currency}). Prices are
         the current highest retail observation across the card&apos;s printings,
         deduplicated to one entry per card so a single card&apos;s foil version
-        does not push the nonfoil off the board.
+        does not push the nonfoil off the board. Toggle currency in the header
+        to swap the ranking market — never FX-converted.
       </p>
       {top.length > 0 ? (
         <ol style={{ paddingLeft: 20, margin: '10px 0 24px' }}>
@@ -147,7 +152,7 @@ async function MostValuableBody(): Promise<React.ReactElement> {
               <Link href={`/card/${slugifyCardName(tile.name)}`} style={{ fontWeight: 700 }}>
                 {tile.name}
               </Link>{' '}
-              — {tile.priceEur ? `€${tile.priceEur.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : `$${tile.priceUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`}
+              — {formatCurrencyPrice(tile.priceUsd, tile.priceCurrency || currency)}
               {tile.rarity && ` · ${tile.rarity}`}
               {tile.finish && ` · ${tile.finish}`}
               {tile.setName && ` · ${tile.setName}`}

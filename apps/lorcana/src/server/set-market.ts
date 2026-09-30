@@ -6,6 +6,7 @@ import {
 } from '@collector-network/market-data';
 import { getLorcanaClient, getLorcanaGameId } from './client';
 import { getPrintingsForCards } from '@collector-network/database';
+import { CURRENCY_SOURCE_KEY, DEFAULT_CURRENCY, type LorcanaCurrency } from '../lib/currency';
 
 // Set-level market aggregate for Lorcana set pages. Mirrors the MTG
 // methodology so numbers are comparable across the network:
@@ -54,19 +55,21 @@ export interface LcSetMarket {
 export async function getSetMarketForLorcana(
   setId: string,
   cards: readonly TcgCard[],
-  opts: { topN?: number } = {},
+  opts: { topN?: number; currency?: LorcanaCurrency } = {},
 ): Promise<LcSetMarket> {
   const supabase = getLorcanaClient();
   void (await getLorcanaGameId(supabase));
   void setId;
   const topN = opts.topN ?? 5;
+  const rankingCurrency: LorcanaCurrency = opts.currency ?? DEFAULT_CURRENCY;
+  const rankingSource = CURRENCY_SOURCE_KEY[rankingCurrency];
 
   if (cards.length === 0) {
     return {
       eligibleCount: 0,
       pricedCount: 0,
       subtotalUsd: 0,
-      currency: 'USD',
+      currency: rankingCurrency,
       coverage: 0,
       mostValuable: [],
       cheapest: [],
@@ -111,31 +114,25 @@ export async function getSetMarketForLorcana(
   // a URL longer than Supabase's PostgREST / undici tolerate. 100 per
   // request keeps the URL well under 8KB while still keeping the total
   // round-trip count small.
-  const retailQuotes = (
+  const allRetailQuotes = (
     await Promise.all(
       chunk(allPrintingIds, 100).map((batch) =>
         getRetailQuotesForPrintings(supabase, batch),
       ),
     )
   ).flat();
+  // Currency-scope: only keep quotes from the caller's selected native
+  // marketplace + currency. USD → tcggraph.tcgplayer, EUR → tcggraph.cardmarket.
+  // Never FX-converted; a printing with no native quote is unpriced.
+  const retailQuotes = allRetailQuotes.filter(
+    (q) => q.currency === rankingCurrency && q.source === rankingSource,
+  );
   const quotesByPrinting = new Map<string, typeof retailQuotes>();
   for (const q of retailQuotes) {
     const b = quotesByPrinting.get(q.printingId) ?? [];
     b.push(q);
     quotesByPrinting.set(q.printingId, b);
   }
-
-  // Pick a single ranking currency for the whole set. Today's feed is
-  // EUR-only; if USD quotes are present prefer them, else fall back to
-  // whichever currency the retail feed uses.
-  const currencyCounts = new Map<string, number>();
-  for (const q of retailQuotes) {
-    if (!q.currency) continue;
-    currencyCounts.set(q.currency, (currencyCounts.get(q.currency) ?? 0) + 1);
-  }
-  const rankingCurrency = currencyCounts.has('USD')
-    ? 'USD'
-    : (Array.from(currencyCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'USD');
 
   const tiles: LcSetTile[] = [];
   for (const hero of heroes) {

@@ -19,7 +19,17 @@ import AskLorcanaPanel from '@/components/card/AskLorcanaPanel';
 import Faq from '@/components/Faq';
 import { buildCardFaq } from '@/server/faq-card';
 import { getCurrentUser } from '@collector-network/auth';
+import { WatchButton } from '@/components/WatchButton';
+import { isPrintingOnWatchlist } from '@/server/watchlist';
+import CardInternalLinks from '@/components/card/CardInternalLinks';
+import {
+  getCardsInSameSet,
+  getOtherCharacterCards,
+  getCardsBySameRarity,
+  getCardsBySameInk,
+} from '@/server/internal-links';
 import type { LcCardView, LcPrintingView } from '@/server/read';
+import { getLorcanaCurrency } from '@/lib/currency-server';
 
 // Logical / gameplay card page. Shows every printing across every set
 // grouped by treatment.
@@ -87,8 +97,10 @@ export default async function LogicalCardPage({
     treatmentOrder.push({ label: entries[0]!.printingView.treatment.label, code, entries });
   }
 
-  // Read the auth session once for the LogicalAddToCollection component.
+  // Read the auth session + currency preference once. Currency drives
+  // which native retail feed the per-treatment price row displays.
   const currentUser = await getCurrentUser();
+  const currency = await getLorcanaCurrency();
 
   // Materialise a flat list of every real printing the user could
   // legitimately add to their collection. The LogicalAddToCollection
@@ -102,6 +114,38 @@ export default async function LogicalCardPage({
     setCode: cardView.set?.code ?? null,
     collectorNumber: cardView.card.collector_number ?? null,
   }));
+
+  // Page-level Watch semantics: the button tracks the FIRST printing
+  // in the bundle. Users who need per-treatment precision go to the
+  // per-printing page. We label the button "Watch this card" so the
+  // per-card scope is unambiguous.
+  const defaultPrinting = flat[0] ?? null;
+  const initialWatchingResult = defaultPrinting
+    ? await isPrintingOnWatchlist(defaultPrinting.printingView.printing.id)
+    : null;
+  const initialWatching =
+    initialWatchingResult?.ok === true ? initialWatchingResult.value : false;
+
+  // Internal-linking data. Every query is capped + skipped-when-empty
+  // inside the component. We fan them out in parallel so the page
+  // stays snappy.
+  const isCharacter = heroCard.gamedata.cardType === 'character';
+  const primaryInk = heroCard.gamedata.inks[0] ?? null;
+  const [moreFromSet, otherCharacterCards, sameRarityCards, sameInkCards] =
+    await Promise.all([
+      heroCard.set?.id
+        ? getCardsInSameSet(heroCard.set.id, heroCard.card.id, 8)
+        : Promise.resolve([]),
+      isCharacter
+        ? getOtherCharacterCards(bundle.name, heroCard.card.id, 8)
+        : Promise.resolve([]),
+      heroCard.card.rarity
+        ? getCardsBySameRarity(heroCard.card.rarity, heroCard.card.id, 6)
+        : Promise.resolve([]),
+      primaryInk
+        ? getCardsBySameInk(primaryInk, heroCard.card.id, 6)
+        : Promise.resolve([]),
+    ]);
 
   // Compute deterministic FAQ from the bundle. Prices pulled from the
   // printings' known retail (`market`) rows.
@@ -218,17 +262,59 @@ export default async function LogicalCardPage({
             </div>
           </div>
 
-          {/* Primary action: real Add-to-Collection with a printing
-              picker. Signed-out shows Sign in + Create free account.
-              Signed-in shows the picker then the actual form. Never
-              inserts an ambiguous row — every write is scoped to a
-              real printing id. */}
-          <LogicalAddToCollection
-            cardName={bundle.name}
-            isSignedIn={Boolean(currentUser)}
-            returnPath={`/card/${slugifyCardName(bundle.name)}`}
-            printings={printingPicks}
-          />
+          {/* Primary action bar: Add-to-Collection (per-printing) +
+              Watch (per-card convenience). The Watch button toggles
+              watchlist state for the DEFAULT/first printing in the
+              bundle; users who need to watch a specific treatment can
+              open the exact printing page. Labelled "Watch this card"
+              so the scope is unambiguous. Signed-out state falls
+              through to /sign-in with a returnTo. */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <LogicalAddToCollection
+              cardName={bundle.name}
+              isSignedIn={Boolean(currentUser)}
+              returnPath={`/card/${slugifyCardName(bundle.name)}`}
+              printings={printingPicks}
+            />
+            {defaultPrinting ? (
+              <span
+                title="Watches the first printing of this card. Visit a specific printing page to watch that treatment individually."
+                style={{ display: 'inline-flex' }}
+              >
+                <WatchButton
+                  tcgCardId={defaultPrinting.cardView.card.id}
+                  tcgPrintingId={defaultPrinting.printingView.printing.id}
+                  initialWatching={initialWatching}
+                  signedIn={Boolean(currentUser)}
+                  currentPathname={`/card/${slugifyCardName(bundle.name)}`}
+                />
+              </span>
+            ) : null}
+          </div>
+          {!currentUser && (
+            <p
+              style={{
+                margin: '-4px 0 0',
+                fontSize: 12,
+                color: 'var(--text-muted)',
+              }}
+            >
+              <Link
+                href={`/sign-in?returnTo=${encodeURIComponent(`/card/${slugifyCardName(bundle.name)}`)}`}
+                style={{ color: 'var(--text-muted)' }}
+              >
+                Sign in
+              </Link>{' '}
+              to add to collection or watchlist.
+            </p>
+          )}
 
           {/* Secondary affiliate CTA. Small size; long disclosure lives
               at the bottom of the page (EbayAffiliateDisclosure). */}
@@ -290,6 +376,7 @@ export default async function LogicalCardPage({
                   cardView={cardView}
                   printingView={printingView}
                   linkToPrinting
+                  currency={currency}
                 />
               ))}
             </div>
@@ -324,6 +411,19 @@ export default async function LogicalCardPage({
       />
 
       <Faq title={`FAQ — ${bundle.name}`} entries={cardFaqEntries} />
+
+      <CardInternalLinks
+        cardName={bundle.name}
+        moreFromSet={moreFromSet}
+        otherCharacterCards={otherCharacterCards}
+        sameRarity={sameRarityCards}
+        sameInk={sameInkCards}
+        setCode={heroCard.set?.code ?? null}
+        setName={heroCard.set?.name ?? null}
+        rarityLabel={heroCard.rarity.label !== 'Unknown' ? heroCard.rarity.label : null}
+        primaryInk={primaryInk}
+        isCharacter={isCharacter}
+      />
 
       <EbayAffiliateDisclosure />
     </div>

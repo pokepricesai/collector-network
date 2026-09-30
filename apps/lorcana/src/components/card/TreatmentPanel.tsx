@@ -3,6 +3,7 @@ import type { LcPrintingView, LcCardView } from '@/server/read';
 import { buildEbaySearchUrl } from '@/lib/lorcana/ebay';
 import { buildPrintingSlug } from '@/lib/lorcana/slug';
 import TreatmentPrice from './TreatmentPrice';
+import { DEFAULT_CURRENCY, type LorcanaCurrency } from '@/lib/currency';
 
 // A single treatment block — headline + price bucket + fingerprint +
 // eBay affiliate CTA. On the logical card page we render several of
@@ -13,10 +14,12 @@ export default function TreatmentPanel({
   cardView,
   printingView,
   linkToPrinting,
+  currency = DEFAULT_CURRENCY,
 }: {
   cardView: LcCardView;
   printingView: LcPrintingView;
   linkToPrinting: boolean;
+  currency?: LorcanaCurrency;
 }) {
   const { treatment, pricing, printing, set } = printingView;
   const setLabel = set?.code?.toUpperCase() ?? '—';
@@ -71,7 +74,7 @@ export default function TreatmentPanel({
         </div>
       </div>
 
-      <TreatmentPrice pricing={pricing} />
+      <TreatmentPrice pricing={pricing} currency={currency} />
 
       <div
         className="lc-engraved"

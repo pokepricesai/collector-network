@@ -4,6 +4,8 @@ import CardBoard from '@/components/home/CardBoard';
 import { canonicalFor } from '@/lib/seo';
 import Faq from '@/components/Faq';
 import { MARKET_ICONIC_FAQ } from '@/lib/faq-content';
+import { getLorcanaCurrency } from '@/lib/currency-server';
+import { CURRENCY_SOURCE_NAME } from '@/lib/currency';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -16,10 +18,12 @@ export const metadata: Metadata = {
 };
 
 export default async function IconicListPage() {
+  const currency = await getLorcanaCurrency();
   const tiles = await getPricedTiles({
     limit: 60,
     rarity: 'Iconic',
     cardCandidates: 40,
+    currency,
   });
 
   return (
@@ -33,7 +37,8 @@ export default async function IconicListPage() {
             <em>Fabled</em> (Set 9) and continued through{' '}
             <em>Whispers in the Well</em>, <em>Winterspell</em>,{' '}
             <em>Wilds Unknown</em> and <em>Attack of the Vine!</em> —
-            2 per set. Ranked by cheapest current USD retail.
+            2 per set. Ranked by highest current {CURRENCY_SOURCE_NAME[currency]}
+            {' '}retail ({currency}).
           </p>
         </div>
       </header>

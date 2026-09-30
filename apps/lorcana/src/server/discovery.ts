@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient, TcgCard, TcgPrinting, TcgSet } from '@collector-network/database';
 import { getRetailQuotesForPrintings, selectPreferredRetailQuote } from '@collector-network/market-data';
 import { getLorcanaClient, getLorcanaGameId } from './client';
+import { CURRENCY_SOURCE_KEY, DEFAULT_CURRENCY, type LorcanaCurrency } from '../lib/currency';
 
 // Discovery queries — the audit-derived surface that powers homepage,
 // market, Enchanted spotlight, ink pages, chase discovery. Every
@@ -114,6 +115,11 @@ interface DiscoveryQueryOpts {
   cardCandidates?: number;
   /** Only pick priced cards; hide the rest. */
   limit: number;
+  /** Which currency's native retail feed to rank against. USD uses
+   *  the tcggraph.tcgplayer source, EUR uses tcggraph.cardmarket. Never
+   *  FX-converted. Cards without a quote in the selected currency are
+   *  excluded (missing = "No current price"). */
+  currency?: LorcanaCurrency;
 }
 
 /** Pull the top-N most-valuable cards.
@@ -144,15 +150,23 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
   const supabase = getLorcanaClient();
   const gameId = await getLorcanaGameId(supabase);
 
-  // 1. Take a fat top-of-price slice from tcg_market_prices_current.
-  //    We over-fetch by ~20x the limit to leave headroom for outlier
-  //    exclusion and rarity/ink/set filtering downstream.
+  // Currency scoping. USD → tcggraph.tcgplayer, EUR → tcggraph.cardmarket.
+  // Never FX-converted, never cross-substituted.
+  const rankingCurrency: LorcanaCurrency = opts.currency ?? DEFAULT_CURRENCY;
+  const rankingSource = CURRENCY_SOURCE_KEY[rankingCurrency];
+
+  // 1. Take a fat top-of-price slice from tcg_market_prices_current,
+  //    filtered to the requested currency's native source. We over-fetch
+  //    by ~20x the limit to leave headroom for outlier exclusion and
+  //    rarity/ink/set filtering downstream.
   const sliceLimit = Math.max(200, opts.limit * 20);
   const priceQ = supabase
     .from('tcg_market_prices_current')
     .select('tcg_printing_id, price, currency, avg_30d, finish, list_type, source, region')
     .eq('game_id', gameId)
     .eq('list_type', 'retail')
+    .eq('source', rankingSource)
+    .eq('currency', rankingCurrency)
     .order('price', { ascending: false })
     .limit(sliceLimit);
   const { data: priceRowsRaw, error: priceErr } = await priceQ;
@@ -170,22 +184,7 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
   }
   const priceRows = priceRowsRaw as PriceRow[];
 
-  // 2. Pick a single dominant currency to rank against. Today's Lorcana
-  //    feed is single-currency (EUR) but we don't hardcode the choice —
-  //    we pick whichever currency has the most rows in this slice.
-  const currencyCounts = new Map<string, number>();
-  for (const r of priceRows) {
-    if (!r.currency) continue;
-    currencyCounts.set(r.currency, (currencyCounts.get(r.currency) ?? 0) + 1);
-  }
-  let rankingCurrency: string | null = null;
-  let bestCount = 0;
-  for (const [ccy, count] of currencyCounts) {
-    if (count > bestCount) { rankingCurrency = ccy; bestCount = count; }
-  }
-  if (!rankingCurrency) return [];
-
-  // 3. Filter to the dominant currency + apply the outlier guard.
+  // 2. Apply the outlier guard against the currency-scoped rows.
   //    Outlier rule: discard only if BOTH (price > 5x avg_30d) AND
   //    (avg_30d is a meaningful floor — >= 5 units in this currency).
   //    Legitimate scarce promos with thin trend history stay.
@@ -193,7 +192,6 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
   const OUTLIER_MULTIPLE = 5;   // 5x above trend
   const norm: { printingId: string; price: number; finish: string | null; source: string | null; region: string | null; currency: string }[] = [];
   for (const r of priceRows) {
-    if (r.currency !== rankingCurrency) continue;
     if (r.price == null || r.price <= 0) continue;
     if (
       r.avg_30d != null &&

@@ -31,7 +31,7 @@ export function SetMarketOverview({ market, setCode, setName }: Props) {
   const showsFullValue = market.coverage >= SET_VALUE_COVERAGE_THRESHOLD;
   const valueLabel = showsFullValue ? 'Set value' : 'Priced-card subtotal';
   const valueSublabel = showsFullValue
-    ? 'Estimated set value from cheapest-USD-per-card retail across every priced printing.'
+    ? `Estimated set value from cheapest-${market.currency}-per-card retail across every priced printing.`
     : `Subtotal for the ${market.pricedCount.toLocaleString()} priced cards. Coverage is below ${Math.round(SET_VALUE_COVERAGE_THRESHOLD * 100)}%, so this is not a whole-set estimate.`;
 
   return (
@@ -94,17 +94,19 @@ export function SetMarketOverview({ market, setCode, setName }: Props) {
         <MiniStat
           label="Unpriced"
           value={String(Math.max(0, market.eligibleCount - market.pricedCount))}
-          sub="No USD retail on any printing yet"
+          sub={`No ${market.currency} retail on any printing yet`}
         />
       </div>
 
       <details style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Methodology</summary>
         <p style={{ margin: '6px 0 0', lineHeight: 1.55 }}>
-          For each unique card in this set we take the cheapest current USD retail across all its
-          printings and sum those numbers. Foil premiums are deliberately excluded to keep the total
-          comparable across sets. Cards with no current USD retail on any printing are counted as
-          unpriced and reported separately.
+          For each unique card in this set we take the cheapest current
+          {' '}{market.currency} retail across all its printings and sum
+          those numbers. Foil premiums are deliberately excluded to keep the
+          total comparable across sets. Cards with no current {market.currency}
+          {' '}retail on any printing are counted as unpriced and reported
+          separately.
         </p>
       </details>
 

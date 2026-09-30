@@ -2,6 +2,7 @@ import 'server-only';
 import type { TcgCard } from '@collector-network/database';
 import { getLorcanaClient, getLorcanaGameId } from './client';
 import { getPricedTiles, type DiscoveryTile } from './discovery';
+import { DEFAULT_CURRENCY, type LorcanaCurrency } from '../lib/currency';
 
 // Server-side card finder. All filters land as URL query params so
 // results are shareable, indexable (once launched) and back-button
@@ -24,6 +25,11 @@ export interface FindFilters {
   set?: string | null;
   q?: string | null;
   sort?: 'price-desc' | 'price-asc' | 'name-asc' | null;
+  /** Optional min/max cutoffs on the currency-matched retail price.
+   *  Applied AFTER currency-scoping so the same numeric axis is used
+   *  as the sort. */
+  priceMin?: number | null;
+  priceMax?: number | null;
 }
 
 export interface FindResult {
@@ -68,7 +74,10 @@ function canonicalCardType(input: string | null | undefined): string | null {
   return CARD_TYPE_ALIASES[input.trim().toLowerCase()] ?? null;
 }
 
-export async function findCards(filters: FindFilters): Promise<FindResult> {
+export async function findCards(
+  filters: FindFilters,
+  currency: LorcanaCurrency = DEFAULT_CURRENCY,
+): Promise<FindResult> {
   const supabase = getLorcanaClient();
   const gameId = await getLorcanaGameId(supabase);
 
@@ -135,10 +144,12 @@ export async function findCards(filters: FindFilters): Promise<FindResult> {
 
   // Delegate pricing to getPricedTiles by feeding it the same filter
   // set — we already have candidate cards but this keeps the pricing
-  // pipeline in one place.
+  // pipeline in one place. Currency scopes the source retail feed so
+  // ranking is native, never FX-converted.
   const tiles = await getPricedTiles({
     limit: MAX_RESULTS,
     cardCandidates: Math.max(200, totalMatched),
+    currency,
     ...(rarity ? { rarity } : {}),
     ...(setId ? { setId } : {}),
     ...(ink ? { ink } : {}),
@@ -161,6 +172,23 @@ export async function findCards(filters: FindFilters): Promise<FindResult> {
         if (gd?.['inkable'] !== inkable) return false;
       }
       if (q && q.length >= 2 && !card.name.toLowerCase().includes(q.toLowerCase())) return false;
+      return true;
+    });
+  }
+
+  // Price min/max applied on the currency-matched tile price. Tiles
+  // that aren't priced in the selected currency simply don't exist
+  // here (already filtered upstream), so no silent fallback.
+  const priceMin = typeof filters.priceMin === 'number' && Number.isFinite(filters.priceMin)
+    ? filters.priceMin
+    : null;
+  const priceMax = typeof filters.priceMax === 'number' && Number.isFinite(filters.priceMax)
+    ? filters.priceMax
+    : null;
+  if (priceMin != null || priceMax != null) {
+    filtered = filtered.filter((t) => {
+      if (priceMin != null && t.priceUsd < priceMin) return false;
+      if (priceMax != null && t.priceUsd > priceMax) return false;
       return true;
     });
   }
@@ -191,6 +219,8 @@ export async function findCards(filters: FindFilters): Promise<FindResult> {
       set: filters.set?.toLowerCase() ?? null,
       q,
       sort: filters.sort ?? 'price-desc',
+      priceMin,
+      priceMax,
     },
   };
 }

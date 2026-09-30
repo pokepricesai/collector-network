@@ -3,6 +3,8 @@ import Link from 'next/link';
 import type { DiscoveryTile } from '@/server/discovery';
 import { pickCardImage } from '@/lib/lorcana/image';
 import { slugifyCardName } from '@/lib/lorcana/slug';
+import { formatPrice as formatCurrencyPrice } from '@/lib/lorcana/format-price';
+import { CURRENCY_SOURCE_NAME, DEFAULT_CURRENCY, type LorcanaCurrency } from '@/lib/currency';
 
 // Homepage hero — rebuilt during the Lorcana-only launch blocker pass.
 //
@@ -27,6 +29,7 @@ interface HeroProps {
   setCount: number;
   enchantedCount: number;
   mostValuable?: DiscoveryTile[];
+  currency?: LorcanaCurrency;
 }
 
 function fmt(n: number): string {
@@ -34,15 +37,9 @@ function fmt(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-function money(usd: number, eur: number | null): string {
-  if (eur != null) {
-    return `€${eur.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-  }
-  return `$${usd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-}
-
 export default function Hero({
   cardCount, setCount, enchantedCount, mostValuable = [],
+  currency = DEFAULT_CURRENCY,
 }: HeroProps) {
   const topCard = mostValuable[0];
   return (
@@ -126,7 +123,7 @@ export default function Hero({
         {/* ── RIGHT: real-data value module or collection CTA ── */}
         <aside style={{ minWidth: 0 }}>
           {topCard ? (
-            <TopValueCard tile={topCard} />
+            <TopValueCard tile={topCard} currency={currency} />
           ) : (
             <CollectionCta />
           )}
@@ -136,7 +133,7 @@ export default function Hero({
   );
 }
 
-function TopValueCard({ tile }: { tile: DiscoveryTile }) {
+function TopValueCard({ tile, currency }: { tile: DiscoveryTile; currency: LorcanaCurrency }) {
   return (
     <Link
       href={`/card/${slugifyCardName(tile.name)}`}
@@ -195,10 +192,10 @@ function TopValueCard({ tile }: { tile: DiscoveryTile }) {
               color: 'var(--text-strong)',
               letterSpacing: '-0.02em',
             }}>
-              {money(tile.priceUsd, tile.priceEur)}
+              {formatCurrencyPrice(tile.priceUsd, tile.priceCurrency || currency)}
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              live retail · Cardmarket EU
+              live retail · {CURRENCY_SOURCE_NAME[currency]}
             </span>
           </div>
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>

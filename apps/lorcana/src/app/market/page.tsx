@@ -5,6 +5,8 @@ import CardBoard from '@/components/home/CardBoard';
 import Faq from '@/components/Faq';
 import { MARKET_FAQ } from '@/lib/faq-content';
 import { SITE_URL } from '@/lib/site-url';
+import { getLorcanaCurrency } from '@/lib/currency-server';
+import { CURRENCY_SOURCE_NAME } from '@/lib/currency';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -22,11 +24,12 @@ export const metadata: Metadata = {
 // modules instead and disclose the missing history explicitly.
 
 export default async function MarketPage() {
+  const currency = await getLorcanaCurrency();
   const [mostValuable, enchanted, iconic, legendary] = await Promise.all([
-    getPricedTiles({ limit: 18, cardCandidates: 500 }),
-    getPricedTiles({ limit: 12, rarity: 'Enchanted', cardCandidates: 240 }),
-    getPricedTiles({ limit: 8, rarity: 'Iconic', cardCandidates: 30 }),
-    getPricedTiles({ limit: 8, rarity: 'Legendary', cardCandidates: 200 }),
+    getPricedTiles({ limit: 18, cardCandidates: 500, currency }),
+    getPricedTiles({ limit: 12, rarity: 'Enchanted', cardCandidates: 240, currency }),
+    getPricedTiles({ limit: 8, rarity: 'Iconic', cardCandidates: 30, currency }),
+    getPricedTiles({ limit: 8, rarity: 'Legendary', cardCandidates: 200, currency }),
   ]);
 
   return (
@@ -38,9 +41,10 @@ export default async function MarketPage() {
             Lorcana at a glance
           </h1>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.55, maxWidth: 640 }}>
-            Value-ranked, priced individually. Cardmarket EUR and TCGplayer
-            USD refreshed daily. Every card links through to its full
-            treatment map.
+            Value-ranked, priced individually. Currently ranking on{' '}
+            {CURRENCY_SOURCE_NAME[currency]} ({currency}). Toggle currency
+            in the header to swap between TCGplayer USD and Cardmarket EUR.
+            Never FX-converted.
           </p>
         </div>
       </header>

@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { getCurrentUser, createServerSupabase } from '@collector-network/auth';
 import { listCollectionForCurrentUser } from '../../server/collection';
 import { listWatchlistForCurrentUser } from '../../server/watchlist';
+import { countBaseSlotsForSet } from '../../server/set-completion';
 import {
   writeSnapshotIfDue,
   getCollectionValueHistory,
@@ -297,16 +298,13 @@ async function countCardsPerSet(
   supabase: Awaited<ReturnType<typeof createServerSupabase>>,
   setIds: readonly string[],
 ): Promise<Map<string, number>> {
+  // Uses the canonical Lorcana base-slot rule from
+  // set-completion.ts. One HEAD count per set — small N (< 25
+  // typically). Keeps the query simple and avoids a group-by RPC.
   const out = new Map<string, number>();
-  // One HEAD count per set — small N (< 20 typically). Keeps the
-  // query simple and avoids a group-by RPC.
   await Promise.all(
     setIds.map(async (setId) => {
-      const { count } = await supabase
-        .from('tcg_cards')
-        .select('id', { count: 'exact', head: true })
-        .eq('set_id', setId);
-      out.set(setId, count ?? 0);
+      out.set(setId, await countBaseSlotsForSet(supabase, setId));
     }),
   );
   return out;

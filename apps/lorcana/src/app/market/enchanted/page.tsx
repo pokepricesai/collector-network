@@ -4,6 +4,8 @@ import CardBoard from '@/components/home/CardBoard';
 import { canonicalFor } from '@/lib/seo';
 import Faq from '@/components/Faq';
 import { MARKET_ENCHANTED_FAQ } from '@/lib/faq-content';
+import { getLorcanaCurrency } from '@/lib/currency-server';
+import { CURRENCY_SOURCE_NAME } from '@/lib/currency';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -16,10 +18,12 @@ export const metadata: Metadata = {
 };
 
 export default async function EnchantedListPage() {
+  const currency = await getLorcanaCurrency();
   const tiles = await getPricedTiles({
     limit: 300,
     rarity: 'Enchanted',
     cardCandidates: 400,
+    currency,
   });
 
   return (
@@ -31,7 +35,8 @@ export default async function EnchantedListPage() {
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.55, maxWidth: 640 }}>
             {tiles.length > 0 ? (
               <>Showing {tiles.length} priced Enchanted cards ordered by
-              cheapest current USD retail across their printings.</>
+              highest current {CURRENCY_SOURCE_NAME[currency]} retail
+              ({currency}) across their printings.</>
             ) : (
               <>Enchanted price data is loading. Check back shortly.</>
             )}

@@ -17,6 +17,7 @@ import { getPrintingHistory } from '@/server/history';
 import { getGradedRowsForAnchor } from '@/server/graded';
 import type { LcCardView, LcPrintingView } from '@/server/read';
 import type { TcgCard } from '@collector-network/database';
+import { getLorcanaCurrency } from '@/lib/currency-server';
 
 // Specific-printing page. URL: /set/{code}/card/{cn-slug}. Resolves to
 // a single tcg_cards row + all its treatment printings from that set,
@@ -103,6 +104,7 @@ export default async function PrintingPage({
   if (!resolved) notFound();
   const bundle = await getCardBundleByCardId(resolved.cardId);
   if (!bundle) notFound();
+  const currency = await getLorcanaCurrency();
 
   // Filter to just the printings that live in *this* set, so the page
   // is set-specific. The /card/[slug] URL is where every set gets shown.
@@ -298,6 +300,7 @@ export default async function PrintingPage({
                   cardView={cardView}
                   printingView={printingView}
                   linkToPrinting={false}
+                  currency={currency}
                 />
               ))
             )}

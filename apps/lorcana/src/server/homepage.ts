@@ -2,6 +2,7 @@ import 'server-only';
 import { listRecentSetsWithCounts, type LcSetSummary } from './browse';
 import { getPricedTiles, type DiscoveryTile } from './discovery';
 import { getLorcanaClient, getLorcanaGameId } from './client';
+import { DEFAULT_CURRENCY, type LorcanaCurrency } from '../lib/currency';
 
 // Homepage payload assembly.
 //
@@ -31,15 +32,17 @@ export interface HomepagePayload {
   errors: string[];
 }
 
-export async function getHomepageData(): Promise<HomepagePayload> {
+export async function getHomepageData(
+  currency: LorcanaCurrency = DEFAULT_CURRENCY,
+): Promise<HomepagePayload> {
   const errors: string[] = [];
 
   const [statsR, setsR, valueR, enchR, iconR] = await Promise.allSettled([
     getHomepageStats(),
     listRecentSetsWithCounts(6),
-    getPricedTiles({ limit: 12, cardCandidates: 500 }),
-    getPricedTiles({ limit: 6, rarity: 'Enchanted', cardCandidates: 260 }),
-    getPricedTiles({ limit: 4, rarity: 'Iconic', cardCandidates: 30 }),
+    getPricedTiles({ limit: 12, cardCandidates: 500, currency }),
+    getPricedTiles({ limit: 6, rarity: 'Enchanted', cardCandidates: 260, currency }),
+    getPricedTiles({ limit: 4, rarity: 'Iconic', cardCandidates: 30, currency }),
   ]);
 
   const stats = statsR.status === 'fulfilled'

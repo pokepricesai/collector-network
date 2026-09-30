@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getCurrentUser } from '@collector-network/auth';
 import { getSetBundle } from '@/server/browse';
 import { getSetMarketForLorcana } from '@/server/set-market';
+import { getSetCompletionForCurrentUser } from '@/server/set-completion';
 import {
   getRarityDistributionForSet,
   getFinishSplitForSet,
@@ -20,7 +22,10 @@ import { SetGridClient, type SetGridEntry } from '@/components/SetGridClient';
 import RarityDistribution from '@/components/set/RarityDistribution';
 import FinishSplitPanel from '@/components/set/FinishSplitPanel';
 import ChaseCounts from '@/components/set/ChaseCounts';
+import SetTaxonomyLinks from '@/components/set/SetTaxonomyLinks';
+import { summariseSetTaxonomy } from '@/server/internal-links';
 import type { TcgCard } from '@collector-network/database';
+import { getLorcanaCurrency } from '@/lib/currency-server';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -93,6 +98,94 @@ export async function generateMetadata({
   };
 }
 
+function SetCompletionPanel({
+  signedIn,
+  completion,
+  setCode,
+  setName,
+}: {
+  signedIn: boolean;
+  completion: { owned: number; total: number; missingSample: unknown[] } | null;
+  setCode: string;
+  setName: string;
+}) {
+  const panelStyle: React.CSSProperties = {
+    padding: '14px 16px',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 14,
+    marginBottom: 20,
+    display: 'grid',
+    gap: 10,
+  };
+  if (!signedIn) {
+    return (
+      <div style={panelStyle}>
+        <div className="label-mono">Your collection</div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+            Sign in to track your collection on this set.
+          </span>
+          <Link
+            href={`/sign-in?returnTo=${encodeURIComponent(`/set/${setCode.toLowerCase()}`)}`}
+            className="btn btn-sm btn-primary"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  if (!completion || completion.total === 0) return null;
+  const { owned, total, missingSample } = completion;
+  const pct = Math.round((owned / Math.max(total, 1)) * 100);
+  const missingCount = total - owned;
+  return (
+    <div style={panelStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <div className="label-mono">Your collection · {setName}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {missingCount > 0 ? `${missingCount} missing` : 'Complete'}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 22, fontWeight: 800, color: 'var(--text-strong)' }}>
+          {owned.toLocaleString()} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>/ {total.toLocaleString()}</span>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{pct}% complete</div>
+      </div>
+      <div
+        aria-hidden
+        style={{
+          height: 8,
+          borderRadius: 999,
+          background: 'var(--surface-inset, rgba(0,0,0,0.06))',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${pct}%`,
+            background: 'var(--accent-2, #6A43BE)',
+            transition: 'width 200ms ease',
+          }}
+        />
+      </div>
+      {missingCount > 0 && missingSample.length > 0 && (
+        <div style={{ fontSize: 12 }}>
+          <Link
+            href={`/collection?set=${encodeURIComponent(setCode.toLowerCase())}&missing=1`}
+            style={{ color: 'var(--accent-2, #6A43BE)', textDecoration: 'none', fontWeight: 600 }}
+          >
+            See missing ({missingCount})
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default async function SetPage({
   params,
 }: {
@@ -112,12 +205,18 @@ export default async function SetPage({
   }
   const uniqueNames = [...byName.keys()].sort((a, b) => a.localeCompare(b));
 
-  // Fetch market overview + rarity distribution + finish split in
-  // parallel. Each is a small server helper — no shared client cost.
-  const [market, rarityRows, finishSplit] = await Promise.all([
-    getSetMarketForLorcana(set.id, cards, { topN: 5 }),
+  // Fetch market overview + rarity distribution + finish split +
+  // (signed-in) set-completion in parallel. Each is a small server
+  // helper — no shared client cost.
+  const user = await getCurrentUser();
+  const currency = await getLorcanaCurrency();
+  const [market, rarityRows, finishSplit, completion] = await Promise.all([
+    getSetMarketForLorcana(set.id, cards, { topN: 5, currency }),
     getRarityDistributionForSet(set.id, cards),
     getFinishSplitForSet(cards),
+    user
+      ? getSetCompletionForCurrentUser({ setId: set.id }).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const rarityCounts: Record<string, number> = {};
@@ -125,6 +224,10 @@ export default async function SetPage({
     const r = c.rarity ?? 'Unknown';
     rarityCounts[r] = (rarityCounts[r] ?? 0) + 1;
   }
+
+  // In-memory taxonomy summary (characters / inks / rarities) — used
+  // by SetTaxonomyLinks for the crawlable "Explore this set" block.
+  const taxonomy = summariseSetTaxonomy(cards);
 
   const priceLookup = new Map<string, number>();
   for (const t of market.mostValuable) priceLookup.set(t.cardId, t.priceUsd);
@@ -216,7 +319,7 @@ export default async function SetPage({
             <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{uniqueNames.length.toLocaleString()}</strong> unique cards</span>
             <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{cards.length.toLocaleString()}</strong> total variants</span>
             {market.pricedCount > 0 && (
-              <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{market.pricedCount.toLocaleString()}</strong> with USD retail</span>
+              <span><strong style={{ color: 'var(--text-strong)', fontFamily: 'ui-monospace, monospace' }}>{market.pricedCount.toLocaleString()}</strong> with {market.currency} retail</span>
             )}
             {set.released_at && <span>Released {formatReleased(set.released_at)}</span>}
           </div>
@@ -246,6 +349,13 @@ export default async function SetPage({
         </div>
       ) : (
         <>
+          <SetCompletionPanel
+            signedIn={!!user}
+            completion={completion}
+            setCode={set.code}
+            setName={set.name}
+          />
+
           <SetMarketOverview market={market} setCode={set.code} setName={set.name} />
 
           <div style={{
@@ -263,6 +373,12 @@ export default async function SetPage({
           </div>
 
           <SetGridClient entries={entries} />
+
+          <SetTaxonomyLinks
+            characters={taxonomy.characters}
+            inks={taxonomy.inks}
+            rarities={taxonomy.rarities}
+          />
 
           <Faq
             title={`FAQ — ${set.name}`}

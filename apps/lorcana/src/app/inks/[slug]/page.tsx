@@ -7,6 +7,7 @@ import CardBoard from '@/components/home/CardBoard';
 import { canonicalFor } from '@/lib/seo';
 import Faq from '@/components/Faq';
 import { inkFaq } from '@/lib/faq-content';
+import { getLorcanaCurrency } from '@/lib/currency-server';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -43,11 +44,12 @@ export default async function InkDetail({
   const { slug } = await params;
   if (!isLcInk(slug)) notFound();
   const label = LC_INK_LABEL[slug];
+  const currency = await getLorcanaCurrency();
 
   const [mostValuable, enchanted, legendary] = await Promise.all([
-    getPricedTiles({ limit: 12, ink: slug, cardCandidates: 500 }),
-    getPricedTiles({ limit: 6, ink: slug, rarity: 'Enchanted', cardCandidates: 260 }),
-    getPricedTiles({ limit: 6, ink: slug, rarity: 'Legendary', cardCandidates: 200 }),
+    getPricedTiles({ limit: 12, ink: slug, cardCandidates: 500, currency }),
+    getPricedTiles({ limit: 6, ink: slug, rarity: 'Enchanted', cardCandidates: 260, currency }),
+    getPricedTiles({ limit: 6, ink: slug, rarity: 'Legendary', cardCandidates: 200, currency }),
   ]);
 
   return (

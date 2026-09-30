@@ -1,11 +1,18 @@
 import Link from 'next/link';
 import type { DiscoveryTile } from '@/server/discovery';
 import CardBoard from './CardBoard';
+import { CURRENCY_SOURCE_NAME, DEFAULT_CURRENCY, type LorcanaCurrency } from '@/lib/currency';
 
 // "Most valuable Lorcana cards" — the network-wide top-value board.
 // Anchors browse activity for collectors landing cold on the homepage.
 
-export default function MostValuable({ tiles }: { tiles: DiscoveryTile[] }) {
+export default function MostValuable({
+  tiles,
+  currency = DEFAULT_CURRENCY,
+}: {
+  tiles: DiscoveryTile[];
+  currency?: LorcanaCurrency;
+}) {
   if (tiles.length === 0) return null;
   return (
     <section className="lc-section">
@@ -31,8 +38,9 @@ export default function MostValuable({ tiles }: { tiles: DiscoveryTile[] }) {
           color: 'var(--text-muted)',
           maxWidth: 620,
         }}>
-          Ranked by the cheapest current USD retail across every printing
-          of the card. Cardmarket EUR shown on the card page.
+          Ranked by highest current {currency} retail on {CURRENCY_SOURCE_NAME[currency]}
+          {' '}across every printing of the card. Toggle currency in the header
+          to swap the ranking market.
         </p>
       </div>
     </section>

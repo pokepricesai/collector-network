@@ -7,6 +7,8 @@ import { findCards, type FindFilters } from '@/server/find';
 import CardBoard from '@/components/home/CardBoard';
 import Faq from '@/components/Faq';
 import { CARD_FINDER_FAQ } from '@/lib/faq-content';
+import { getLorcanaCurrency } from '@/lib/currency-server';
+import { CURRENCY_SOURCE_NAME, CURRENCY_SYMBOL } from '@/lib/currency';
 
 export const revalidate = 900;
 export const dynamic = 'force-dynamic';
@@ -24,11 +26,18 @@ const RARITY_OPTIONS = [
 ] as const;
 
 interface Props {
-  searchParams: Promise<Partial<Record<keyof FindFilters, string>>>;
+  searchParams: Promise<Partial<Record<keyof FindFilters | 'priceMin' | 'priceMax', string>>>;
+}
+
+function parsePriceParam(v: string | undefined): number | null {
+  if (!v) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 export default async function CardFinderPage({ searchParams }: Props) {
   const raw = await searchParams;
+  const currency = await getLorcanaCurrency();
   const filters: FindFilters = {
     ink: raw.ink ?? null,
     rarity: raw.rarity ?? null,
@@ -39,12 +48,14 @@ export default async function CardFinderPage({ searchParams }: Props) {
     set: raw.set ?? null,
     q: raw.q ?? null,
     sort: (raw.sort as FindFilters['sort']) ?? 'price-desc',
+    priceMin: parsePriceParam(raw.priceMin),
+    priceMax: parsePriceParam(raw.priceMax),
   };
 
   // Default-to-all: never gate on "user must pick a filter first".
   // Every visit renders the full priced catalogue and filters narrow.
   const anyFilter = Object.entries(filters).some(([k, v]) => k !== 'sort' && v != null && v !== '');
-  const result = await findCards(filters);
+  const result = await findCards(filters, currency);
 
   return (
     <div className="lc-container lc-section">
@@ -57,8 +68,9 @@ export default async function CardFinderPage({ searchParams }: Props) {
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, maxWidth: 640, lineHeight: 1.55 }}>
             The full catalogue is here. Combine ink, rarity, card type
             and inkability to narrow it — or just search by name. Results
-            ranked by highest current retail across every printing by
-            default.
+            ranked by highest current {CURRENCY_SOURCE_NAME[currency]} retail
+            ({currency}) by default. Toggle currency in the header to swap
+            the ranking market.
           </p>
         </div>
       </header>
@@ -105,6 +117,28 @@ export default async function CardFinderPage({ searchParams }: Props) {
               <option value="false">Uninkable</option>
             </select>
           </Field>
+          <Field label={`Min price (${CURRENCY_SYMBOL[currency]})`}>
+            <input
+              name="priceMin"
+              type="number"
+              min={0}
+              step="0.01"
+              defaultValue={filters.priceMin ?? ''}
+              placeholder="0"
+              className="lc-input"
+            />
+          </Field>
+          <Field label={`Max price (${CURRENCY_SYMBOL[currency]})`}>
+            <input
+              name="priceMax"
+              type="number"
+              min={0}
+              step="0.01"
+              defaultValue={filters.priceMax ?? ''}
+              placeholder="Any"
+              className="lc-input"
+            />
+          </Field>
           <Field label="Sort by">
             <select name="sort" defaultValue={filters.sort ?? 'price-desc'} className="lc-input">
               <option value="price-desc">Price — high to low</option>
@@ -137,6 +171,16 @@ export default async function CardFinderPage({ searchParams }: Props) {
           {filters.inkable && <span className="chip" style={{ fontSize: 12 }}>{filters.inkable === 'true' ? 'Inkable' : 'Uninkable'}</span>}
           {filters.set && <span className="chip" style={{ fontSize: 12 }}>Set: {filters.set.toUpperCase()}</span>}
           {filters.q && <span className="chip" style={{ fontSize: 12 }}>"{filters.q}"</span>}
+          {filters.priceMin != null && (
+            <span className="chip" style={{ fontSize: 12 }}>
+              Min: {CURRENCY_SYMBOL[currency]}{filters.priceMin}
+            </span>
+          )}
+          {filters.priceMax != null && (
+            <span className="chip" style={{ fontSize: 12 }}>
+              Max: {CURRENCY_SYMBOL[currency]}{filters.priceMax}
+            </span>
+          )}
         </div>
       )}
 
