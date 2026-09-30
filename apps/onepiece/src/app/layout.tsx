@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/next';
 import { GoogleAnalytics } from '@collector-network/analytics';
 import './globals.css';
@@ -68,13 +68,6 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: SITE_URL },
   robots: SITE_LAUNCHED ? LAUNCHED_ROBOTS : PRE_LAUNCH_ROBOTS,
-  // Impact.com site-verification tag for the TCG affiliate programme.
-  // Emitted once from the root layout so every public route inherits
-  // it via Next's Metadata system — no chance of duplication and no
-  // interaction with the NOINDEX gate above.
-  other: {
-    'impact-site-verification': 'f040a772-5104-43d8-b353-ba08c8f19d1e',
-  },
 };
 
 // Next 15 pulls viewport out of metadata; without this every page ships
@@ -92,6 +85,14 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en">
       <head>
+        {/* Impact.com TCG affiliate site-verification tag. Emitted
+            verbatim per Impact's snippet — they read the `value`
+            attribute, not the `content` attribute Next's Metadata API
+            would produce. Once, in the root <head>, so it inherits to
+            every public route without duplication and without touching
+            the NOINDEX robots gate. Cast to any because React's
+            HTMLMetaElement types only declare `content`. */}
+        <meta {...({ name: 'impact-site-verification', value: 'f040a772-5104-43d8-b353-ba08c8f19d1e' } as HTMLAttributes<HTMLMetaElement>)} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
