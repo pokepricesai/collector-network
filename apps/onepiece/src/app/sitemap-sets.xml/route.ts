@@ -14,15 +14,24 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const sets = await listSetsWithCounts();
-  const items = sets.map((s) => {
-    const lastmod = s.set.updated_at ?? s.set.released_at ?? BUILD_ISO;
-    return {
-      url: `${SITE_ORIGIN}/set/${encodeURIComponent(s.set.code.toLowerCase())}`,
-      lastmod: safeIso(lastmod),
-      priority: '0.75',
-      changefreq: 'weekly',
-    };
-  });
+  const items = sets
+    // Skip sets whose code carries whitespace or which have zero
+    // cards ingested — the /set/[slug] resolver 404s on percent-
+    // encoded whitespace (e.g. "ST01 PRE" is a placeholder). Keeping
+    // them in the sitemap only feeds Googlebot 404s.
+    .filter((s) => {
+      const code = (s.set.code ?? '').trim();
+      return code.length > 0 && !/\s/.test(code) && s.variantCount > 0;
+    })
+    .map((s) => {
+      const lastmod = s.set.updated_at ?? s.set.released_at ?? BUILD_ISO;
+      return {
+        url: `${SITE_ORIGIN}/set/${encodeURIComponent(s.set.code.toLowerCase())}`,
+        lastmod: safeIso(lastmod),
+        priority: '0.75',
+        changefreq: 'weekly',
+      };
+    });
 
   const urls = items
     .map(
