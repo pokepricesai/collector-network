@@ -24,6 +24,12 @@ import styles from './CardFinder.module.css';
 import { FilterPanel } from './FilterPanel';
 
 export const revalidate = 900;
+//  The RPC-backed price ranker needs ~11s cold + scan ~5s + hydrate
+//  ~2s = ~18s worst case in a fresh Lambda region. Vercel's default
+//  serverless maxDuration on Hobby is 10s, on Pro 300s. Setting an
+//  explicit maxDuration keeps the ceiling visible and gives the safe()
+//  wrapper below plenty of headroom.
+export const maxDuration = 60;
 
 const SITE_URL = siteUrl();
 
@@ -77,13 +83,15 @@ export default async function CardFinderPage({ searchParams }: PageProps) {
   const currency = await getYgoCurrency();
   const filters = { ...enrichWithSmartQuery(rawFilters), currency };
   const [result, rarityOptionsResult] = await Promise.all([
-    //  25s cap — the cold price-first ranker (large-set path)
-    //  pages ~44k tcg_market_prices_current rows for the current
-    //  source+currency; on cold cache with 60 chunks * ~200ms
-    //  round-trips this is ~15-18s. Once cached (MARKET_SHORT TTL),
-    //  the same request returns in tens of ms. 15s was too tight
-    //  for the very first hit per (source, currency, direction).
-    safe('card-finder', () => runYugiohCardFinder(filters), { timeoutMs: 25_000 }),
+    //  40s cap — the cold price-first ranker (large-set path)
+    //  calls yugioh_rank_identities_by_price RPC 14 times to page
+    //  the full ~14k-identity YGO catalogue at ~800ms per call,
+    //  which combined with the scan (~5s) and cold Lambda spin-up
+    //  (~2s) runs ~18-25s in the worst case. Once cached
+    //  (MARKET_SHORT TTL), the same request returns in tens of ms.
+    //  Only affects first hit per (source, currency, direction);
+    //  hourly prewarm normally beats real users to the cold path.
+    safe('card-finder', () => runYugiohCardFinder(filters), { timeoutMs: 40_000 }),
     safe('card-finder-rarity-options', () => listYugiohRarityFilterOptions(), {
       timeoutMs: 5_000,
     }),
