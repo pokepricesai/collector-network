@@ -26,12 +26,13 @@
 //
 // Price filter and price sort. These need every candidate
 // identity's price. Two regimes:
-//   - Candidate set ≤ IDENTITY_PRICE_CAP (3000): fetch the current
-//     retail across every representative printing (batched at 200
-//     IDs per query, ≤ 15 round-trips). Sort/filter globally.
-//   - Candidate set > IDENTITY_PRICE_CAP: refuse price sort / filter
-//     and surface a friendly "add a filter" note. Never silently
-//     apply a partial price sort.
+//   - Candidate set ≤ IDENTITY_PRICE_CAP: fan out per-identity to
+//     tcg_market_prices_current. Cheap and lets us keep the full
+//     RetailQuote objects for tile rendering.
+//   - Candidate set > IDENTITY_PRICE_CAP: use the price-first ranker
+//     in ./price-ranking.ts — scan the price table directly ORDER BY
+//     price and project identities from that ordering. Full-catalogue
+//     price sort works with no silent alphabetical fallback.
 //
 // Attribution invariant preserved: only retail is queried for price
 // (retail is printing-scoped by nature). Graded + card-scoped never
@@ -54,6 +55,12 @@ import type { FinderFilters, FinderSort } from '../lib/finder-filters';
 import { defaultSort } from '../lib/finder-filters';
 import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from './cache';
 import { getYugiohClient } from './read';
+import {
+  priceSortSourceFor,
+  rankIdentitiesByPrice,
+  type PriceRankCurrency,
+  type PriceRankDirection,
+} from './price-ranking';
 
 const YGO_GAME_ID = 'ygo';
 
@@ -95,8 +102,10 @@ export interface FinderResultItem {
 }
 
 export type PriceCapability =
-  | 'ok'                 // price filter/sort was applied globally
-  | 'refused-large'      // set > IDENTITY_PRICE_CAP; refused
+  | 'ok'                 // small set: RetailQuote maps populated globally
+  | 'ok-ranked'          // large set: identities ordered by price via
+                         // price-ranking, but RetailQuote maps are
+                         // empty — per-page hydration populates them
   | 'not-requested';     // no price filter/sort involved
 
 export interface FinderResult {
@@ -229,9 +238,12 @@ async function _runFinderScan(
   let priceMs = 0;
 
   if (wantsGlobalPrice) {
-    if (identities.length > IDENTITY_PRICE_CAP) {
-      priceCapability = 'refused-large';
-    } else {
+    //  Small-set path — fan out per-identity price lookups. Cheap
+    //  enough for ≤ IDENTITY_PRICE_CAP identities and gives us the
+    //  quote objects (source, updatedAt, priceLow, …) that tiles
+    //  render. Kept intact for the filtered case where the identity
+    //  set is already narrow.
+    if (identities.length <= IDENTITY_PRICE_CAP) {
       priceCapability = 'ok';
       const priceStart = Date.now();
       const priced = await priceEveryIdentity(supabase, identities);
@@ -267,6 +279,64 @@ async function _runFinderScan(
             (priceMap.get(a.representativeCardId)?.price ?? -Infinity),
         );
       }
+    } else {
+      //  Large-set path — price-first ranking. Rather than fan out
+      //  from 14k identities to 44k printings (which used to trip
+      //  timeouts and forced the old alphabetical fallback), scan
+      //  tcg_market_prices_current directly ORDER BY price and
+      //  intersect / project the ranking back onto the identity set.
+      //  See ./price-ranking.ts for the mechanics.
+      priceCapability = 'ok-ranked';
+      const priceStart = Date.now();
+      const currencyRank: PriceRankCurrency =
+        filters.currency === 'EUR' ? 'EUR' : 'USD';
+      const source = priceSortSourceFor(currencyRank);
+      const direction: PriceRankDirection =
+        sort === 'price-asc' ? 'asc' : 'desc';
+      const rankedList = await rankIdentitiesByPrice(source, currencyRank, direction);
+      priceMs = Date.now() - priceStart;
+
+      //  Build lookup structures. For filtering we need to know each
+      //  identity's ranked price; for sorting we need position.
+      const priceByIdentity = new Map<string, number>();
+      const rankByIdentity = new Map<string, number>();
+      for (let i = 0; i < rankedList.length; i++) {
+        const r = rankedList[i]!;
+        priceByIdentity.set(r.identityKey, r.price);
+        rankByIdentity.set(r.identityKey, i);
+      }
+
+      //  priceMin / priceMax filter: drop identities whose ranked
+      //  price falls outside the requested window. Identities with
+      //  no price in the selected source are always dropped because
+      //  "min $10" cannot honestly include an unpriced card.
+      if (filters.priceMin != null || filters.priceMax != null) {
+        identities = identities.filter((id) => {
+          const p = priceByIdentity.get(id.identityKey);
+          if (p == null) return false;
+          if (filters.priceMin != null && p < filters.priceMin) return false;
+          if (filters.priceMax != null && p > filters.priceMax) return false;
+          return true;
+        });
+      }
+
+      //  Sort identities by ranked position. Identities without a
+      //  ranked price go to the END of the list for both directions
+      //  — that matches the documented behaviour: "no selected-
+      //  market price should come after priced cards for price-desc"
+      //  and, for price-asc, sinking rather than falsely appearing
+      //  as the cheapest.
+      const NO_PRICE_RANK = Number.MAX_SAFE_INTEGER;
+      identities = identities.slice().sort((a, b) => {
+        const ra = rankByIdentity.get(a.identityKey) ?? NO_PRICE_RANK;
+        const rb = rankByIdentity.get(b.identityKey) ?? NO_PRICE_RANK;
+        return ra - rb;
+      });
+
+      //  We do NOT populate pricesUsd / pricesEur here — those hold
+      //  RetailQuote objects, which the per-page hydration step
+      //  fetches for the current page's identities anyway. Skipping
+      //  the global RetailQuote fetch is what makes this path fast.
     }
   }
 
@@ -337,9 +407,11 @@ async function _runFinder(filtersJson: string): Promise<FinderResult> {
     printingsByCardId.set(p.tcg_card_id, bucket);
   }
 
-  // If the scan step did NOT price everything (either not-requested or
-  // refused-large), do a per-page price fetch so tiles still show a
-  // number.
+  // If the scan step did NOT hydrate the RetailQuote maps, do a
+  // per-page price fetch so tiles still show a number. Applies to:
+  //   - 'not-requested': no price sort/filter, no maps built
+  //   - 'ok-ranked': large-set price-first ranking, maps intentionally
+  //                  empty for cost reasons
   let priceUsd = bundle.pricesUsd;
   let priceEur = bundle.pricesEur;
   if (bundle.priceCapability !== 'ok') {

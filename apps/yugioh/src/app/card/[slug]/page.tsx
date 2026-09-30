@@ -29,6 +29,8 @@ import { buildYugiohEbayLink } from '../../../lib/ebay';
 import AskYGOPricesPanel from '../../../components/card/AskYGOPricesPanel';
 import Faq from '../../../components/Faq';
 import EbayAffiliateDisclosure from '../../../components/EbayAffiliateDisclosure';
+import { StaleSourceNotice } from '../../../components/StaleSourceNotice';
+import { getYgoCurrency } from '../../../lib/currency-server';
 import { cardFaq } from '../../../lib/faq-content';
 import styles from '../../../components/card/CardIdentity.module.css';
 
@@ -77,7 +79,10 @@ export const revalidate = 1800;
 
 export default async function LogicalCardPage({ params }: Props) {
   const { slug } = await params;
-  const data = await getYugiohLogicalCardBySlug(slug);
+  const [data, currency] = await Promise.all([
+    getYugiohLogicalCardBySlug(slug),
+    getYgoCurrency(),
+  ]);
   if (!data) notFound();
 
   const jsonLd = buildCardJsonLd(data, siteUrl());
@@ -307,6 +312,12 @@ export default async function LogicalCardPage({ params }: Props) {
               Range across every indexed printing. Currency is never converted.
             </p>
           </header>
+          {currency === 'USD' && (
+            <StaleSourceNotice source="tcggraph.tcgplayer" />
+          )}
+          {currency === 'EUR' && (
+            <StaleSourceNotice source="tcggraph.cardmarket" />
+          )}
           <div className={styles.pricingGrid}>
             <Surface variant="market" className={styles.priceCell}>
               <span className={styles.priceLabel}>USD retail range</span>

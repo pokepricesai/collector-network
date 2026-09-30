@@ -4,7 +4,9 @@ import { Footer } from '../../components/Footer';
 import { Header } from '../../components/Header';
 import { Surface } from '../../components/Surface';
 import { GradedRankingTable, RetailRankingTable } from '../../components/market/MarketRankingTable';
+import { StaleSourceNotice } from '../../components/StaleSourceNotice';
 import { siteUrl } from '../../lib/site-url';
+import { getYgoCurrency } from '../../lib/currency-server';
 import { getYugiohMarketHomeData } from '../../server/market';
 import Faq from '../../components/Faq';
 import { MARKET_FAQ } from '../../lib/faq-content';
@@ -22,7 +24,10 @@ export const metadata: Metadata = {
 };
 
 export default async function MarketHomePage() {
-  const data = await getYugiohMarketHomeData();
+  const [data, currency] = await Promise.all([
+    getYugiohMarketHomeData(),
+    getYgoCurrency(),
+  ]);
 
   return (
     <>
@@ -44,6 +49,12 @@ export default async function MarketHomePage() {
             valuable right now&rdquo; view is more useful than fabricated
             gainers.
           </div>
+          {currency === 'USD' && (
+            <StaleSourceNotice source="tcggraph.tcgplayer" />
+          )}
+          {currency === 'EUR' && (
+            <StaleSourceNotice source="tcggraph.cardmarket" />
+          )}
         </header>
 
         {data.topRetailUsd.length > 0 && (

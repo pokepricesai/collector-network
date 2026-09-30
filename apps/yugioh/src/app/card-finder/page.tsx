@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CardBrowseTile } from '../../components/card-visual/CardBrowseTile';
 import { Footer } from '../../components/Footer';
 import { Header } from '../../components/Header';
+import { StaleSourceNotice } from '../../components/StaleSourceNotice';
 import { parseFinderQuery } from '../../lib/finder-query';
 import {
   hasStructuredFilters,
@@ -101,6 +102,13 @@ export default async function CardFinderPage({ searchParams }: PageProps) {
           </p>
         </header>
 
+        {currency === 'USD' && (
+          <StaleSourceNotice source="tcggraph.tcgplayer" />
+        )}
+        {currency === 'EUR' && (
+          <StaleSourceNotice source="tcggraph.cardmarket" />
+        )}
+
         <div className={styles.layout}>
           <FilterPanel filters={filters} rarityOptions={rarityOptions} />
 
@@ -177,14 +185,6 @@ function FinderResults({
               </Link>
             );
           })}
-        </div>
-      )}
-
-      {result.priceCapability === 'refused-large' && (
-        <div className={styles.truncatedNote}>
-          Price filter and price sort are disabled while the candidate set
-          holds more than 3,000 cards - narrow with another filter (attribute,
-          type, rarity, archetype …) and price ordering will re-enable.
         </div>
       )}
 
