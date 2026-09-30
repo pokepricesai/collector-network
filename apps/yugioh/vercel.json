@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "//": "Prewarm every hour. The finder cold path is ~10s and MARKET_SHORT is 6h, so hourly keeps the cache warm well inside its TTL. Runs at :05 to avoid the top-of-hour cron rush on Vercel infrastructure.",
       "path": "/api/prewarm",
       "schedule": "5 * * * *"
     }
