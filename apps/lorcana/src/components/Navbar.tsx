@@ -16,23 +16,22 @@ import { useRouter, usePathname } from 'next/navigation';
 type NavItem = { label: string; href: string };
 
 const PRIMARY_LINKS_WIDE: NavItem[] = [
-  { label: 'Cards',       href: '/cards/search' },
+  { label: 'Card Finder', href: '/card-finder' },
   { label: 'Sets',        href: '/browse' },
   { label: 'Characters',  href: '/characters' },
   { label: 'Inks',        href: '/inks' },
-  { label: 'Card Finder', href: '/card-finder' },
   { label: 'Movers',      href: '/market' },
   { label: 'AI',          href: '/ai' },
   { label: 'Insights',    href: '/insights' },
 ];
 
 const PRIMARY_LINKS_MEDIUM: NavItem[] = [
-  { label: 'Cards',      href: '/cards/search' },
-  { label: 'Sets',       href: '/browse' },
-  { label: 'Characters', href: '/characters' },
-  { label: 'Movers',     href: '/market' },
-  { label: 'AI',         href: '/ai' },
-  { label: 'Insights',   href: '/insights' },
+  { label: 'Card Finder', href: '/card-finder' },
+  { label: 'Sets',        href: '/browse' },
+  { label: 'Characters',  href: '/characters' },
+  { label: 'Movers',      href: '/market' },
+  { label: 'AI',          href: '/ai' },
+  { label: 'Insights',    href: '/insights' },
 ];
 
 const TOOLS_LINKS: NavItem[] = [
