@@ -29,6 +29,13 @@ export const metadata: Metadata = {
       'Every Yu-Gi-Oh! card, every printing, every rarity. Live retail and graded market values.',
   },
   robots: { index: true, follow: true },
+  verification: {
+    // Google Search Console ownership verification. Emitted globally
+    // as <meta name="google-site-verification" content="..."> by
+    // Next's Metadata API so every public route inherits it and no
+    // route can accidentally drop it.
+    google: 'A4mrElgE5m9Ht5AfcVqb_b0pDBh9FUTeJ2NUbVOqUpI',
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
