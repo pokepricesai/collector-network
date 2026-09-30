@@ -77,7 +77,13 @@ export default async function CardFinderPage({ searchParams }: PageProps) {
   const currency = await getYgoCurrency();
   const filters = { ...enrichWithSmartQuery(rawFilters), currency };
   const [result, rarityOptionsResult] = await Promise.all([
-    safe('card-finder', () => runYugiohCardFinder(filters), { timeoutMs: 15_000 }),
+    //  25s cap — the cold price-first ranker (large-set path)
+    //  pages ~44k tcg_market_prices_current rows for the current
+    //  source+currency; on cold cache with 60 chunks * ~200ms
+    //  round-trips this is ~15-18s. Once cached (MARKET_SHORT TTL),
+    //  the same request returns in tens of ms. 15s was too tight
+    //  for the very first hit per (source, currency, direction).
+    safe('card-finder', () => runYugiohCardFinder(filters), { timeoutMs: 25_000 }),
     safe('card-finder-rarity-options', () => listYugiohRarityFilterOptions(), {
       timeoutMs: 5_000,
     }),

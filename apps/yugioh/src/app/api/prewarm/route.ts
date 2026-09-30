@@ -30,9 +30,16 @@ const ALLOWLIST: readonly string[] = [
   // users almost never hit the cold path. Different query strings
   // produce different unstable_cache keys — each entry warms its own
   // ISR slot.
+  //
+  // The `?_cur=USD|EUR` suffix is a prewarm-only sentinel that
+  // maps to a cookie in warmOne(). Cold price-first ranking runs
+  // per (source, currency, direction) so both currencies need to be
+  // warmed for `?sort=price-desc` and `?sort=price-asc`.
   '/card-finder',
   '/card-finder?sort=price-desc',
   '/card-finder?sort=price-asc',
+  '/card-finder?sort=price-desc&_cur=EUR',
+  '/card-finder?sort=price-asc&_cur=EUR',
   '/market',
   '/market/most-valuable',
   '/market/most-valuable?currency=EUR',
@@ -89,12 +96,29 @@ interface WarmResult {
 
 async function warmOne(origin: string, path: string): Promise<WarmResult> {
   const start = performance.now();
+  //  Prewarm-only sentinel `_cur=USD|EUR`: strip it from the request
+  //  URL and translate to the corresponding cookie the finder reads.
+  //  This lets us prewarm the EUR ranker cache without exposing a
+  //  currency-parameterised public URL (which would inflate the
+  //  crawlable surface area).
+  let requestPath = path;
+  const cookies: string[] = [];
+  const curMatch = /(?:^|[?&])_cur=(USD|EUR)/.exec(path);
+  if (curMatch) {
+    requestPath = path
+      .replace(/([?&])_cur=(?:USD|EUR)&?/, '$1')
+      .replace(/[?&]$/, '');
+    cookies.push(`ygo_currency=${curMatch[1]}`);
+  }
   try {
-    const res = await fetch(`${origin}${path}`, {
+    const res = await fetch(`${origin}${requestPath}`, {
       // We want to trigger the origin render, not read from a proxy.
       cache: 'no-store',
       redirect: 'follow',
-      headers: { 'user-agent': 'ygo-prewarm/1' },
+      headers: {
+        'user-agent': 'ygo-prewarm/1',
+        ...(cookies.length > 0 ? { cookie: cookies.join('; ') } : {}),
+      },
     });
     // Read the body so ISR completes populating the cached page.
     await res.arrayBuffer();
