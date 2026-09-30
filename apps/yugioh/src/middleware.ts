@@ -30,6 +30,6 @@ export const config = {
   // Skip static assets and the icon/OG endpoints so we don't waste
   // Lambda time on them. Next's built-in matcher syntax.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.png|ygoprices-logo.png|sitemap.xml|sitemap|robots.txt|api/prewarm).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon1.png|apple-icon.png|ygoprices-logo.png|ygoprices-favicon.png|sitemap.xml|sitemap|robots.txt|api/prewarm).*)',
   ],
 };

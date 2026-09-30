@@ -39,16 +39,17 @@ export async function Header({ compactSearch = true }: { compactSearch?: boolean
         <Link href="/" className={styles.brand} aria-label="YGOPrices - home">
           {/* Native <img> so we do not need to configure the Next
               image loader for a local static asset. Intrinsic size is
-              2172×724; width/height reserve aspect ratio and prevent
-              CLS. Loaded with priority (fetchPriority="high") because
-              it's above-the-fold on every route. */}
+              1200×675 (16:9); width/height reserve aspect ratio and
+              prevent CLS. CSS caps display height; object-fit keeps
+              proportions. Loaded with priority (fetchPriority="high")
+              because it's above-the-fold on every route. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/ygoprices-logo.png"
             alt="YGOPrices"
             className={styles.brandLogo}
-            width={2172}
-            height={724}
+            width={1200}
+            height={675}
             fetchPriority="high"
             decoding="async"
           />
