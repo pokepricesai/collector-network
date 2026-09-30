@@ -10,8 +10,8 @@ export function Footer() {
             src="/ygoprices-logo.png"
             alt="YGOPrices"
             className={styles.brandLogo}
-            width={1200}
-            height={675}
+            width={1400}
+            height={787}
             loading="lazy"
             decoding="async"
           />

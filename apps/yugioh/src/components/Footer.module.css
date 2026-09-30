@@ -59,9 +59,9 @@
 
 .brandLogo {
   display: block;
-  height: 56px;
+  height: 96px;
   width: auto;
-  max-width: 240px;
+  max-width: 320px;
   object-fit: contain;
   margin-bottom: var(--ygo-size-sm);
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5));

@@ -36,13 +36,15 @@
 
 .brandLogo {
   display: block;
-  height: 44px;
+  /* Desktop: sized for presence on the navbar. Aspect ratio ~16:9,
+     so 72px tall means ~128px wide, well inside max-width. */
+  height: 72px;
   width: auto;
-  max-width: 220px;
+  max-width: 260px;
   object-fit: contain;
-  /* Slight drop shadow makes the logo pop off the near-black navbar
-     without haloing at the edges. */
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+  /* Subtle glow so the transparent-PNG logo pops off the near-black
+     navbar without a black halo at the edges. */
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.45));
 }
 
 .searchWrap {
@@ -89,7 +91,7 @@
 }
 
 @media (max-width: 1023px) {
-  .brandLogo { height: 38px; max-width: 180px; }
+  .brandLogo { height: 56px; max-width: 200px; }
 }
 
 @media (max-width: 899px) {
@@ -102,6 +104,8 @@
   .brand { grid-area: brand; }
   .searchWrap { grid-area: search; max-width: none; min-width: 0; }
   .accountSlot { grid-area: account; }
-  .brandLogo { height: 30px; max-width: 110px; }
+  /* Mobile: keep the header compact — 40px tall (~71px wide at 16:9)
+     still reads as a proper brand mark without ballooning the header. */
+  .brandLogo { height: 40px; max-width: 130px; }
   .nav { display: none; }
 }
