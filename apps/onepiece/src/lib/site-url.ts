@@ -2,7 +2,9 @@
 // public launch state. Kept minimal so every page metadata / sitemap
 // route reaches for the same values.
 
-export const SITE_LAUNCHED = process.env['SITE_LAUNCHED'] === 'true';
+// Trim so an accidentally trailing newline / space in a Vercel env
+// var doesn't defeat the equality check.
+export const SITE_LAUNCHED = (process.env['SITE_LAUNCHED'] ?? '').trim() === 'true';
 
 // Deployment writes NEXT_PUBLIC_SITE_URL. Default here is the
 // intended production origin; it is safe to expose because it is

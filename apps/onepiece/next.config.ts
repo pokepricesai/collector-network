@@ -22,7 +22,11 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    const preLaunch = process.env['SITE_LAUNCHED'] !== 'true';
+    // Trim so a Vercel env var accidentally set to "true\n" or " true"
+    // still counts. `SITE_LAUNCHED=true` disables the site-wide
+    // noindex header; anything else keeps the pre-launch guard.
+    const rawLaunched = (process.env['SITE_LAUNCHED'] ?? '').trim();
+    const preLaunch = rawLaunched !== 'true';
     const baseline = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
