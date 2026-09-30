@@ -22,13 +22,12 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    // Trim so a Vercel env var accidentally set to "true\n" or " true"
-    // still counts. `SITE_LAUNCHED=true` disables the site-wide
-    // noindex header; anything else keeps the pre-launch guard.
+    // `SITE_LAUNCHED=false` opts back into the pre-launch noindex
+    // header (for maintenance / de-index). Anything else — including
+    // unset — leaves the site index/follow-friendly. OnePiecePrices
+    // launched 2026-09-30 with Luke's explicit approval.
     const rawLaunched = (process.env['SITE_LAUNCHED'] ?? '').trim();
-    const preLaunch = rawLaunched !== 'true';
-    // Build-log breadcrumb so we can confirm which branch we took.
-    console.log(`[onepiece/next.config] SITE_LAUNCHED raw len=${(process.env['SITE_LAUNCHED'] ?? '').length} trimmed=${JSON.stringify(rawLaunched)} preLaunch=${preLaunch}`);
+    const preLaunch = rawLaunched === 'false';
     const baseline = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
