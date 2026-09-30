@@ -22,7 +22,7 @@ import { CACHE_TAGS, CACHE_TTL, withCacheBypass } from './cache';
 import { normaliseEdition, type EditionMarker } from './edition';
 import { toYugiohGamedata, type YugiohGamedata } from './gamedata';
 import { getYugiohClient } from './read';
-import { safe } from './safe';
+import { retryOnce, safe } from './safe';
 import { normalisePrintingKey, slugMatches, slugToIlikePattern, toCardSlug } from '../lib/slug';
 
 // Yu-Gi-Oh! server-only composition for /card/[slug] and
@@ -98,18 +98,24 @@ async function _getYugiohLogicalCardBySlug(
   // re-slugging confirms an exact slug match to eliminate false
   // positives from cards whose names collide under the lossy slug.
   const ilikePattern = slugToIlikePattern(cleaned);
-  const { data: candidates, error } = await supabase
-    .from('tcg_cards')
-    .select('*')
-    .eq('game_id', YGO_GAME_ID)
-    .ilike('name', ilikePattern)
-    .limit(500);
-  if (error) {
-    throw new Error(
-      `[yugioh/card] getYugiohLogicalCardBySlug(${slug}): ${error.message}`,
-    );
-  }
-  const rows = (candidates as TcgCard[] | null) ?? [];
+  //  Retry-once on transient DB failure. Card-identity lookup is
+  //  structural — a persistent Supabase outage still surfaces at the
+  //  page boundary, but a single hiccup (statement timeout, PGRST 5xx,
+  //  connection reset) no longer takes the page down.
+  const rows = await retryOnce(`card-lookup:${cleaned.slice(0, 40)}`, async () => {
+    const { data: candidates, error } = await supabase
+      .from('tcg_cards')
+      .select('*')
+      .eq('game_id', YGO_GAME_ID)
+      .ilike('name', ilikePattern)
+      .limit(500);
+    if (error) {
+      throw new Error(
+        `[yugioh/card] getYugiohLogicalCardBySlug(${slug}): ${error.message}`,
+      );
+    }
+    return (candidates as TcgCard[] | null) ?? [];
+  });
   const matching = rows.filter((c) => slugMatches(c.name, cleaned));
   if (matching.length === 0) return null;
 
@@ -156,8 +162,8 @@ async function composeLogicalCard(
   // hiccup renders a valid 200 with a "pricing unavailable" note
   // rather than a route-level 500 (Slice 6 cold-hit regression fix).
   const [printings, sets, cardScopedMapResult] = await Promise.all([
-    getPrintingsForCards(supabase, cardIds),
-    getSetsByIds(supabase, setIds),
+    retryOnce('printings-for-cards', () => getPrintingsForCards(supabase, cardIds)),
+    retryOnce('sets-by-ids', () => getSetsByIds(supabase, setIds)),
     safe('card-scoped-pricing', () =>
       getCardScopedPricingForCards(supabase, cardIds),
     ),
@@ -270,28 +276,32 @@ async function _getYugiohPhysicalPrintingByRoute(
   const normalisedKey = normalisePrintingKey(printingKey);
   const upperCn = collectorNumber.trim().toUpperCase();
 
-  const { data: cardRows, error: cErr } = await supabase
-    .from('tcg_cards')
-    .select('*')
-    .eq('game_id', YGO_GAME_ID)
-    .eq('collector_number', upperCn);
-  if (cErr) {
-    throw new Error(`[yugioh/printing] card lookup: ${cErr.message}`);
-  }
-  const cards = (cardRows as TcgCard[] | null) ?? [];
+  const cards = await retryOnce(`printing-card-lookup:${upperCn}`, async () => {
+    const { data: cardRows, error: cErr } = await supabase
+      .from('tcg_cards')
+      .select('*')
+      .eq('game_id', YGO_GAME_ID)
+      .eq('collector_number', upperCn);
+    if (cErr) {
+      throw new Error(`[yugioh/printing] card lookup: ${cErr.message}`);
+    }
+    return (cardRows as TcgCard[] | null) ?? [];
+  });
   const matchingCards = cards.filter((c) => slugMatches(c.name, cardSlug));
   if (matchingCards.length === 0) return null;
 
   // Prefer the card that has a printing matching the requested key.
   const cardIds = matchingCards.map((c) => c.id);
-  const { data: printingRows, error: pErr } = await supabase
-    .from('tcg_printings')
-    .select('*')
-    .in('tcg_card_id', cardIds);
-  if (pErr) {
-    throw new Error(`[yugioh/printing] printings lookup: ${pErr.message}`);
-  }
-  const printings = (printingRows as TcgPrinting[] | null) ?? [];
+  const printings = await retryOnce('printing-lookup', async () => {
+    const { data: printingRows, error: pErr } = await supabase
+      .from('tcg_printings')
+      .select('*')
+      .in('tcg_card_id', cardIds);
+    if (pErr) {
+      throw new Error(`[yugioh/printing] printings lookup: ${pErr.message}`);
+    }
+    return (printingRows as TcgPrinting[] | null) ?? [];
+  });
   const targetPrinting = printings.find(
     (p) => normalisePrintingKey(p.tcggraph_printing_key) === normalisedKey,
   );
@@ -320,7 +330,9 @@ async function _getYugiohPhysicalPrintingByRoute(
       getPrintingPricing(supabase, targetPrinting.id),
     ),
     (async () => {
-      const sets = await getSetsByIds(supabase, [card.set_id]);
+      const sets = await retryOnce('printing-set-lookup', () =>
+        getSetsByIds(supabase, [card.set_id]),
+      );
       return sets[0] ?? null;
     })(),
     safe('printing-card-scoped-pricing', () =>

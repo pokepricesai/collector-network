@@ -61,12 +61,68 @@ export async function safe<T>(
 }
 
 function classifyError(message: string): 'timeout' | 'fetch' | 'db' | 'other' {
-  if (/timeout after \d+ms/i.test(message)) return 'timeout';
-  if (/fetch failed|ECONNRESET|ENOTFOUND/i.test(message)) return 'fetch';
-  if (/PGRST|canceling statement|Bad Request/i.test(message)) return 'db';
+  if (/timeout after \d+ms|canceling statement due to statement timeout/i.test(message)) return 'timeout';
+  if (/fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(message)) return 'fetch';
+  if (/PGRST|Bad Request|HTTP 5\d\d/i.test(message)) return 'db';
   return 'other';
 }
 
 export function unwrapOr<T, F>(result: SafeResult<T>, fallback: F): T | F {
   return result.ok ? result.value : fallback;
+}
+
+//  retryOnce — bounded retry for structural DB reads whose failure
+//  would take down the whole page. Only retries errors that look
+//  transient (timeout, connection reset, PGRST 5xx, statement
+//  timeout). Non-transient errors are rethrown immediately so a
+//  genuine bug does not get papered over. Retries exactly once so
+//  a persistent outage still surfaces at the page boundary.
+//
+//  Structured single-line log on retry so operators can measure how
+//  often this saves a page render in production.
+export async function retryOnce<T>(
+  label: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const start = performance.now();
+  try {
+    return await fn();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!isTransientDbError(message)) {
+      throw err;
+    }
+    const firstMs = Math.round(performance.now() - start);
+    console.warn(
+      `[yugioh/retry] label=${label} attempt=1 status=fail category=${classifyError(message)} duration_ms=${firstMs} msg=${JSON.stringify(message.slice(0, 200))}`,
+    );
+    const secondStart = performance.now();
+    try {
+      const value = await fn();
+      const secondMs = Math.round(performance.now() - secondStart);
+      console.warn(
+        `[yugioh/retry] label=${label} attempt=2 status=ok recovered_from=${classifyError(message)} duration_ms=${secondMs}`,
+      );
+      return value;
+    } catch (retryErr) {
+      const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+      const secondMs = Math.round(performance.now() - secondStart);
+      console.error(
+        `[yugioh/retry] label=${label} attempt=2 status=fail category=${classifyError(retryMessage)} duration_ms=${secondMs} msg=${JSON.stringify(retryMessage.slice(0, 200))}`,
+      );
+      throw retryErr;
+    }
+  }
+}
+
+function isTransientDbError(message: string): boolean {
+  if (/timeout after \d+ms/i.test(message)) return true;
+  if (/canceling statement due to statement timeout/i.test(message)) return true;
+  if (/ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(message)) return true;
+  if (/fetch failed/i.test(message)) return true;
+  // PostgREST wraps DB errors with a code — 5xx-shaped statuses are
+  // retryable; auth / schema errors (4xx-shaped, "PGRST100" etc.) are
+  // not because retrying will just fail again the same way.
+  if (/HTTP 5\d\d|PGRST5\d\d|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout/i.test(message)) return true;
+  return false;
 }
