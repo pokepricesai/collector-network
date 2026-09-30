@@ -27,6 +27,8 @@ const nextConfig: NextConfig = {
     // noindex header; anything else keeps the pre-launch guard.
     const rawLaunched = (process.env['SITE_LAUNCHED'] ?? '').trim();
     const preLaunch = rawLaunched !== 'true';
+    // Build-log breadcrumb so we can confirm which branch we took.
+    console.log(`[onepiece/next.config] SITE_LAUNCHED raw len=${(process.env['SITE_LAUNCHED'] ?? '').length} trimmed=${JSON.stringify(rawLaunched)} preLaunch=${preLaunch}`);
     const baseline = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
