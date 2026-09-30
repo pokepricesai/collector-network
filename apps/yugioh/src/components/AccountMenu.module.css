@@ -35,38 +35,31 @@
   text-decoration: none;
 }
 
-.trigger {
+.triggerCircle {
   display: inline-flex;
   align-items: center;
-  gap: var(--ygo-size-xs);
+  justify-content: center;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--ygo-radius-pill);
-  padding: 2px 8px 2px 2px;
+  border: 1px solid var(--ygo-line-hairline);
+  border-radius: 999px;
+  padding: 2px;
   cursor: pointer;
-  color: var(--ygo-text-muted);
+  transition: border-color var(--ygo-motion-fast) var(--ygo-motion-ease);
+  margin-left: var(--ygo-size-xs);
+  line-height: 0;
+}
+
+.triggerCircle:hover {
+  border-color: var(--ygo-accent-gold);
+}
+
+.menuHeader {
+  padding: 6px 10px 4px;
   font-family: var(--ygo-font-body);
-  font-size: 12.5px;
-  font-weight: 600;
-  transition: border-color var(--ygo-motion-fast) var(--ygo-motion-ease),
-              color var(--ygo-motion-fast) var(--ygo-motion-ease);
-  margin-left: var(--ygo-size-sm);
-}
-
-.trigger:hover {
-  color: var(--ygo-text-primary);
-  border-color: var(--ygo-line-hairline);
-}
-
-.triggerName {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chevron {
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--ygo-text-quiet);
 }
 
@@ -125,11 +118,11 @@
 
 .signOutButton:hover { background: rgba(177, 42, 47, 0.1); }
 
-/* Mobile: swap the "Sign in / Create account" full text for a
-   single compact "Sign in" pill so the header row stays clean.
-   Signed-in trigger hides the display name text — avatar-only. */
+/* Mobile: keep the sign-in + sign-up chips visible but tighter, and
+   let the circle trigger sit flush without extra margin. */
 @media (max-width: 767px) {
-  .linkSecondary { display: none; }
-  .triggerName { display: none; }
-  .trigger { padding: 2px; margin-left: 0; }
+  .loggedOut { gap: 4px; margin-left: 4px; }
+  .linkSecondary { padding: 4px 6px; }
+  .linkPrimary { padding: 4px 8px; }
+  .triggerCircle { margin-left: 4px; }
 }

@@ -104,7 +104,14 @@ interface DialogProps {
 function Dialog(props: DialogProps) {
   const router = useRouter();
   const [tab, setTab] = useState<'raw' | 'graded'>('raw');
-  const [printingId, setPrintingId] = useState(props.fixedPrinting?.id ?? '');
+  // If the caller passed exactly one printing option (single-print
+  // card), preselect it and hide the picker — the user shouldn't have
+  // to "choose" between one option.
+  const sole = !props.fixedPrinting && props.availablePrintings?.length === 1
+    ? props.availablePrintings[0]!
+    : null;
+  const preselected = props.fixedPrinting ?? sole ?? null;
+  const [printingId, setPrintingId] = useState(preselected?.id ?? '');
   const [quantity, setQuantity] = useState(1);
   const [condition, setCondition] = useState<Condition>('near-mint');
   const [grader, setGrader] = useState<Grader>('psa');
@@ -125,7 +132,10 @@ function Dialog(props: DialogProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [props]);
 
-  const needsPrintingPicker = !props.fixedPrinting;
+  // Only surface the picker when there's a real choice to make:
+  // more than one printing available and no preselection.
+  const needsPrintingPicker =
+    !props.fixedPrinting && (props.availablePrintings?.length ?? 0) > 1;
   const canSubmit = useMemo(() => {
     if (isPending) return false;
     if (!printingId) return false;
@@ -180,8 +190,8 @@ function Dialog(props: DialogProps) {
         <div className={styles.cardLine}>
           <div>
             <p className={styles.cardName}>{props.cardName}</p>
-            {props.fixedPrinting && (
-              <p className={styles.cardMeta}>{props.fixedPrinting.label}</p>
+            {preselected && (
+              <p className={styles.cardMeta}>{preselected.label}</p>
             )}
           </div>
         </div>
@@ -278,16 +288,22 @@ function Dialog(props: DialogProps) {
           {tab === 'graded' && (
             <div className={styles.field}>
               <label htmlFor="ac-grade" className={styles.label}>Grade *</label>
-              <input
+              <select
                 id="ac-grade"
-                type="text"
-                className={styles.input}
-                maxLength={8}
-                placeholder="e.g. 10, 9, 9.5"
+                className={styles.select}
                 value={grade}
                 onChange={(e) => setGrade(e.target.value)}
                 required
-              />
+              >
+                {/* Controlled grades. Covers every grader's core scale
+                    (PSA 1-10 + half-grades, BGS half-grade steps + 10,
+                    CGC/SGC 1-10). "Auth" is a shared PSA/BGS auth-only
+                    slab. Grader-specific labels stay in the badge; the
+                    stored value is the numeric grade the panels expect. */}
+                {['10','9.5','9','8.5','8','7.5','7','6.5','6','5.5','5','4.5','4','3.5','3','2.5','2','1.5','1','Auth'].map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
             </div>
           )}
 

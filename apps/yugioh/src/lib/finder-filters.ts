@@ -45,6 +45,12 @@ export interface FinderFilters {
   priceMin?: number;
   priceMax?: number;
 
+  // Currency the visitor has selected for site-wide price context.
+  // Controls which native map (Cardmarket EUR vs TCGPlayer USD) the
+  // finder uses for price sort and priceMin/priceMax filter. Never
+  // FX-converted. Default USD; supplied by the page from the cookie.
+  currency?: 'USD' | 'EUR';
+
   // Sort/page + soft hints (from smart-query parser).
   sort?: FinderSort;
   page?: number;

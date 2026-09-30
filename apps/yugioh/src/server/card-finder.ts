@@ -239,9 +239,15 @@ async function _runFinderScan(
       pricesEur = priced.pricesEur;
       priceMs = Date.now() - priceStart;
 
+      // Pick the currency map the visitor picked (default USD). EUR
+      // uses the Cardmarket-native map. Never FX-converts. When the
+      // preferred map has no quote for a card we leave it at
+      // Infinity/-Infinity so it sinks in the sort — matches "No
+      // current price" copy on the surface.
+      const priceMap = filters.currency === 'EUR' ? pricesEur : pricesUsd;
       if (filters.priceMin != null || filters.priceMax != null) {
         identities = identities.filter((id) => {
-          const p = pricesUsd.get(id.representativeCardId)?.price;
+          const p = priceMap.get(id.representativeCardId)?.price;
           if (p == null) return false;
           if (filters.priceMin != null && p < filters.priceMin) return false;
           if (filters.priceMax != null && p > filters.priceMax) return false;
@@ -251,14 +257,14 @@ async function _runFinderScan(
       if (sort === 'price-asc') {
         identities = identities.slice().sort(
           (a, b) =>
-            (pricesUsd.get(a.representativeCardId)?.price ?? Infinity) -
-            (pricesUsd.get(b.representativeCardId)?.price ?? Infinity),
+            (priceMap.get(a.representativeCardId)?.price ?? Infinity) -
+            (priceMap.get(b.representativeCardId)?.price ?? Infinity),
         );
       } else if (sort === 'price-desc') {
         identities = identities.slice().sort(
           (a, b) =>
-            (pricesUsd.get(b.representativeCardId)?.price ?? -Infinity) -
-            (pricesUsd.get(a.representativeCardId)?.price ?? -Infinity),
+            (priceMap.get(b.representativeCardId)?.price ?? -Infinity) -
+            (priceMap.get(a.representativeCardId)?.price ?? -Infinity),
         );
       }
     }

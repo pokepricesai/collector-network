@@ -3,6 +3,8 @@ import { getCurrentUser } from '@collector-network/auth';
 import { readYgoProfile } from '../lib/user-profile';
 import { AccountMenu } from './AccountMenu';
 import { SearchBar } from './SearchBar';
+import { CurrencyToggle } from './CurrencyToggle';
+import { getYgoCurrency } from '../lib/currency-server';
 import styles from './Header.module.css';
 
 interface NavItem {
@@ -26,7 +28,12 @@ const NAV: NavItem[] = [
 ];
 
 export async function Header({ compactSearch = true }: { compactSearch?: boolean }) {
-  const user = await getCurrentUser();
+  // Read user and currency in parallel so the header adds no extra
+  // serial round trips to a page's cold path.
+  const [user, currency] = await Promise.all([
+    getCurrentUser(),
+    getYgoCurrency(),
+  ]);
   const profile = user ? readYgoProfile(user) : null;
   const photoUrl = user
     ? ((user.user_metadata?.['avatar_url'] as string | undefined) ??
@@ -68,6 +75,12 @@ export async function Header({ compactSearch = true }: { compactSearch?: boolean
           ))}
         </nav>
         <div className={styles.accountSlot}>
+          <CurrencyToggle initial={currency} />
+          {user && (
+            <Link href="/dashboard" className={styles.dashboardLink}>
+              Dashboard
+            </Link>
+          )}
           <AccountMenu
             user={
               user

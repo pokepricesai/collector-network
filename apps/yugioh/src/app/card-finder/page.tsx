@@ -16,6 +16,7 @@ import { toCardSlug } from '../../lib/slug';
 import { runYugiohCardFinder } from '../../server/card-finder';
 import { listYugiohRarityFilterOptions } from '../../server/browse';
 import { safe } from '../../server/safe';
+import { getYgoCurrency } from '../../lib/currency-server';
 import Faq from '../../components/Faq';
 import { CARD_FINDER_FAQ } from '../../lib/faq-content';
 import styles from './CardFinder.module.css';
@@ -69,7 +70,11 @@ function enrichWithSmartQuery(base: FinderFilters): FinderFilters {
 export default async function CardFinderPage({ searchParams }: PageProps) {
   const raw = await searchParams;
   const rawFilters = parseFinderParams(raw);
-  const filters = enrichWithSmartQuery(rawFilters);
+  // Thread the visitor's currency preference into the finder so price
+  // sort + priceMin/priceMax filter use the Cardmarket EUR map or the
+  // TCGPlayer USD map instead of always defaulting to USD.
+  const currency = await getYgoCurrency();
+  const filters = { ...enrichWithSmartQuery(rawFilters), currency };
   const [result, rarityOptionsResult] = await Promise.all([
     safe('card-finder', () => runYugiohCardFinder(filters), { timeoutMs: 15_000 }),
     safe('card-finder-rarity-options', () => listYugiohRarityFilterOptions(), {

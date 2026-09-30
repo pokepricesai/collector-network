@@ -1,8 +1,12 @@
 'use client';
 
-// Header account state. When signed out: Sign in + Create account
-// links. When signed in: avatar + dropdown (Collection, Decks,
-// Watchlist, Account, Settings, Sign out).
+// Header account state.
+// - Signed out: compact "Sign in" + "Sign up" chip pair.
+// - Signed in: compact circular avatar (no name text) that opens a
+//   dropdown with Dashboard, Collection, Watchlist, Decks, Settings,
+//   Sign out. The primary "Dashboard" entry point lives in the main
+//   header (next to this menu) — this menu is the secondary account
+//   surface.
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -48,7 +52,7 @@ export function AccountMenu({ user }: Props) {
           Sign in
         </Link>
         <Link href="/sign-up" className={styles.linkPrimary}>
-          Create account
+          Sign up
         </Link>
       </div>
     );
@@ -58,41 +62,41 @@ export function AccountMenu({ user }: Props) {
     <div className={styles.wrap} ref={ref}>
       <button
         type="button"
-        className={styles.trigger}
+        className={styles.triggerCircle}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={`Account menu for ${user.displayName || 'you'}`}
         onClick={() => setOpen((v) => !v)}
       >
         <Avatar
           avatarKey={user.avatarKey}
-          size={30}
+          size={32}
           photoUrl={user.photoUrl}
           alt={user.displayName || 'Account'}
         />
-        <span className={styles.triggerName}>
-          {user.displayName || 'Account'}
-        </span>
-        <span aria-hidden className={styles.chevron}>
-          ▾
-        </span>
       </button>
       {open && (
         <div className={styles.menu} role="menu">
+          {user.displayName && (
+            <div className={styles.menuHeader} aria-hidden>
+              {user.displayName}
+            </div>
+          )}
+          <Link
+            href="/dashboard"
+            className={styles.item}
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            Dashboard
+          </Link>
           <Link
             href="/collection"
             className={styles.item}
             role="menuitem"
             onClick={() => setOpen(false)}
           >
-            My Collection
-          </Link>
-          <Link
-            href="/decks"
-            className={styles.item}
-            role="menuitem"
-            onClick={() => setOpen(false)}
-          >
-            My Decks
+            Collection
           </Link>
           <Link
             href="/watchlist"
@@ -102,15 +106,15 @@ export function AccountMenu({ user }: Props) {
           >
             Watchlist
           </Link>
-          <hr className={styles.sep} />
           <Link
-            href="/account"
+            href="/decks"
             className={styles.item}
             role="menuitem"
             onClick={() => setOpen(false)}
           >
-            Account
+            Decks
           </Link>
+          <hr className={styles.sep} />
           <Link
             href="/settings"
             className={styles.item}
