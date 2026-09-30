@@ -23,7 +23,11 @@ export const metadata: Metadata = {
 };
 
 export default async function ArchetypesDirectoryPage() {
-  const entries = await listYugiohArchetypesForDirectory();
+  //  Build-time prerender can hit the DB statement timeout on this
+  //  ~38k-card scan (observed 2026-09-30). Fail-soft to an empty list
+  //  so the build succeeds; ISR (revalidate=3600) refills on first
+  //  runtime hit, when connections are warm.
+  const entries = await listYugiohArchetypesForDirectory().catch(() => []);
   const totalCards = entries.reduce((n, e) => n + e.cardCount, 0);
 
   return (
