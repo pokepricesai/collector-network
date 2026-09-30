@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/next';
 import { GoogleAnalytics } from '@collector-network/analytics';
 import { ygoFontClassName } from '../design/fonts';
@@ -34,6 +34,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={ygoFontClassName}>
+      <head>
+        {/* Impact.com TCG affiliate site-verification tag. Impact
+            reads the `value` attribute, not the `content` attribute
+            Next's Metadata API would produce, so we render it directly
+            in the root <head>. Once here means every public route
+            inherits it without duplication and without touching the
+            robots metadata above. Cast because React's HTMLMetaElement
+            types only declare `content`. */}
+        <meta {...({ name: 'impact-site-verification', value: 'f007a060-45e7-4b7d-adc4-d642c2d73f83' } as HTMLAttributes<HTMLMetaElement>)} />
+      </head>
       <body>
         {children}
         {/* Vercel Web Analytics - anonymous page-view counts. Custom
