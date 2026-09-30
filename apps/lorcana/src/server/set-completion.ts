@@ -56,9 +56,13 @@ export async function getSetCompletionForCurrentUser({
 
   // Total = distinct tcg_card_id rows in this set. Equivalent to the
   // distinct collector_number count per the base-slot rule above.
+  // Narrow projection (2026-09-30 perf pass): the set page render
+  // only needs id + name + collector_number + rarity to enumerate a
+  // missing sample; pulling `*` was dragging gamedata JSON on every
+  // set-page load for signed-in users.
   const { data: allCards, error: cardsErr } = await supabase
     .from('tcg_cards')
-    .select('*')
+    .select('id, name, collector_number, rarity, set_id')
     .eq('set_id', setId);
   if (cardsErr) {
     throw new Error(`[lorcana/set-completion] cards ${setId}: ${cardsErr.message}`);

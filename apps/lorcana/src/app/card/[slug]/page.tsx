@@ -19,8 +19,8 @@ import AskLorcanaPanel from '@/components/card/AskLorcanaPanel';
 import Faq from '@/components/Faq';
 import { buildCardFaq } from '@/server/faq-card';
 import { getCurrentUser } from '@collector-network/auth';
-import { WatchButton } from '@/components/WatchButton';
-import { isPrintingOnWatchlist } from '@/server/watchlist';
+import LogicalWatch, { type WatchablePrinting } from '@/components/card/LogicalWatch';
+import { watchedPrintingIdsFor } from '@/server/watchlist';
 import CardInternalLinks from '@/components/card/CardInternalLinks';
 import {
   getCardsInSameSet,
@@ -115,16 +115,19 @@ export default async function LogicalCardPage({
     collectorNumber: cardView.card.collector_number ?? null,
   }));
 
-  // Page-level Watch semantics: the button tracks the FIRST printing
-  // in the bundle. Users who need per-treatment precision go to the
-  // per-printing page. We label the button "Watch this card" so the
-  // per-card scope is unambiguous.
-  const defaultPrinting = flat[0] ?? null;
-  const initialWatchingResult = defaultPrinting
-    ? await isPrintingOnWatchlist(defaultPrinting.printingView.printing.id)
-    : null;
-  const initialWatching =
-    initialWatchingResult?.ok === true ? initialWatchingResult.value : false;
+  //  Watchlist identity mirrors the collection flow: single-printing
+  //  cards auto-select the one and only tcg_printing_id; multi-
+  //  printing cards force a picker where the user chooses the exact
+  //  treatment × finish × set combination they want to watch. The
+  //  initial "Watching" state per printing is computed in one round
+  //  trip via watchedPrintingIdsFor().
+  const watchedIds = currentUser
+    ? await watchedPrintingIdsFor(printingPicks.map((p) => p.printingId))
+    : new Set<string>();
+  const watchablePrintings: WatchablePrinting[] = printingPicks.map((p) => ({
+    ...p,
+    initialWatching: watchedIds.has(p.printingId),
+  }));
 
   // Internal-linking data. Every query is capped + skipped-when-empty
   // inside the component. We fan them out in parallel so the page
@@ -283,19 +286,13 @@ export default async function LogicalCardPage({
               returnPath={`/card/${slugifyCardName(bundle.name)}`}
               printings={printingPicks}
             />
-            {defaultPrinting ? (
-              <span
-                title="Watches the first printing of this card. Visit a specific printing page to watch that treatment individually."
-                style={{ display: 'inline-flex' }}
-              >
-                <WatchButton
-                  tcgCardId={defaultPrinting.cardView.card.id}
-                  tcgPrintingId={defaultPrinting.printingView.printing.id}
-                  initialWatching={initialWatching}
-                  signedIn={Boolean(currentUser)}
-                  currentPathname={`/card/${slugifyCardName(bundle.name)}`}
-                />
-              </span>
+            {watchablePrintings.length > 0 ? (
+              <LogicalWatch
+                cardName={bundle.name}
+                isSignedIn={Boolean(currentUser)}
+                returnPath={`/card/${slugifyCardName(bundle.name)}`}
+                printings={watchablePrintings}
+              />
             ) : null}
           </div>
           {!currentUser && (

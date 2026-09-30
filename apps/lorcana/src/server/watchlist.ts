@@ -276,3 +276,30 @@ export async function isPrintingOnWatchlist(
   }
   return { ok: true, value: !!data };
 }
+
+//  Batched variant used by the card-page LogicalWatch chooser: given
+//  every printing on a card, return a Set of the ones the current
+//  user is already watching. Signed-out callers get an empty Set.
+//  One round trip instead of one-per-printing.
+export async function watchedPrintingIdsFor(
+  tcg_printing_ids: readonly string[],
+): Promise<Set<string>> {
+  if (tcg_printing_ids.length === 0) return new Set();
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return new Set();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('tcg_printing_id')
+    .eq('user_id', user.id)
+    .in('tcg_printing_id', [...tcg_printing_ids]);
+  if (error) {
+    if (isMissingTable(error)) return new Set();
+    return new Set();
+  }
+  const out = new Set<string>();
+  for (const row of (data as { tcg_printing_id: string }[] | null) ?? []) {
+    out.add(row.tcg_printing_id);
+  }
+  return out;
+}

@@ -105,47 +105,50 @@ export const listCharacters = unstable_cache(
 
 //  Look up every card row belonging to one character. Kept uncached
 //  per-slug so the character page can update the moment a new
-//  version ships; the underlying tcg_cards scan is inexpensive
-//  because we filter on the base name.
+//  version ships. Perf-optimised (2026-09-30): instead of scanning
+//  the ENTIRE 4k-row Lorcana catalogue in 1000-row chunks we filter
+//  server-side by name pattern. Every character-card name in
+//  Lorcana is either the bare base name (no subtitle) or of the
+//  form "BaseName - Subtitle", so `name = base OR name LIKE 'base - %'`
+//  narrows to ≤ 60 rows for even the most-versioned character.
 export async function getCharacterBySlug(slug: string): Promise<CharacterPageData | null> {
   const characters = await listCharacters();
   const match = characters.find((c) => c.slug === slug);
   if (!match) return null;
 
   const sb = getLorcanaClient();
-  //  We can't reliably ILIKE for "starts with base name" because
-  //  card names include hyphens and punctuation that break substring
-  //  match. Pull all Lorcana CHARACTER rows sharing this character
-  //  slug via a two-pass: cheap projection then in-memory filter.
-  const CHUNK = 1000;
+  //  Escape the base name for PostgREST's ILIKE pattern grammar.
+  //  Lorcana names contain apostrophes and punctuation but no % or
+  //  _ characters in practice; keep the escape defensive anyway.
+  const escaped = match.name.replace(/[\\%_]/g, (m) => `\\${m}`);
+  const { data, error } = await sb
+    .from('tcg_cards')
+    .select('*, tcg_sets(*)')
+    .eq('game_id', LORCANA_GAME_ID)
+    .or(`name.eq.${match.name},name.ilike.${escaped} - %`);
+  if (error) throw new Error(`[lorcana/characters] getBySlug ${slug}: ${error.message}`);
+  type Joined = TcgCard & { tcg_sets: TcgSet | null };
+  const rows = (data as Joined[] | null) ?? [];
+
   const versions: CharacterVersion[] = [];
   const inks = new Set<string>();
-  for (let from = 0; from < 60_000; from += CHUNK) {
-    const { data, error } = await sb
-      .from('tcg_cards')
-      .select('*, tcg_sets(*)')
-      .eq('game_id', LORCANA_GAME_ID)
-      .range(from, from + CHUNK - 1);
-    if (error) throw new Error(`[lorcana/characters] getBySlug: ${error.message}`);
-    type Joined = TcgCard & { tcg_sets: TcgSet | null };
-    const rows = (data as Joined[] | null) ?? [];
-    if (rows.length === 0) break;
-    for (const r of rows) {
-      const gd = toLcGamedata(r.gamedata);
-      if (gd.cardType !== 'character') continue;
-      if (slugifyCardName(characterKeyFromName(r.name)) !== slug) continue;
-      const image = pickImage(r.images);
-      versions.push({
-        card: r,
-        set: r.tcg_sets ?? null,
-        versionSubtitle: gd.version,
-        ink: gd.inks[0] ?? null,
-        rarity: r.rarity ?? null,
-        image,
-      });
-      for (const ink of gd.inks) inks.add(ink);
-    }
-    if (rows.length < CHUNK) break;
+  for (const r of rows) {
+    const gd = toLcGamedata(r.gamedata);
+    if (gd.cardType !== 'character') continue;
+    //  Belt-and-braces: our OR-filter already narrows to base or
+    //  base-hyphen-subtitle, but re-slug the LHS and compare to be
+    //  sure the row genuinely belongs to this character.
+    if (slugifyCardName(characterKeyFromName(r.name)) !== slug) continue;
+    const image = pickImage(r.images);
+    versions.push({
+      card: r,
+      set: r.tcg_sets ?? null,
+      versionSubtitle: gd.version,
+      ink: gd.inks[0] ?? null,
+      rarity: r.rarity ?? null,
+      image,
+    });
+    for (const ink of gd.inks) inks.add(ink);
   }
   if (versions.length === 0) return null;
   versions.sort((a, b) => {
