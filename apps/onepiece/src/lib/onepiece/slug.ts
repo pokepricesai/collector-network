@@ -47,11 +47,29 @@ export function buildPrintingSlug(collectorNumber: string | null, name: string):
  *  happens to share a character name. The href is
  *  `/card/${baseCollectorSlug}-${nameSlug}`. Cards with no collector
  *  number fall back to a name-only slug (legacy behaviour) so promos
- *  without a printed number still work. */
+ *  without a printed number still work.
+ *  Level A in the product model: base game card / overview. */
 export function buildLogicalCardHref(collectorNumber: string | null, name: string): string {
   const base = baseCollectorNumber(collectorNumber);
   const slug = buildPrintingSlug(base, name);
   return `/card/${slug}`;
+}
+
+/** Exact-variant URL builder. Preserves the full collector number
+ *  including any `_p1` / `_p2` / `_r1` suffix so a specific
+ *  collectible variant gets its own route. This is where Card Finder
+ *  tiles should link when the tile represents a specific priced
+ *  variant. Requires the variant's set code. Level B in the product
+ *  model: collectible variant / treatment / exact printing detail. */
+export function buildVariantHref(
+  setCode: string | null | undefined,
+  collectorNumber: string | null,
+  name: string,
+): string {
+  const code = (setCode ?? '').toLowerCase();
+  const slug = buildPrintingSlug(collectorNumber, name);
+  if (!code) return `/card/${slug}`;
+  return `/set/${encodeURIComponent(code)}/card/${encodeURIComponent(slug)}`;
 }
 
 export function slugifyCollector(cn: string): string {

@@ -1,17 +1,37 @@
 import type { PrintingPricing } from '@collector-network/market-data';
 import { formatPrice } from '@/lib/onepiece/format-price';
-import { selectPreferredRetailQuote } from '@collector-network/market-data';
+import { pickHeadlinePrice, HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
+import { CURRENCY_SOURCE_NAME, type OpCurrency } from '@/lib/onepiece/currency';
 
 // Price summary for a single priced printing. Reads the caller's
 // PrintingPricing (retail + attribution='printing' graded) and renders
 // only the buckets that have data. Never mixes currencies.
 
+// Turn a `RetailQuote.source` string into the marketplace it belongs
+// to. Sources look like `tcggraph.tcgplayer` or
+// `tcggraph.cardmarket` — we only need the trailing token. Anything
+// unrecognised falls back to the currency's native source name (EUR
+// → Cardmarket, USD → TCGPlayer) so a mislabelled row still gets a
+// truthful native label rather than "Retail".
+function sourceLabel(source: string | null | undefined, currency: OpCurrency): string {
+  const s = (source ?? '').toLowerCase();
+  if (s.includes('tcgplayer')) return 'TCGPlayer';
+  if (s.includes('cardmarket')) return 'Cardmarket';
+  return CURRENCY_SOURCE_NAME[currency];
+}
+
 export default function TreatmentPrice({
   pricing,
+  currency,
 }: {
   pricing: PrintingPricing;
+  /** Currency preference from the request cookie. Defaults to USD to
+   *  preserve prior behaviour when a caller hasn't wired the header
+   *  yet. */
+  currency?: OpCurrency;
 }) {
-  const preferred = selectPreferredRetailQuote(pricing.market, 'USD');
+  const cur: OpCurrency = currency ?? 'USD';
+  const headline = pickHeadlinePrice(pricing.market, cur);
 
   const rawFloor = pickLowestNonNull(
     pricing.raw.map((r) => ({ price: r.price, currency: r.currency })),
@@ -25,7 +45,7 @@ export default function TreatmentPrice({
     })),
   );
 
-  if (!preferred && !rawFloor && !gradedTop) {
+  if (!headline && !rawFloor && !gradedTop) {
     return (
       <div
         className="label-mono"
@@ -39,6 +59,15 @@ export default function TreatmentPrice({
     );
   }
 
+  // Source-native price label: "Cardmarket 30-day average",
+  // "Cardmarket marketplace low", "TCGPlayer 30-day average",
+  // "TCGPlayer listing trend". NEVER the generic word "Retail" —
+  // the user is entitled to see WHICH marketplace the number came
+  // from and WHICH signal it represents.
+  const sourceName = headline ? sourceLabel(headline.source, headline.currency) : null;
+  const priceLabel = headline
+    ? `${sourceName} ${HEADLINE_SIGNAL_LABEL[headline.signal].toLowerCase()}`
+    : '';
   return (
     <div
       style={{
@@ -46,11 +75,11 @@ export default function TreatmentPrice({
         gap: 6,
       }}
     >
-      {preferred && (
+      {headline && (
         <PriceRow
-          label="Retail"
-          headline={formatPrice(preferred.price, preferred.currency)}
-          detail={`${preferred.source}${preferred.finish ? ' · ' + preferred.finish : ''}`}
+          label={priceLabel}
+          headline={formatPrice(headline.price, headline.currency)}
+          detail={headline.finish ? headline.finish : sourceName ?? ''}
         />
       )}
       {rawFloor && (

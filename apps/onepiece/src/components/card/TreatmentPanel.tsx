@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { OpPrintingView, OpCardView } from '@/server/read';
 import { buildEbaySearchUrl } from '@/lib/onepiece/ebay';
-import { buildPrintingSlug } from '@/lib/onepiece/slug';
+import { buildPrintingSlug, baseCollectorNumber } from '@/lib/onepiece/slug';
+import type { OpCurrency } from '@/lib/onepiece/currency';
 import TreatmentPrice from './TreatmentPrice';
 
 // A single treatment block — headline + price bucket + fingerprint +
@@ -13,10 +14,20 @@ export default function TreatmentPanel({
   cardView,
   printingView,
   linkToPrinting,
+  imageUrl,
+  currency,
 }: {
   cardView: OpCardView;
   printingView: OpPrintingView;
   linkToPrinting: boolean;
+  /** Optional thumbnail. Set on the base card overview so distinct
+   *  parallel art is visible without opening the variant page. Kept
+   *  off the variant page (all rows share the same image). */
+  imageUrl?: string | null;
+  /** Currency preference from the request cookie. Forwarded to the
+   *  price row so labels read "Cardmarket 30-day average" (EUR) or
+   *  "TCGPlayer marketplace low" (USD), never generic "Retail". */
+  currency?: OpCurrency;
 }) {
   const { treatment, pricing, printing, set, variantIndex } = printingView;
   const setLabel = set?.code?.toUpperCase() ?? '–';
@@ -33,15 +44,27 @@ export default function TreatmentPanel({
     printing.language?.toUpperCase() ?? 'EN',
   ];
 
-  const ebayTreatmentLabel =
-    variantIndex != null
-      ? `${treatment.label} #${variantIndex}`
-      : treatment.label;
+  // eBay query strategy: narrow by base collector number + treatment
+  // discriminator so a "Boa Hancock" search stops returning Japanese
+  // OP07-051 copies. The internal `_p1`/`_p2` suffix is our slug, not
+  // a token sellers write in listing titles, so we ship the BASE
+  // collector (OP07-038) and add a DB-derived treatment word
+  // (parallel / secret rare / treasure rare / special card / promo /
+  // reprint) which IS how sellers describe the variant. Standard rows
+  // ship without a modifier — the base collector alone is already
+  // discriminating enough.
+  const baseCn = baseCollectorNumber(printing.collector_number);
+  const treatmentModifier =
+    treatment.code === 'standard' || treatment.code === 'leader'
+      ? null
+      : treatment.label.toLowerCase();
   const ebay = buildEbaySearchUrl({
     cardName: cardView.card.name,
     setName: set?.name,
-    treatmentLabel: ebayTreatmentLabel,
+    collectorNumber: baseCn ?? printing.collector_number ?? null,
+    treatmentLabel: treatmentModifier,
     language: printing.language,
+    source: 'treatment-panel',
   });
 
   const slug = buildPrintingSlug(printing.collector_number, cardView.card.name);
@@ -60,31 +83,49 @@ export default function TreatmentPanel({
           marginBottom: 12,
         }}
       >
-        <div style={{ display: 'grid', gap: 4 }}>
-          <span
-            className={`treatment-badge treatment-badge--${treatment.code}`}
-            style={{ width: 'fit-content' }}
-          >
-            {treatment.label}
-            {variantIndex != null && ` #${variantIndex}`}
-          </span>
-          <span
-            className="op-fingerprint"
-            style={{ width: 'fit-content' }}
-            aria-label="Printing fingerprint"
-          >
-            {fingerprint.map((part, i) => (
-              <span key={i}>
-                {i > 0 && <span className="sep">·</span>}
-                {' '}
-                {part}
-              </span>
-            ))}
-          </span>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', minWidth: 0 }}>
+          {imageUrl && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={imageUrl}
+              alt={`${cardView.card.name} ${printing.collector_number ?? ''}`}
+              loading="lazy"
+              style={{
+                width: 60,
+                aspectRatio: '5 / 7',
+                objectFit: 'cover',
+                borderRadius: 6,
+                background: 'var(--bg-light)',
+                flex: '0 0 auto',
+              }}
+            />
+          )}
+          <div style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+            <span
+              className={`treatment-badge treatment-badge--${treatment.code}`}
+              style={{ width: 'fit-content' }}
+            >
+              {treatment.label}
+              {variantIndex != null && ` #${variantIndex}`}
+            </span>
+            <span
+              className="op-fingerprint"
+              style={{ width: 'fit-content' }}
+              aria-label="Printing fingerprint"
+            >
+              {fingerprint.map((part, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="sep">·</span>}
+                  {' '}
+                  {part}
+                </span>
+              ))}
+            </span>
+          </div>
         </div>
       </div>
 
-      <TreatmentPrice pricing={pricing} />
+      <TreatmentPrice pricing={pricing} currency={currency} />
 
       <div
         className="op-engraved"

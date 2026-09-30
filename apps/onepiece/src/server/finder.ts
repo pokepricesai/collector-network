@@ -13,7 +13,7 @@ import { getOnepieceClient, getOnepieceGameId } from './client';
 import { toOpGamedata, type OpGamedata } from '../lib/onepiece/gamedata';
 import type { OpCardType } from '../lib/onepiece/card-type';
 import type { OpColour } from '../lib/onepiece/colour';
-import { slugifyCardName, buildLogicalCardHref, baseCollectorNumber } from '../lib/onepiece/slug';
+import { slugifyCardName, buildVariantHref } from '../lib/onepiece/slug';
 import type { OpCurrency } from '../lib/onepiece/currency';
 import { pickHeadlinePrice, type HeadlineSignal } from '../lib/onepiece/pick-headline';
 import type { RetailQuote } from '@collector-network/market-data';
@@ -198,31 +198,27 @@ export async function queryFinder(
     return true;
   });
 
-  // Deduplicate to logical cards. A logical card = one base collector
-  // number (its parallels and reprints collapse into it). Different
-  // game cards that happen to share a character name (e.g. the 30+
-  // distinct "Roronoa Zoro" cards across sets) remain SEPARATE tiles.
-  // Prefer the highest-rarity row within a family as the tile anchor.
-  const rarityRank: Record<string, number> = {
-    TR: 8, SEC: 7, 'SP CARD': 6, SR: 5, L: 4, R: 3, UC: 2, C: 1, P: 3,
-  };
-  const familyKey = (c: TcgCard): string => {
-    const base = baseCollectorNumber(c.collector_number) ?? c.id;
-    return `${base}|${c.name}`;
-  };
+  // Deduplicate to COLLECTIBLE VARIANTS. A collectible variant is one
+  // tcg_cards row — i.e. Boa Hancock OP07-038, OP07-038_p1 and
+  // OP07-038_p2 are THREE separate tiles with distinct images and
+  // distinct prices. Only the DB-level (finish × language) rows
+  // collapse INSIDE the variant (both OP07-038_p1 nonfoil and foil
+  // share the same Cardmarket / TCGPlayer product, so we present one
+  // tile per variant not per finish).
+  const variantByCardId = new Map<string, TcgCard>();
+  for (const c of filtered) {
+    if (!variantByCardId.has(c.id)) variantByCardId.set(c.id, c);
+  }
+  const dedupedAnchors: TcgCard[] = Array.from(variantByCardId.values());
+  const familyKey = (c: TcgCard): string => c.id;
+  // Grouping used downstream by loadPricing for pricing / printing
+  // roll-up. Same key: one tcg_cards row per bucket.
   const byFamily = new Map<string, TcgCard[]>();
   for (const c of filtered) {
     const key = familyKey(c);
     const bucket = byFamily.get(key);
     if (bucket) bucket.push(c);
     else byFamily.set(key, [c]);
-  }
-  const dedupedAnchors: TcgCard[] = [];
-  for (const bucket of byFamily.values()) {
-    const sorted = [...bucket].sort((a, b) =>
-      (rarityRank[(b.rarity ?? '').toUpperCase()] ?? 0) -
-      (rarityRank[(a.rarity ?? '').toUpperCase()] ?? 0));
-    dedupedAnchors.push(sorted[0]!);
   }
 
   // Pricing is expensive: 1,384 unique cards × ~2-3 printings each
@@ -348,15 +344,19 @@ export async function queryFinder(
 
   function materialise(anchor: TcgCard, price: number | null, signal: HeadlineSignal | null, printingCount: number): OpFinderTile {
     const gamedata = toOpGamedata(anchor.gamedata);
+    const set = setsById.get(anchor.set_id) ?? null;
     return {
       cardId: anchor.id,
       name: anchor.name,
       collectorNumber: anchor.collector_number,
       rarity: anchor.rarity,
       gamedata,
-      set: setsById.get(anchor.set_id) ?? null,
+      set,
       imageUrl: pickImage(anchor.images),
-      href: buildLogicalCardHref(anchor.collector_number, anchor.name),
+      // Level B href: exact collectible variant page for THIS
+      // tcg_cards row (preserves any _p1/_p2/_r1 suffix). Falls back
+      // to the logical family URL if the anchor has no set code.
+      href: buildVariantHref(set?.code ?? null, anchor.collector_number, anchor.name),
       price,
       currency,
       priceSignal: signal,
@@ -558,13 +558,13 @@ async function queryFinderByPrice(
   }
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
-  // Group cards by FAMILY (base collector + name). A "family" bundles
-  // the base card with its parallels and reprints. Cards that merely
-  // share a character name across different sets are separate families.
-  const familyKey = (c: TcgCard): string => {
-    const base = baseCollectorNumber(c.collector_number) ?? c.id;
-    return `${base}|${c.name}`;
-  };
+  // Group by COLLECTIBLE VARIANT (one tcg_cards row). Each _p1, _p2,
+  // base gets its own tile — a $6,969 P2 must never merge into a
+  // $0.24 base. DB-level (finish × language) rows collapse INSIDE the
+  // variant because they share the same marketplace product (proven
+  // via cardmarket_id / tcgplayer_id sharing for OP07-038_p1 nonfoil
+  // + foil).
+  const familyKey = (c: TcgCard): string => c.id;
   const byFamily = new Map<string, TcgCard[]>();
   for (const c of cards) {
     const key = familyKey(c);
@@ -688,20 +688,28 @@ async function queryFinderByPrice(
   // Materialise every survivor as a tile so we can re-sort the whole
   // set when the caller asked for a non-price sort (e.g. price filter
   // + sort=name). Pagination happens after the re-sort.
-  const allTiles: OpFinderTile[] = entries.map(({ anchor, price, signal }) => ({
-    cardId: anchor.id,
-    name: anchor.name,
-    collectorNumber: anchor.collector_number,
-    rarity: anchor.rarity,
-    gamedata: toOpGamedata(anchor.gamedata),
-    set: setsById.get(anchor.set_id) ?? null,
-    imageUrl: pickImage(anchor.images),
-    href: buildLogicalCardHref(anchor.collector_number, anchor.name),
-    price,
-    currency,
-    priceSignal: signal,
-    printingCount: printingsByFamily.get(familyKey(anchor)) ?? 0,
-  }));
+  const allTiles: OpFinderTile[] = entries.map(({ anchor, price, signal }) => {
+    const set = setsById.get(anchor.set_id) ?? null;
+    return {
+      cardId: anchor.id,
+      name: anchor.name,
+      collectorNumber: anchor.collector_number,
+      rarity: anchor.rarity,
+      gamedata: toOpGamedata(anchor.gamedata),
+      set,
+      imageUrl: pickImage(anchor.images),
+      // Level B: exact collectible variant page (preserves _p1/_p2 in
+      // the URL). Falls back to /card family URL if the anchor's set
+      // code is missing.
+      href: buildVariantHref(set?.code ?? null, anchor.collector_number, anchor.name),
+      price,
+      currency,
+      priceSignal: signal,
+      // Printings on THIS variant (finish × language rows on the same
+      // tcg_cards row). Variant-scoped now, not family-scoped.
+      printingCount: printingsByFamily.get(familyKey(anchor)) ?? 0,
+    };
+  });
   if (outputSort !== 'price-desc' && outputSort !== 'price-asc') {
     allTiles.sort((a, b) => compareTiles(a, b, outputSort));
   }

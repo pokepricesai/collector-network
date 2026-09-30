@@ -21,16 +21,26 @@ export interface TcgGradedRow {
 }
 
 export async function getGradedRowsForAnchor(
-  anchor: { printingId: string; cardId: string },
+  anchor: { printingId: string; cardId: string } | { printingIds: string[]; cardId: string },
   supabase: SupabaseClient = getOnepieceClient(),
 ): Promise<TcgGradedRow[]> {
   // Two anchor queries in parallel: printing-attributed + card-
   // attributed. anon RLS allows both.
+  //
+  // The printing anchor may be a single id OR every printing that
+  // belongs to this collectible variant (finish × language rows on
+  // the same tcg_cards row). We use IN(...) so a graded row keyed to
+  // the foil finish still surfaces when the caller landed on the
+  // nonfoil printing. The card anchor is always a single tcg_cards
+  // row — never widened to the base-collector family.
+  const printingIds =
+    'printingIds' in anchor ? anchor.printingIds : [anchor.printingId];
+  if (printingIds.length === 0) return [];
   const [byPrinting, byCard] = await Promise.all([
     supabase
       .from('tcg_graded_prices_current')
       .select('tcg_printing_id, tcg_card_id, attribution, grader, grade, currency, price, card_sales_volume, updated_at')
-      .eq('tcg_printing_id', anchor.printingId)
+      .in('tcg_printing_id', printingIds)
       .eq('attribution', 'printing')
       .not('price', 'is', null),
     supabase

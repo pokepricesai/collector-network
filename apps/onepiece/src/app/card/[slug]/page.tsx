@@ -17,6 +17,7 @@ import {
 import { pickCardImage } from '@/lib/onepiece/image';
 import { renderEffectText } from '@/lib/onepiece/render-effect';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { TREATMENT_DISPLAY_ORDER } from '@/lib/onepiece/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
@@ -141,14 +142,21 @@ export default async function LogicalCardPage({
     for (const p of c.printings) flat.push({ cardView: c, printingView: p });
   }
 
-  // Pick hero art from the highest-rarity card row.
-  const heroCard = pickHero(bundle.cards);
+  // Pick hero art from the BASE row of the family. A base row has no
+  // `_p*` or `_r*` suffix on its collector number, so its art is the
+  // canonical "base card" the player sees in tournament play. Falling
+  // back to the highest-rarity row keeps historic families (all-
+  // parallel promo lines) working. This is Level A: base game card,
+  // not a headline price claim on any parallel.
+  const heroCard = pickBaseVariant(bundle.cards) ?? pickHero(bundle.cards);
   const heroImage = pickCardImage(heroCard.card.images);
+  const baseCollectorLabel = fam.baseCollector ?? heroCard.card.collector_number ?? '';
 
   // Load current user server-side so LogicalAddToCollection can render
   // its signed-in vs signed-out state without a client fetch.
   const currentUser = await getCurrentUser();
   const returnPath = `/card/${slug}`;
+  const currency = await getCurrencyPreference();
 
   // Materialise every real printing as a PrintingPick for the picker —
   // never a synthetic default row.
@@ -230,19 +238,25 @@ export default async function LogicalCardPage({
           <div style={{ display: 'grid', gap: 14 }}>
             <div>
               <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-                One Piece Card Game
+                Base game card {baseCollectorLabel && `· ${baseCollectorLabel}`}
               </div>
               <h1 style={{ margin: '4px 0 10px', fontSize: 30, lineHeight: 1.15 }}>
-                {bundle.name}
+                All versions of {bundle.name}{baseCollectorLabel ? ` ${baseCollectorLabel}` : ''}
               </h1>
+              <p style={{ margin: '0 0 8px', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.55, maxWidth: 640 }}>
+                Overview of every collectible variant of this base game card.
+                Each version below has its own image, its own marketplace
+                identity and its own live price. No family-wide headline
+                price is claimed for this card.
+              </p>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {heroCard.gamedata.colours.map((c) => (
                   <span key={c} className={`chip chip-${c}`}>
                     {OP_COLOUR_LABEL[c]}
                   </span>
                 ))}
-                <span className="chip chip-gold" title="Standard, parallel, reprint, secret rare, special card, treasure rare, promo and leader treatments">
-                  {treatmentOrder.length} treatment{treatmentOrder.length === 1 ? '' : 's'} · {flat.length} printing{flat.length === 1 ? '' : 's'}
+                <span className="chip chip-gold" title="Distinct collectible variants (base + parallels + reprints)">
+                  {bundle.cards.length} version{bundle.cards.length === 1 ? '' : 's'} · {flat.length} marketplace row{flat.length === 1 ? '' : 's'}
                 </span>
               </div>
             </div>
@@ -310,10 +324,10 @@ export default async function LogicalCardPage({
         <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
           <header>
             <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-              Treatments
+              Versions
             </div>
             <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
-              Priced individually
+              Different versions of this card
             </h2>
             <p
               style={{
@@ -324,9 +338,9 @@ export default async function LogicalCardPage({
                 maxWidth: 640,
               }}
             >
-              Every treatment for {bundle.name} is a separate priced entity. Rarer
-              treatments appear first so the chase versions of this card are always
-              visible above the standard printing.
+              Each version below is a distinct collectible with its own image and
+              its own marketplace price. Click a version to open its exact-variant
+              page (image, price and eBay search all match).
             </p>
           </header>
 
@@ -343,7 +357,7 @@ export default async function LogicalCardPage({
                     fontWeight: 600,
                   }}
                 >
-                  {group.entries.length} printing
+                  {group.entries.length} marketplace row
                   {group.entries.length === 1 ? '' : 's'}
                 </span>
               </div>
@@ -360,6 +374,8 @@ export default async function LogicalCardPage({
                     cardView={cardView}
                     printingView={printingView}
                     linkToPrinting
+                    imageUrl={pickCardImage(cardView.card.images)}
+                    currency={currency}
                   />
                 ))}
               </div>
@@ -446,6 +462,17 @@ function pickCheapestLive(view: OpPrintingView): string | null {
   if (!best) return null;
   const symbol = best.currency === 'EUR' ? '€' : best.currency === 'USD' ? '$' : `${best.currency} `;
   return `${symbol}${best.price.toFixed(2)}`;
+}
+
+/** Pick the base row of the family — no `_p*` / `_r*` suffix on the
+ *  collector number. Returns null when every row is a parallel /
+ *  reprint (rare, but happens on promo-only lines). */
+function pickBaseVariant(cards: OpCardView[]): OpCardView | null {
+  const base = cards.find((c) => {
+    const cn = c.card.collector_number ?? '';
+    return cn.length > 0 && !/_(?:p|r)\d+$/i.test(cn);
+  });
+  return base ?? null;
 }
 
 function pickHero(cards: OpCardView[]): OpCardView {

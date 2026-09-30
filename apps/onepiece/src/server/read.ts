@@ -23,6 +23,8 @@ import {
   type OpTreatmentInfo,
 } from '../lib/onepiece/treatment';
 import { normaliseRarity, type OpRarity } from '../lib/onepiece/rarity';
+import { pickHeadlinePrice } from '../lib/onepiece/pick-headline';
+import { pickCardImage } from '../lib/onepiece/image';
 
 // One Piece server-only composition layer.
 //
@@ -169,6 +171,102 @@ export async function getCardBundleByCardId(
   });
   const cards = family.length > 0 ? family : [anchor];
   return composeBundle(supabase, anchor.name, cards);
+}
+
+/** Load ONE collectible variant only (a single tcg_cards row) and its
+ *  own printings. This is Level B in the product model: same image,
+ *  same collector number (including any `_p1` / `_p2` suffix), same
+ *  price the Finder tile showed. Callers use this on the exact-
+ *  variant destination page — the sibling parallels / reprints /
+ *  reprints-of-reprints show up on the /card overview page instead.
+ *
+ *  The returned bundle has exactly one entry in `cards[]`, and
+ *  `bundle.name` is that row's DB name. */
+export async function getVariantBundle(
+  cardId: string,
+  supabase: SupabaseClient = getOnepieceClient(),
+): Promise<OpCardBundle | null> {
+  const gameId = await getOnepieceGameId(supabase);
+  const row = await getCardById(supabase, cardId);
+  if (!row || row.game_id !== gameId) return null;
+  return composeBundle(supabase, row.name, [row]);
+}
+
+/** Sibling variants in the same base-collector family — i.e. every
+ *  other collectible-variant row (base + `_p*` + `_r*`) that shares
+ *  this variant's base collector number and DB name. Returns compact
+ *  rows suitable for a "Other versions of Boa Hancock OP07-038" rail:
+ *  own image, own collector number, own set code, own headline price
+ *  (native currency of the row's marketplace). */
+export interface OpSiblingVariant {
+  cardId: string;
+  cardName: string;
+  collectorNumber: string | null;
+  setCode: string | null;
+  setName: string | null;
+  imageUrl: string | null;
+  headline: { price: number; currency: 'EUR' | 'USD'; signal: 'avg30d' | 'priceLow' | 'trend' } | null;
+}
+export async function getSiblingVariants(
+  anchorCardId: string,
+  currency: 'EUR' | 'USD',
+  supabase: SupabaseClient = getOnepieceClient(),
+): Promise<OpSiblingVariant[]> {
+  const gameId = await getOnepieceGameId(supabase);
+  const anchor = await getCardById(supabase, anchorCardId);
+  if (!anchor || anchor.game_id !== gameId) return [];
+  const base = baseCollectorNumber(anchor.collector_number);
+  if (!base) return [];
+  const upper = base.toUpperCase();
+  const { data, error } = await supabase
+    .from('tcg_cards')
+    .select('*')
+    .eq('game_id', gameId)
+    .or(
+      `collector_number.eq.${upper},collector_number.ilike.${upper}\\_p%,collector_number.ilike.${upper}\\_r%`,
+    );
+  if (error) {
+    console.error('[onepiece/read] getSiblingVariants query', error);
+    return [];
+  }
+  const nameSlugTarget = slugifyCardName(anchor.name);
+  const family = ((data as TcgCard[] | null) ?? []).filter(
+    (c) => slugifyCardName(c.name) === nameSlugTarget && c.id !== anchor.id,
+  );
+  if (family.length === 0) return [];
+  const cardIds = family.map((c) => c.id);
+  const setIds = Array.from(new Set(family.map((c) => c.set_id)));
+  const [printings, sets] = await Promise.all([
+    getPrintingsForCards(supabase, cardIds),
+    getSetsByIds(supabase, setIds),
+  ]);
+  const setsById = new Map(sets.map((s) => [s.id, s]));
+  const printingsByCard = groupBy(printings, (p) => p.tcg_card_id);
+  const pricingMap = await getPrintingPricingBatch(
+    supabase,
+    printings.map((p) => p.id),
+  );
+  return family.map((c) => {
+    const set = setsById.get(c.set_id) ?? null;
+    const rows = printingsByCard.get(c.id) ?? [];
+    let top: OpSiblingVariant['headline'] = null;
+    for (const p of rows) {
+      const pricing = pricingMap.get(p.id);
+      if (!pricing?.market?.length) continue;
+      const h = pickHeadlinePrice(pricing.market, currency);
+      if (!h) continue;
+      if (!top || h.price > top.price) top = { price: h.price, currency: h.currency, signal: h.signal };
+    }
+    return {
+      cardId: c.id,
+      cardName: c.name,
+      collectorNumber: c.collector_number,
+      setCode: set?.code ?? null,
+      setName: set?.name ?? null,
+      imageUrl: pickCardImage(c.images),
+      headline: top,
+    };
+  });
 }
 
 export interface OpPrintingBundle {

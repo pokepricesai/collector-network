@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentUser } from '@collector-network/auth';
 import { getSetBundle } from '@/server/browse';
-import { getCardBundleByCardId } from '@/server/read';
+import { getVariantBundle, getSiblingVariants } from '@/server/read';
 import { canonicalFor } from '@/lib/seo';
-import { buildPrintingSlug, candidatePrintingSplits, slugifyCardName } from '@/lib/onepiece/slug';
+import { buildLogicalCardHref, buildVariantHref, candidatePrintingSplits, slugifyCardName } from '@/lib/onepiece/slug';
+import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
+import { CURRENCY_SOURCE_NAME, formatPrice } from '@/lib/onepiece/currency';
+import { HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
 import { pickCardImage } from '@/lib/onepiece/image';
 import { renderEffectText } from '@/lib/onepiece/render-effect';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
@@ -82,11 +85,11 @@ export async function generateMetadata({
   const { slug, cardSlug } = await params;
   const resolved = await resolveCard(slug, cardSlug);
   if (!resolved) return { title: 'Card not found' };
-  const bundle = await getCardBundleByCardId(resolved.cardId);
+  const bundle = await getVariantBundle(resolved.cardId);
   if (!bundle) return { title: 'Card not found' };
   return {
-    title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '–'}. Priced treatments`,
-    description: `${bundle.name} from ${slug.toUpperCase()}. Every treatment (standard, parallel, secret rare, special card, treasure rare) with live prices.`,
+    title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '–'}. Live market price`,
+    description: `${bundle.name} (${slug.toUpperCase()} ${resolved.matched.collector_number ?? ''}). Live Cardmarket and TCGPlayer market prices for this exact variant.`,
     alternates: {
       canonical: canonicalFor(
         `/set/${encodeURIComponent(slug.toLowerCase())}/card/${encodeURIComponent(cardSlug)}`,
@@ -103,25 +106,24 @@ export default async function PrintingPage({
   const { slug, cardSlug } = await params;
   const resolved = await resolveCard(slug, cardSlug);
   if (!resolved) notFound();
-  const bundle = await getCardBundleByCardId(resolved.cardId);
+  const bundle = await getVariantBundle(resolved.cardId);
   if (!bundle) notFound();
 
-  // Filter to just the printings that live in *this* set, so the page
-  // is set-specific. The /card/[slug] URL is where every set gets shown.
-  const inThisSet: Array<{ cardView: OpCardView; printingView: OpPrintingView }> = [];
-  const otherSets: Array<{ cardView: OpCardView; printingView: OpPrintingView }> = [];
-  for (const c of bundle.cards) {
-    for (const p of c.printings) {
-      const inSet =
-        (p.set?.code ?? '').toLowerCase() === slug.toLowerCase() ||
-        (c.set?.code ?? '').toLowerCase() === slug.toLowerCase();
-      if (inSet) inThisSet.push({ cardView: c, printingView: p });
-      else otherSets.push({ cardView: c, printingView: p });
-    }
-  }
+  // Variant-scoped: bundle now holds exactly one tcg_cards row + its
+  // own printings (finish × language rows). No sibling parallel /
+  // reprint can silently override the hero image or the headline
+  // price. Cross-set concerns don't apply either — a Level B variant
+  // belongs to exactly one set.
+  const anchorCardView: OpCardView = bundle.cards[0]!;
+  const variantPrintings: Array<{ cardView: OpCardView; printingView: OpPrintingView }> =
+    anchorCardView.printings.map((p) => ({ cardView: anchorCardView, printingView: p }));
 
-  const anchorPrinting = inThisSet[0]?.printingView;
-  const anchorCardView = inThisSet[0]?.cardView ?? bundle.cards[0]!;
+  const currency = await getCurrencyPreference();
+  // Sibling variants: base + other parallels + reprints in the same
+  // family. Own image, own headline price, own /set/.../card/... link.
+  const siblings = await getSiblingVariants(resolved.cardId, currency);
+
+  const anchorPrinting = variantPrintings[0]?.printingView;
   const heroImage = pickCardImage(anchorCardView.card.images);
 
   const canonicalSetLabel =
@@ -210,11 +212,11 @@ export default async function PrintingPage({
                   </span>
                 ))}
                 <Link
-                  href={`/card/${encodeURIComponent(slugifyCardName(bundle.name))}`}
+                  href={buildLogicalCardHref(resolved.matched.collector_number, bundle.name)}
                   className="chip chip-gold"
                   style={{ textDecoration: 'none' }}
                 >
-                  See every treatment
+                  View all versions of {bundle.name} {(resolved.matched.collector_number ?? '').split('_')[0]}
                 </Link>
               </div>
             </div>
@@ -254,8 +256,8 @@ export default async function PrintingPage({
         </div>
 
         {anchorPrinting && (
-          <GradedPanelForPrinting
-            printingId={anchorPrinting.printing.id}
+          <GradedPanelForVariant
+            printingIds={anchorCardView.printings.map((p) => p.printing.id)}
             cardId={anchorCardView.card.id}
             setCode={canonicalSetLabel}
             collectorNumber={resolved.matched.collector_number}
@@ -266,11 +268,15 @@ export default async function PrintingPage({
         <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
           <header>
             <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-              In this set
+              This variant
             </div>
             <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
-              Treatments in {canonicalSetLabel}
+              {canonicalSetLabel} #{resolved.matched.collector_number ?? '–'}, priced rows
             </h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5 }}>
+              Only rows tied to <strong>{resolved.matched.collector_number ?? bundle.name}</strong>.
+              Sibling parallels and reprints are listed further down.
+            </p>
           </header>
 
           <div
@@ -280,7 +286,7 @@ export default async function PrintingPage({
               gap: 12,
             }}
           >
-            {inThisSet.length === 0 ? (
+            {variantPrintings.length === 0 ? (
               <div
                 style={{
                   gridColumn: '1 / -1',
@@ -291,34 +297,39 @@ export default async function PrintingPage({
                   color: 'var(--text-muted)',
                 }}
               >
-                No priced printings recorded for this set yet.
+                No priced marketplace rows recorded for this variant yet.
               </div>
             ) : (
-              inThisSet.map(({ cardView, printingView }) => (
+              variantPrintings.map(({ cardView, printingView }) => (
                 <TreatmentPanel
                   key={printingView.printing.id}
                   cardView={cardView}
                   printingView={printingView}
                   linkToPrinting={false}
+                  currency={currency}
                 />
               ))
             )}
           </div>
 
-          {inThisSet[0] && (
-            <PriceHistoryBlock printingId={inThisSet[0].printingView.printing.id} />
+          {variantPrintings[0] && (
+            <PriceHistoryBlock printingId={variantPrintings[0].printingView.printing.id} />
           )}
         </section>
 
-        {otherSets.length > 0 && (
+        {siblings.length > 0 && (
           <section style={{ marginTop: 40, display: 'grid', gap: 16 }}>
             <header>
-              <div className="label-mono" style={{ color: 'var(--gold-600) ' }}>
-                Also printed in
+              <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
+                Other versions
               </div>
               <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
-                Other printings of {bundle.name}
+                Other versions of {bundle.name} {(resolved.matched.collector_number ?? '').split('_')[0]}
               </h2>
+              <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5 }}>
+                Distinct collectible variants (parallels, reprints).
+                Each has its own image, own market ID, own price.
+              </p>
             </header>
             <ul
               style={{
@@ -326,26 +337,29 @@ export default async function PrintingPage({
                 padding: 0,
                 margin: 0,
                 display: 'grid',
-                gap: 6,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))',
+                gap: 10,
               }}
             >
-              {otherSets.map(({ cardView, printingView }) => {
-                const setCode = printingView.set?.code ?? cardView.set?.code ?? '';
-                const slugRow = buildPrintingSlug(
-                  printingView.printing.collector_number,
-                  cardView.card.name,
-                );
-                const href = `/set/${encodeURIComponent(setCode.toLowerCase())}/card/${encodeURIComponent(slugRow)}`;
+              {siblings.map((sib) => {
+                const href = buildVariantHref(sib.setCode, sib.collectorNumber, sib.cardName);
+                const priceText = sib.headline
+                  ? formatPrice(sib.headline.price, sib.headline.currency, { digits: sib.headline.price >= 100 ? 0 : 2 })
+                  : null;
+                const priceHint = sib.headline
+                  ? `${CURRENCY_SOURCE_NAME[sib.headline.currency]} ${HEADLINE_SIGNAL_LABEL[sib.headline.signal].toLowerCase()}`
+                  : null;
                 return (
-                  <li key={printingView.printing.id}>
+                  <li key={sib.cardId}>
                     <Link
                       href={href}
                       className="card-hover"
                       style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
+                        display: 'grid',
+                        gridTemplateColumns: '56px 1fr',
+                        gap: 12,
                         alignItems: 'center',
-                        padding: '10px 14px',
+                        padding: 10,
                         background: 'var(--surface)',
                         border: '1px solid var(--border)',
                         borderRadius: 10,
@@ -353,22 +367,32 @@ export default async function PrintingPage({
                         color: 'var(--text)',
                       }}
                     >
-                      <span style={{ display: 'grid', gap: 2 }}>
-                        <span style={{ fontWeight: 700, fontSize: 14 }}>
-                          {printingView.set?.name ?? setCode.toUpperCase()}
-                        </span>
-                        <span
-                          className="label-mono"
-                          style={{ color: 'var(--text-muted)' }}
-                        >
-                          {setCode.toUpperCase()} · #{printingView.printing.collector_number ?? '–'} · {cardView.rarity.label}
-                        </span>
-                      </span>
-                      <span
-                        className={`treatment-badge treatment-badge--${printingView.treatment.code}`}
-                      >
-                        {printingView.treatment.label}
-                      </span>
+                      {sib.imageUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={sib.imageUrl}
+                          alt={`${sib.cardName} ${sib.collectorNumber ?? ''}`}
+                          loading="lazy"
+                          style={{ width: 56, aspectRatio: '5 / 7', objectFit: 'cover', borderRadius: 6, background: 'var(--bg-light)' }}
+                        />
+                      ) : (
+                        <div style={{ width: 56, aspectRatio: '5 / 7', background: 'var(--bg-light)', borderRadius: 6 }} />
+                      )}
+                      <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.02em' }}>
+                          {(sib.setCode ?? '').toUpperCase()} #{sib.collectorNumber ?? '–'}
+                        </div>
+                        {priceText ? (
+                          <>
+                            <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 800, fontSize: 15 }}>
+                              {priceText}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{priceHint}</div>
+                          </>
+                        ) : (
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No live market price</div>
+                        )}
+                      </div>
                     </Link>
                   </li>
                 );
@@ -383,20 +407,20 @@ export default async function PrintingPage({
   );
 }
 
-async function GradedPanelForPrinting({
-  printingId,
+async function GradedPanelForVariant({
+  printingIds,
   cardId,
   setCode,
   collectorNumber,
   finish,
 }: {
-  printingId: string;
+  printingIds: string[];
   cardId: string;
   setCode: string;
   collectorNumber: string | null;
   finish: string | null;
 }) {
-  const rows = await getGradedRowsForAnchor({ printingId, cardId });
+  const rows = await getGradedRowsForAnchor({ printingIds, cardId });
   if (rows.length === 0) return null;
   return (
     <div style={{ marginTop: 28 }}>
