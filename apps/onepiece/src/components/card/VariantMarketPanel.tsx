@@ -12,18 +12,12 @@ import { buildEbaySearchUrl } from '@/lib/onepiece/ebay';
 import { baseCollectorNumber } from '@/lib/onepiece/slug';
 
 // Variant-scope market panel: Cardmarket EUR + TCGPlayer USD shown
-// side-by-side for one collectible variant. NO currency conversion —
-// each panel shows only its native feed. Rows are grouped by
-// marketplace product id (cardmarket_id / tcgplayer_id): when finish
-// rows on the same variant share a product id, they collapse into one
-// panel with a "Nonfoil / Foil" note rather than two duplicate rows.
-//
-// Data flow:
-//   input  = variantPrintings (every finish × language row on this
-//            one tcg_cards row) + language default.
-//   output = up to two panels (one Cardmarket, one TCGPlayer). When a
-//            side has no quote, we render an honest "no live quote"
-//            state instead of hiding.
+// side-by-side for one collectible variant. NO currency conversion.
+// Rows are grouped by marketplace product id (cardmarket_id /
+// tcgplayer_id); finish rows that share a product id collapse into
+// one panel. Finish labels are ONLY surfaced when a source actually
+// carries multiple distinct product ids for this variant — otherwise
+// they'd falsely imply two separate purchasable products.
 
 type SourceKey = 'cardmarket' | 'tcgplayer';
 
@@ -130,14 +124,18 @@ function MarketCard({
   cardName,
   baseCollector,
   group,
-  finish,
+  sourceHasMultipleProducts,
   fallbackCurrency,
 }: {
   source: SourceKey;
   cardName: string;
   baseCollector: string | null;
   group: Grouped | null;
-  finish: string | null;
+  /** True only when the source has >1 distinct product id for this
+   *  variant — the only case where a finish label is a meaningful
+   *  user-facing distinction. Everywhere else finish is DB granularity
+   *  the marketplace itself doesn't split, so we suppress it. */
+  sourceHasMultipleProducts: boolean;
   fallbackCurrency: 'EUR' | 'USD';
 }) {
   const sourceLabel = source === 'cardmarket' ? 'Cardmarket' : 'TCGPlayer';
@@ -153,12 +151,13 @@ function MarketCard({
   const cta = productHref ?? searchHref;
   const ctaLabel = productHref ? `View on ${sourceLabel}` : `Search ${sourceLabel}`;
   const updated = group ? daysAgo(newestUpdate(group)) : null;
-  const finishNote =
-    group && group.finishes.length > 1
-      ? `${group.finishes.map(prettyFinish).join(' / ')} share this listing`
-      : group && group.finishes.length === 1
-      ? prettyFinish(group.finishes[0]!)
-      : finish ? prettyFinish(finish) : null;
+  // Only show finish text when the source genuinely splits this
+  // variant into multiple purchasable products by finish. In the
+  // current OP feed, nonfoil + foil rows on the same variant share a
+  // marketplace product id, so we suppress the label.
+  const finishNote = sourceHasMultipleProducts && group && group.finishes.length === 1
+    ? prettyFinish(group.finishes[0]!)
+    : null;
 
   return (
     <div
@@ -177,7 +176,7 @@ function MarketCard({
         </div>
         {updated && (
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            updated {updated}
+            Updated {updated}
           </span>
         )}
       </div>
@@ -192,7 +191,7 @@ function MarketCard({
           </div>
           {(secondary.priceLow != null || secondary.trend != null) && (
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
-              {secondary.priceLow != null && (
+              {secondary.priceLow != null && headline.signal !== 'priceLow' && (
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Marketplace low <strong style={{ color: 'var(--text)' }}>{formatPrice(secondary.priceLow, currency)}</strong>
                 </span>
@@ -207,7 +206,7 @@ function MarketCard({
         </>
       ) : (
         <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          No live {sourceLabel} quote for this variant right now.
+          No live {sourceLabel} quote for this version right now.
         </div>
       )}
       <a
@@ -258,14 +257,16 @@ export default function VariantMarketPanel({
   const groups = groupByMarketProduct(variantPrintings);
   const cardmarket = findGroup(groups, 'cardmarket');
   const tcgplayer = findGroup(groups, 'tcgplayer');
+  // Detect whether either source truly splits this variant into more
+  // than one purchasable product by finish. That's the only case where
+  // a "Foil" / "Nonfoil" label is a real user-facing distinction rather
+  // than DB-side noise.
+  const cardmarketMulti = groups.filter((g) => g.source === 'cardmarket').length > 1;
+  const tcgplayerMulti = groups.filter((g) => g.source === 'tcgplayer').length > 1;
 
-  // eBay is game-wide — one CTA below the two market panels. Query
-  // narrows via base collector + name (never our internal _p slug).
-  const finishForEbay = variantPrintings[0]?.printing.finish ?? null;
   const ebayHref = buildEbaySearchUrl({
     cardName,
     collectorNumber: base ?? collectorNumber,
-    treatmentLabel: finishForEbay && finishForEbay !== 'nonfoil' ? finishForEbay : null,
     source: 'variant-market-panel',
   });
 
@@ -282,8 +283,7 @@ export default function VariantMarketPanel({
           Cardmarket and TCGPlayer, native currency
         </h2>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.55 }}>
-          Both feeds shown side-by-side. Nonfoil and foil are collapsed
-          when they share a marketplace product id.
+          Prices from Cardmarket and TCGPlayer for this exact version.
         </p>
       </header>
       <div
@@ -298,7 +298,7 @@ export default function VariantMarketPanel({
           cardName={cardName}
           baseCollector={base}
           group={cardmarket}
-          finish={finishForEbay}
+          sourceHasMultipleProducts={cardmarketMulti}
           fallbackCurrency="EUR"
         />
         <MarketCard
@@ -306,7 +306,7 @@ export default function VariantMarketPanel({
           cardName={cardName}
           baseCollector={base}
           group={tcgplayer}
-          finish={finishForEbay}
+          sourceHasMultipleProducts={tcgplayerMulti}
           fallbackCurrency="USD"
         />
       </div>

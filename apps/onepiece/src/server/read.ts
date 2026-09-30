@@ -202,6 +202,10 @@ export interface OpSiblingVariant {
   cardId: string;
   cardName: string;
   collectorNumber: string | null;
+  /** Card rarity — needed so callers can call `formatVariantLabel`
+   *  and land on the same treatment terminology the DB uses (Secret
+   *  Rare, Treasure Rare, etc. instead of a generic Parallel label). */
+  rarity: string | null;
   setCode: string | null;
   setName: string | null;
   imageUrl: string | null;
@@ -261,6 +265,7 @@ export async function getSiblingVariants(
       cardId: c.id,
       cardName: c.name,
       collectorNumber: c.collector_number,
+      rarity: c.rarity ?? null,
       setCode: set?.code ?? null,
       setName: set?.name ?? null,
       imageUrl: pickCardImage(c.images),

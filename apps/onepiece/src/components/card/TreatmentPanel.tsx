@@ -31,16 +31,19 @@ export default function TreatmentPanel({
 }) {
   const { treatment, pricing, printing, set, variantIndex } = printingView;
   const setLabel = set?.code?.toUpperCase() ?? '–';
-  const finishLabel = printing.finish?.toUpperCase() ?? null;
-  // The variant index (`_p2` → 2) is the collector-relevant fingerprint
-  // when it exists. Chase treatments (SEC / SP CARD / TR) don't have it.
+  // Fingerprint drops the internal `_p#` / `_r#` suffix from the
+  // visible collector number — the variant index is already carried
+  // by the treatment badge above (e.g. "Parallel #2"). Finish is
+  // omitted for OP because our nonfoil / foil DB rows share a single
+  // marketplace product id, so a visible finish label would falsely
+  // imply two distinct purchasable products.
+  const baseCollector = baseCollectorNumber(printing.collector_number) ?? '–';
   const treatmentToken =
     variantIndex != null ? `${treatment.short}${variantIndex}` : treatment.short;
   const fingerprint = [
     setLabel,
-    printing.collector_number ?? '–',
+    baseCollector,
     treatmentToken,
-    ...(finishLabel ? [finishLabel] : []),
     printing.language?.toUpperCase() ?? 'EN',
   ];
 
@@ -88,7 +91,7 @@ export default function TreatmentPanel({
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={imageUrl}
-              alt={`${cardView.card.name} ${printing.collector_number ?? ''}`}
+              alt={`${cardView.card.name} ${baseCollector} ${treatment.label}${variantIndex != null ? ` #${variantIndex}` : ''}`}
               loading="lazy"
               style={{
                 width: 60,

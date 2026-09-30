@@ -1,5 +1,6 @@
 import type { HistoryBundle, HistorySeries } from '@/server/history';
 import { formatPrice } from '@/lib/onepiece/format-price';
+import { HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
 
 function friendlySource(raw: string): string {
   const s = (raw ?? '').toLowerCase();
@@ -34,10 +35,10 @@ export default function PriceHistorySpark({ history }: { history: HistoryBundle 
         }}
       >
         <span className="label-mono" style={{ color: 'var(--gold-600)' }}>
-          Price history
+          Price history by marketplace and signal
         </span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          {history.observedFrom} → {history.observedTo}
+          {history.observedFrom} to {history.observedTo}
         </span>
       </div>
       {history.series.map((s, i) => (
@@ -95,9 +96,9 @@ function SeriesRow({ series }: { series: HistorySeries }) {
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
+          title={`${friendlySource(series.source)} ${series.currency} ${HEADLINE_SIGNAL_LABEL[series.signal]} history`}
         >
-          {friendlySource(series.source)} · {series.currency}
-          {series.finish ? ` · ${series.finish}` : ''}
+          {friendlySource(series.source)} · {series.currency} · {HEADLINE_SIGNAL_LABEL[series.signal]}
         </span>
         <span style={{ fontWeight: 700 }}>
           {formatPrice(last.price, series.currency)}

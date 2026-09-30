@@ -5,7 +5,8 @@ import { getCurrentUser } from '@collector-network/auth';
 import { getSetBundle } from '@/server/browse';
 import { getVariantBundle, getSiblingVariants } from '@/server/read';
 import { canonicalFor } from '@/lib/seo';
-import { buildLogicalCardHref, buildVariantHref, candidatePrintingSplits, slugifyCardName, baseCollectorNumber as computeBaseCollector } from '@/lib/onepiece/slug';
+import { buildLogicalCardHref, buildVariantHref, candidatePrintingSplits, slugifyCardName } from '@/lib/onepiece/slug';
+import { formatVariantLabel } from '@/lib/onepiece/variant-label';
 import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { CURRENCY_SOURCE_NAME, formatPrice } from '@/lib/onepiece/currency';
 import { pickHeadlinePrice, HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
@@ -91,9 +92,10 @@ export async function generateMetadata({
   if (!resolved) return { title: 'Card not found' };
   const bundle = await getVariantBundle(resolved.cardId);
   if (!bundle) return { title: 'Card not found' };
+  const label = formatVariantLabel(resolved.matched.collector_number, resolved.matched.rarity);
   return {
-    title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '–'}. Live market price`,
-    description: `${bundle.name} (${slug.toUpperCase()} ${resolved.matched.collector_number ?? ''}). Live Cardmarket and TCGPlayer market prices for this exact variant.`,
+    title: `${bundle.name} · ${slug.toUpperCase()} ${label.displayLinePlain}. Live market price`,
+    description: `${bundle.name} (${slug.toUpperCase()} ${label.displayLinePlain}). Live Cardmarket and TCGPlayer market prices for this exact variant.`,
     alternates: {
       canonical: canonicalFor(
         `/set/${encodeURIComponent(slug.toLowerCase())}/card/${encodeURIComponent(cardSlug)}`,
@@ -129,10 +131,28 @@ export default async function PrintingPage({
     anchorCardView.set?.code?.toUpperCase() ??
     slug.toUpperCase();
 
+  const variantLabel = formatVariantLabel(
+    resolved.matched.collector_number,
+    resolved.matched.rarity,
+  );
+
+  // Compute per-source headlines once so both FAQ text and the
+  // history sparkline label the same signal that the market panel
+  // shows. No extra DB round trips — this reads from the pricing
+  // already loaded into the bundle.
+  const cardmarketHeadline = pickSourceHeadlineFromPrintings(anchorCardView.printings, 'cardmarket', 'EUR');
+  const tcgplayerHeadline = pickSourceHeadlineFromPrintings(anchorCardView.printings, 'tcgplayer', 'USD');
+  const historySignalPreference = {
+    ...(cardmarketHeadline ? { cardmarket: cardmarketHeadline.signal } : {}),
+    ...(tcgplayerHeadline ? { tcgplayer: tcgplayerHeadline.signal } : {}),
+  } as const;
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
-    name: `${bundle.name} · ${canonicalSetLabel}`,
+    // Human-readable Product.name uses the friendly variant label, not
+    // the internal `_p#` slug. Bandai never prints "_p2" on the card.
+    name: `${bundle.name} · ${canonicalSetLabel} ${variantLabel.displayLinePlain}`,
     url: canonicalFor(
       `/set/${encodeURIComponent(slug.toLowerCase())}/card/${encodeURIComponent(cardSlug)}`,
     ),
@@ -155,7 +175,11 @@ export default async function PrintingPage({
           setCode={canonicalSetLabel}
           setName={anchorPrinting?.set?.name ?? anchorCardView.set?.name ?? slug.toUpperCase()}
           setPath={`/set/${encodeURIComponent(slug.toLowerCase())}`}
-          cardName={bundle.name}
+          cardName={
+            variantLabel.treatmentLabel
+              ? `${bundle.name} · ${variantLabel.treatmentLabel}${variantLabel.variantIndex != null ? ` #${variantLabel.variantIndex}` : ''}`
+              : bundle.name
+          }
         />
 
         <div
@@ -192,7 +216,7 @@ export default async function PrintingPage({
           <div style={{ display: 'grid', gap: 14 }}>
             <div>
               <div className="label-mono" style={{ color: 'var(--gold-600)' }}>
-                {canonicalSetLabel} · #{resolved.matched.collector_number ?? '–'} · {anchorCardView.rarity.label}
+                {canonicalSetLabel} · {variantLabel.displayLine} · {anchorCardView.rarity.label}
               </div>
               <h1
                 style={{
@@ -214,7 +238,7 @@ export default async function PrintingPage({
                   className="chip chip-gold"
                   style={{ textDecoration: 'none' }}
                 >
-                  View all versions of {bundle.name} {(resolved.matched.collector_number ?? '').split('_')[0]}
+                  View all versions of {bundle.name} {variantLabel.base}
                 </Link>
               </div>
             </div>
@@ -272,6 +296,7 @@ export default async function PrintingPage({
 
         <VariantHistoryBlock
           printingIds={anchorCardView.printings.map((p) => p.printing.id)}
+          signalPreference={historySignalPreference}
         />
 
         {siblings.length > 0 && (
@@ -281,11 +306,10 @@ export default async function PrintingPage({
                 Other versions
               </div>
               <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
-                Other versions of {bundle.name} {(resolved.matched.collector_number ?? '').split('_')[0]}
+                Other versions of {bundle.name} {variantLabel.base}
               </h2>
               <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5 }}>
-                Distinct collectible variants (parallels, reprints).
-                Each has its own image, own market ID, own price.
+                Each version has its own image, its own marketplace product and its own price.
               </p>
             </header>
             <ul
@@ -300,6 +324,7 @@ export default async function PrintingPage({
             >
               {siblings.map((sib) => {
                 const href = buildVariantHref(sib.setCode, sib.collectorNumber, sib.cardName);
+                const sibLabel = formatVariantLabel(sib.collectorNumber, sib.rarity ?? null);
                 const priceText = sib.headline
                   ? formatPrice(sib.headline.price, sib.headline.currency, { digits: sib.headline.price >= 100 ? 0 : 2 })
                   : null;
@@ -328,7 +353,7 @@ export default async function PrintingPage({
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={sib.imageUrl}
-                          alt={`${sib.cardName} ${sib.collectorNumber ?? ''}`}
+                          alt={`${sib.cardName} ${sibLabel.displayLinePlain}`}
                           loading="lazy"
                           style={{ width: 56, aspectRatio: '5 / 7', objectFit: 'cover', borderRadius: 6, background: 'var(--bg-light)' }}
                         />
@@ -337,7 +362,7 @@ export default async function PrintingPage({
                       )}
                       <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.02em' }}>
-                          {(sib.setCode ?? '').toUpperCase()} #{sib.collectorNumber ?? '–'}
+                          {(sib.setCode ?? '').toUpperCase()} · {sibLabel.displayLine || sib.collectorNumber || '–'}
                         </div>
                         {priceText ? (
                           <>
@@ -366,6 +391,12 @@ export default async function PrintingPage({
           setCode={canonicalSetLabel}
           siblingsCount={siblings.length}
           hasGraded={await gradedHasRows(anchorCardView.printings.map((p) => p.printing.id), anchorCardView.card.id)}
+          humanIdentifier={variantLabel.displayLinePlain}
+          baseCollector={variantLabel.base}
+          treatmentLabel={variantLabel.treatmentLabel}
+          variantIndex={variantLabel.variantIndex}
+          cardmarketHeadline={cardmarketHeadline}
+          tcgplayerHeadline={tcgplayerHeadline}
         />
 
         <EbayAffiliateDisclosure />
@@ -414,6 +445,12 @@ function VariantFaqBlock({
   setCode,
   siblingsCount,
   hasGraded,
+  humanIdentifier,
+  baseCollector,
+  treatmentLabel,
+  variantIndex,
+  cardmarketHeadline,
+  tcgplayerHeadline,
 }: {
   bundle: { name: string };
   anchorCardView: OpCardView;
@@ -422,24 +459,25 @@ function VariantFaqBlock({
   setCode: string;
   siblingsCount: number;
   hasGraded: boolean;
+  /** Friendly identifier like "OP07-038 Parallel #2" used in every
+   *  visible question/answer. Internal `_p#` slug never appears. */
+  humanIdentifier: string;
+  baseCollector: string;
+  treatmentLabel: string | null;
+  variantIndex: number | null;
+  cardmarketHeadline: { price: number; currency: 'EUR' | 'USD'; signal: 'avg30d' | 'priceLow' | 'trend' } | null;
+  tcgplayerHeadline: { price: number; currency: 'EUR' | 'USD'; signal: 'avg30d' | 'priceLow' | 'trend' } | null;
 }) {
   const cn = matched.collector_number ?? '';
-  const base = computeBaseCollector(cn) ?? cn;
   const isParallel = /_p\d+$/i.test(cn);
   const isReprint = /_r\d+$/i.test(cn);
-  const variantIndexMatch = cn.match(/_[pr](\d+)$/i);
-  const variantIndex = variantIndexMatch ? Number.parseInt(variantIndexMatch[1]!, 10) : null;
-  const anchorPrinting = anchorCardView.printings[0];
-  const treatmentLabel = anchorPrinting?.treatment.label ?? (isParallel ? 'Parallel' : isReprint ? 'Reprint' : 'Standard');
-  const cardmarketHeadline = pickSourceHeadlineFromPrintings(anchorCardView.printings, 'cardmarket', 'EUR');
-  const tcgplayerHeadline = pickSourceHeadlineFromPrintings(anchorCardView.printings, 'tcgplayer', 'USD');
   const entries = variantFaq({
     cardName: bundle.name,
-    collectorNumber: cn || base,
-    baseCollectorNumber: base,
+    humanIdentifier,
+    baseCollectorNumber: baseCollector,
     setLabel,
     setCode,
-    treatmentLabel,
+    treatmentLabel: treatmentLabel ?? 'Standard',
     variantIndex,
     rarityLabel: anchorCardView.rarity.label,
     hasCardmarketQuote: cardmarketHeadline != null,
@@ -453,7 +491,7 @@ function VariantFaqBlock({
   });
   return (
     <Faq
-      title={`FAQ: ${bundle.name} ${cn || base}`}
+      title={`FAQ: ${bundle.name} ${humanIdentifier || baseCollector}`}
       entries={entries}
     />
   );
@@ -486,10 +524,16 @@ async function GradedPanelForVariant({
   );
 }
 
-async function VariantHistoryBlock({ printingIds }: { printingIds: string[] }) {
+async function VariantHistoryBlock({
+  printingIds,
+  signalPreference,
+}: {
+  printingIds: string[];
+  signalPreference: { cardmarket?: 'avg30d' | 'priceLow' | 'trend'; tcgplayer?: 'avg30d' | 'priceLow' | 'trend' };
+}) {
   let history;
   try {
-    history = await getVariantHistory(printingIds);
+    history = await getVariantHistory(printingIds, signalPreference);
   } catch {
     return null;
   }

@@ -522,10 +522,16 @@ export function logicalCardFaq(
  *  question is derived from DB facts — the card's collector number,
  *  set, treatment, headline market signal, whether graded rows exist,
  *  whether a Cardmarket / TCGPlayer product id is known. Content is
- *  stable across renders so the FAQPage JSON-LD stays canonical. */
+ *  stable across renders so the FAQPage JSON-LD stays canonical.
+ *
+ *  `humanIdentifier` is the collector-facing label the caller has
+ *  already composed via `formatVariantLabel` — something like
+ *  "OP07-038 Parallel #2" or "OP01-120 Reprint #1". Every visible
+ *  Q/A uses this; the internal `_p#` / `_r#` slug never appears in
+ *  user-facing copy. */
 export function variantFaq(facts: {
   cardName: string;
-  collectorNumber: string;
+  humanIdentifier: string;
   baseCollectorNumber: string;
   setLabel: string;
   setCode: string;
@@ -542,12 +548,13 @@ export function variantFaq(facts: {
   siblingCount: number;
 }): FaqEntry[] {
   const {
-    cardName, collectorNumber, baseCollectorNumber: base, setLabel, setCode,
+    cardName, humanIdentifier, baseCollectorNumber: base, setLabel, setCode,
     treatmentLabel, variantIndex, rarityLabel,
     hasCardmarketQuote, hasTcgplayerQuote,
     cardmarketHeadline, tcgplayerHeadline,
     hasGraded, isParallel, isReprint, siblingCount,
   } = facts;
+  const ident = humanIdentifier || base;
   const signalWord = (s: 'avg30d' | 'priceLow' | 'trend'): string =>
     s === 'avg30d' ? '30-day average' : s === 'priceLow' ? 'marketplace-low listing' : 'top listing';
   const fmt = (p: number, c: 'EUR' | 'USD'): string => {
@@ -571,23 +578,23 @@ export function variantFaq(facts: {
     return `Neither Cardmarket nor TCGPlayer has a live quote for this exact variant right now.`;
   })();
   entries.push({
-    q: `How much is ${cardName} ${collectorNumber} worth right now?`,
-    a: <>{priceLine} We track each collectible variant as its own priced entity, so this figure is the {treatmentLabel.toLowerCase()} treatment of {cardName} in {setLabel} — never averaged across siblings.</>,
+    q: `How much is ${cardName} ${ident} worth right now?`,
+    a: <>{priceLine} We track each collectible variant as its own priced entity, so this figure is the {treatmentLabel.toLowerCase()} treatment of {cardName} in {setLabel}, never averaged across siblings.</>,
     plainAnswer: `${priceLine} We track each collectible variant as its own priced entity — the ${treatmentLabel.toLowerCase()} treatment of ${cardName} in ${setLabel} — never averaged across siblings.`,
   });
 
   // Q2 — identity ("how do I tell this variant apart")
   const identityAnswer = (() => {
     if (isParallel) {
-      return `The base ${base} print sits at a different price band from this parallel${variantIndex != null ? ` (#${variantIndex})` : ''}. The parallel treatment carries a distinct Cardmarket / TCGPlayer product id, so its market listings never appear under the base collector number.`;
+      return `The base ${base} print sits at a different price band from this parallel${variantIndex != null ? ` (#${variantIndex})` : ''}. The parallel treatment carries a distinct Cardmarket and TCGPlayer product id, so its market listings never appear under the base collector number.`;
     }
     if (isReprint) {
-      return `This is a reprint of the base ${base}. The reprint carries its own marketplace product id and its own price signal, distinct from the original print.`;
+      return `This is a reprint of the base ${base}${variantIndex != null ? ` (Reprint #${variantIndex})` : ''}. The reprint carries its own marketplace product id and its own price signal, distinct from the original print.`;
     }
-    return `This is the base ${base} print of ${cardName}. Parallels and reprints of the same base carry a suffix on the collector number (e.g. ${base}_p1) and are tracked as separate priced entities on their own pages.`;
+    return `This is the base ${base} print of ${cardName}. Parallels and reprints of the same base are shown as distinct versions with their own images and prices, listed in the "Other versions" rail on this page.`;
   })();
   entries.push({
-    q: `How can I tell my ${cardName} is the ${collectorNumber} version and not another treatment?`,
+    q: `How can I tell my ${cardName} is the ${ident} version and not another treatment?`,
     a: <>{identityAnswer}</>,
     plainAnswer: identityAnswer,
   });
@@ -597,26 +604,26 @@ export function variantFaq(facts: {
     const parts: string[] = [];
     if (hasCardmarketQuote) parts.push('the Cardmarket product listing (EUR)');
     if (hasTcgplayerQuote) parts.push('the TCGPlayer product listing (USD)');
-    parts.push('an eBay search narrowed to this collector number');
+    parts.push(`an eBay search narrowed to ${base}`);
     if (parts.length === 1) return `We link to ${parts[0]}.`;
     if (parts.length === 2) return `We link to ${parts[0]} and ${parts[1]}.`;
     return `We link to ${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}.`;
   })();
   entries.push({
-    q: `Where can I buy ${cardName} ${collectorNumber}?`,
+    q: `Where can I buy ${cardName} ${ident}?`,
     a: (
       <>
         {buyLine} Every buy link on this page is scoped to this exact
-        variant, not the base card family, so the marketplace lands on
+        version, not the base card family, so the marketplace lands on
         the same listing whose price is quoted above.
       </>
     ),
-    plainAnswer: `${buyLine} Every buy link on this page is scoped to this exact variant, not the base card family.`,
+    plainAnswer: `${buyLine} Every buy link on this page is scoped to this exact version, not the base card family.`,
   });
 
   // Q4 — rarity/treatment context
   entries.push({
-    q: `What treatment is ${cardName} ${collectorNumber}?`,
+    q: `What treatment is ${cardName} ${ident}?`,
     a: (
       <>
         {treatmentLabel}
@@ -632,30 +639,30 @@ export function variantFaq(facts: {
   // Q5 — graded (only if data exists)
   if (hasGraded) {
     entries.push({
-      q: `How much is a graded ${cardName} ${collectorNumber}?`,
+      q: `How much is a graded ${cardName} ${ident}?`,
       a: (
         <>
           Live PSA, BGS, CGC and SGC market prices for this exact
-          variant are shown in the &ldquo;Graded card prices&rdquo;
-          panel above. Rows are scoped to this collector number only;
+          version are shown in the &ldquo;Graded card prices&rdquo;
+          panel above. Rows are scoped to this version only;
           a slab price from another parallel of {cardName} is never
-          shown under this variant.
+          shown here.
         </>
       ),
-      plainAnswer: `Live PSA, BGS, CGC and SGC market prices for ${cardName} ${collectorNumber} are shown in the Graded card prices panel above. Rows are scoped to this collector number only; slab prices from other parallels are never shown here.`,
+      plainAnswer: `Live PSA, BGS, CGC and SGC market prices for ${cardName} ${ident} are shown in the Graded card prices panel above. Rows are scoped to this version only; slab prices from other parallels are never shown here.`,
     });
   } else {
     entries.push({
-      q: `Are there graded prices for ${cardName} ${collectorNumber}?`,
+      q: `Are there graded prices for ${cardName} ${ident}?`,
       a: (
         <>
           No confidently-mapped PSA, BGS, CGC or SGC rows exist for
-          this exact variant today. Rather than borrow a slab price
+          this exact version today. Rather than borrow a slab price
           from a sibling parallel, we render no graded panel until the
-          feed carries data anchored to this collector number.
+          feed carries data anchored to this version.
         </>
       ),
-      plainAnswer: `No confidently-mapped PSA, BGS, CGC or SGC rows exist for ${cardName} ${collectorNumber} today. We do not borrow slab prices from sibling parallels.`,
+      plainAnswer: `No confidently-mapped PSA, BGS, CGC or SGC rows exist for ${cardName} ${ident} today. We do not borrow slab prices from sibling parallels.`,
     });
   }
 
@@ -678,7 +685,7 @@ export function variantFaq(facts: {
 
   // Q7 — set context (evergreen closer)
   entries.push({
-    q: `What set is ${cardName} ${collectorNumber} from?`,
+    q: `What set is ${cardName} ${ident} from?`,
     a: <>{setLabel} ({setCode.toUpperCase()}).</>,
     plainAnswer: `${setLabel} (${setCode.toUpperCase()}).`,
   });
