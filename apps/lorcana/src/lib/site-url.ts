@@ -14,8 +14,22 @@ const RAW =
   process.env['SITE_URL'] ??
   'https://www.lorcanaprices.io';
 
+// Defensive sanitisation. The value can arrive with:
+//   • a UTF-8 BOM (U+FEFF) baked in — PowerShell's `vercel env add`
+//     pipeline encoding is a known source of this
+//   • surrounding double quotes if the deploy pipeline forwards the
+//     literal .env line instead of the value
+//   • leading/trailing whitespace
+// All three would make `new URL(SITE_URL)` throw at build time,
+// which is what broke the previous deploy.
+const CLEANED = RAW
+  .replace(/[﻿​]/g, '')
+  .trim()
+  .replace(/^"|"$/g, '')
+  .trim();
+
 // Strip trailing slash so callers can build `${SITE_URL}${path}` safely.
-export const SITE_URL = RAW.replace(/\/+$/, '');
+export const SITE_URL = CLEANED.replace(/\/+$/, '');
 
 export function absoluteUrl(path: string): string {
   if (!path.startsWith('/')) return `${SITE_URL}/${path}`;
