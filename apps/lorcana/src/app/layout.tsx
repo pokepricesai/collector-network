@@ -67,6 +67,19 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: SITE_URL },
   robots: SITE_LAUNCHED ? LAUNCHED_ROBOTS : PRE_LAUNCH_ROBOTS,
+  // Search Console site verification. Emits
+  //   <meta name="google-site-verification" content="…" />
+  //   <meta name="msvalidate.01" content="…" />
+  // only when the matching env var is present — nothing shipped if
+  // the token has not been issued yet.
+  verification: {
+    ...(process.env['GOOGLE_SITE_VERIFICATION']
+      ? { google: process.env['GOOGLE_SITE_VERIFICATION'] }
+      : {}),
+    ...(process.env['BING_SITE_VERIFICATION']
+      ? { other: { 'msvalidate.01': process.env['BING_SITE_VERIFICATION'] } }
+      : {}),
+  },
 };
 
 // Next 15 pulls viewport out of metadata; without this every page ships
