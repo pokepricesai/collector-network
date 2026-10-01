@@ -14,12 +14,16 @@ export default function ContactPage() {
     <section className="section">
       <div className="container" style={{ display: 'grid', gap: 28, maxWidth: 720 }}>
         <div style={{ display: 'grid', gap: 12 }}>
-          <h1>Contact {SITE_NAME}</h1>
+          <span className="eyebrow">Contact</span>
+          <h1>Contact {SITE_NAME}.</h1>
           <p className="lede">
             For partnerships, commercial enquiries or general questions, get in touch.
+            Pick the enquiry type that fits best and we&apos;ll route it to the right place.
           </p>
         </div>
-        <ContactForm />
+        <div className="form-panel">
+          <ContactForm />
+        </div>
       </div>
     </section>
   );

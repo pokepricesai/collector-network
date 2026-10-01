@@ -1,9 +1,10 @@
 import Image from 'next/image';
 import { SITES } from '@/lib/sites';
+import { ArrowUpRight } from './icons';
 
-// The five-platform grid. These real approved logos are the dominant
-// visual element on the homepage. Each is a direct anchor to the
-// corresponding Production site; they open in the same tab per spec.
+// Five-platform grid. Logos stay dominant; a per-brand accent colour
+// is used only for the hover glow and the subtle "Visit site" cue
+// that fades in. External links open in a new tab per spec.
 
 export default function PlatformGrid() {
   return (
@@ -12,9 +13,11 @@ export default function PlatformGrid() {
         <a
           key={s.slug}
           href={s.href}
-          rel="noopener"
+          target="_blank"
+          rel="noopener noreferrer"
           className="platform-card"
-          aria-label={`${s.name}: ${s.descriptor}`}
+          aria-label={`${s.name}: ${s.descriptor} (opens in new tab)`}
+          style={{ ['--accent' as string]: s.accent }}
         >
           <div className="platform-logo">
             <Image
@@ -29,6 +32,9 @@ export default function PlatformGrid() {
           <div className="platform-meta">
             <span className="platform-name">{s.name}</span>
             <span className="platform-desc">{s.descriptor}</span>
+            <span className="platform-visit" aria-hidden>
+              Visit site <ArrowUpRight />
+            </span>
           </div>
         </a>
       ))}

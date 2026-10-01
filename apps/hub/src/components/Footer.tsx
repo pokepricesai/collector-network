@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { SITE_NAME, SITES } from '@/lib/sites';
+import { ArrowUpRight } from './icons';
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -12,7 +13,7 @@ export default function Footer() {
             <span>{SITE_NAME}</span>
           </Link>
           <p className="footer-tagline">
-            Independent trading card pricing and collector platforms.
+            Five specialist trading card platforms. One network.
           </p>
         </div>
         <div className="footer-cols">
@@ -21,8 +22,14 @@ export default function Footer() {
             <ul>
               {SITES.map((s) => (
                 <li key={s.slug}>
-                  <a href={s.href} rel="noopener">
-                    {s.name}
+                  <a
+                    href={s.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${s.name} (opens in new tab)`}
+                  >
+                    <span>{s.name}</span>
+                    <ArrowUpRight className="ext-arrow" />
                   </a>
                 </li>
               ))}
@@ -40,7 +47,9 @@ export default function Footer() {
       </div>
       <div className="container footer-copy">
         <span>© {year} {SITE_NAME}</span>
-        <span className="subtle">Pokémon, Magic: The Gathering, Yu-Gi-Oh!, One Piece and Disney Lorcana are trademarks of their respective owners.</span>
+        <span className="subtle">
+          Pokémon, Magic: The Gathering, Yu-Gi-Oh!, One Piece and Disney Lorcana are trademarks of their respective owners.
+        </span>
       </div>
     </footer>
   );

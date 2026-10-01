@@ -1,6 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SITE_NAME, SITE_URL } from '@/lib/sites';
+import {
+  ArrowRight,
+  IconCustom,
+  IconData,
+  IconGrading,
+  IconRetail,
+  IconSponsor,
+} from '@/components/icons';
 
 export const metadata: Metadata = {
   title: `Partner with ${SITE_NAME}`,
@@ -9,12 +17,69 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/partner` },
 };
 
+const CATEGORIES = [
+  {
+    key: 'sponsorship',
+    icon: <IconSponsor />,
+    title: 'Sponsorship',
+    bullets: [
+      'Category sponsorship',
+      'Homepage and site placements',
+      'Targeted card and set placements',
+      'Brand visibility around relevant tools',
+    ],
+  },
+  {
+    key: 'retail',
+    icon: <IconRetail />,
+    title: 'Marketplace & retail',
+    bullets: [
+      'Buying links',
+      'Marketplace integrations',
+      'Retailer listings',
+      'Commercial referrals',
+      'Product and data integrations',
+    ],
+  },
+  {
+    key: 'grading',
+    icon: <IconGrading />,
+    title: 'Grading',
+    bullets: [
+      'Grading company visibility around graded card pricing',
+      'Grading education and content',
+      'Premium listings',
+      'Data integrations',
+    ],
+  },
+  {
+    key: 'data',
+    icon: <IconData />,
+    title: 'Content & data',
+    bullets: [
+      'Useful sponsored editorial',
+      'Market reports',
+      'Pricing and data collaborations',
+      'Collector research',
+    ],
+  },
+  {
+    key: 'custom',
+    icon: <IconCustom />,
+    title: 'Custom partnerships',
+    bullets: [
+      'If a company serves trading card collectors and there is a useful integration we have not listed, speak to us. We would rather build something specific than reach for an off-the-shelf package.',
+    ],
+  },
+] as const;
+
 export default function PartnerPage() {
   return (
     <section className="section">
-      <div className="container" style={{ display: 'grid', gap: 36 }}>
-        <div style={{ display: 'grid', gap: 14, maxWidth: 760 }}>
-          <h1>Partner with {SITE_NAME}</h1>
+      <div className="container" style={{ display: 'grid', gap: 40 }}>
+        <div style={{ display: 'grid', gap: 14, maxWidth: 780 }}>
+          <span className="eyebrow">Partner</span>
+          <h1>Partner with {SITE_NAME}.</h1>
           <p className="lede">
             Partners can reach collectors directly across several specialist
             platforms rather than buying generic display advertising. Each
@@ -22,66 +87,35 @@ export default function PartnerPage() {
           </p>
         </div>
 
-        <div className="cards-2">
-          <div className="card">
-            <h3>Sponsorship</h3>
-            <ul style={listStyle}>
-              <li>Category sponsorship</li>
-              <li>Homepage and site placements</li>
-              <li>Targeted card and set placements</li>
-              <li>Brand visibility around relevant tools</li>
-            </ul>
-          </div>
-          <div className="card">
-            <h3>Marketplace &amp; retail</h3>
-            <ul style={listStyle}>
-              <li>Buying links</li>
-              <li>Marketplace integrations</li>
-              <li>Retailer listings</li>
-              <li>Commercial referrals</li>
-              <li>Product and data integrations</li>
-            </ul>
-          </div>
-          <div className="card">
-            <h3>Grading</h3>
-            <ul style={listStyle}>
-              <li>Grading company visibility around graded card pricing</li>
-              <li>Grading education and content</li>
-              <li>Premium listings</li>
-              <li>Data integrations</li>
-            </ul>
-          </div>
-          <div className="card">
-            <h3>Content &amp; data</h3>
-            <ul style={listStyle}>
-              <li>Useful sponsored editorial</li>
-              <li>Market reports</li>
-              <li>Pricing and data collaborations</li>
-              <li>Collector research</li>
-            </ul>
-          </div>
+        <div className="cards-3">
+          {CATEGORIES.map((c) => (
+            <div key={c.key} className="partner-card">
+              <span className="partner-icon">{c.icon}</span>
+              <h3>{c.title}</h3>
+              <ul>
+                {c.bullets.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        <div className="card" style={{ display: 'grid', gap: 14 }}>
-          <h3>Custom partnerships</h3>
-          <p className="muted" style={{ fontSize: 15 }}>
-            If a company serves trading card collectors and there is a useful
-            integration we have not listed, speak to us. We would rather build
-            something specific than reach for an off-the-shelf package.
-          </p>
+        <div className="partner-cta">
           <div>
-            <Link href="/contact" className="btn btn-primary">Talk to us</Link>
+            <h2>Talk to us about a partnership.</h2>
+            <p>
+              Tell us what you&apos;re building. If it serves collectors across
+              one or more of our games, we&apos;ll shape an integration that
+              fits.
+            </p>
           </div>
+          <Link href="/contact" className="btn btn-primary btn-lg">
+            <span>Talk to us</span>
+            <ArrowRight className="arrow" />
+          </Link>
         </div>
       </div>
     </section>
   );
 }
-
-const listStyle: React.CSSProperties = {
-  margin: '8px 0 0',
-  paddingLeft: 20,
-  lineHeight: 1.8,
-  color: 'var(--text-muted)',
-  fontSize: 14.5,
-};

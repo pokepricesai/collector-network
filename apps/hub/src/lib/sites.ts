@@ -11,6 +11,12 @@ export interface SiteCard {
   /** Pixel dimensions of the source logo file in /public/sites/. */
   width: number;
   height: number;
+  /** Restrained brand-anchor colour used only for a very subtle hover
+   *  glow on each platform card. Logos remain the dominant surface;
+   *  the colour just hints that each tile belongs to a distinct
+   *  brand. Values chosen conservatively from the public site
+   *  identities, not reused for backgrounds or type. */
+  accent: string;
 }
 
 export const SITES: readonly SiteCard[] = [
@@ -22,6 +28,7 @@ export const SITES: readonly SiteCard[] = [
     logo: '/sites/pokeprices.png',
     width: 1024,
     height: 1024,
+    accent: '#CC0000',
   },
   {
     slug: 'mtgprices',
@@ -31,6 +38,7 @@ export const SITES: readonly SiteCard[] = [
     logo: '/sites/mtgprices.png',
     width: 2048,
     height: 2048,
+    accent: '#B38A2F',
   },
   {
     slug: 'ygoprices',
@@ -40,6 +48,7 @@ export const SITES: readonly SiteCard[] = [
     logo: '/sites/ygoprices.png',
     width: 1024,
     height: 1024,
+    accent: '#8A4CC9',
   },
   {
     slug: 'onepieceprices',
@@ -49,6 +58,7 @@ export const SITES: readonly SiteCard[] = [
     logo: '/sites/onepieceprices.png',
     width: 1024,
     height: 1024,
+    accent: '#C8102E',
   },
   {
     slug: 'lorcanaprices',
@@ -58,6 +68,7 @@ export const SITES: readonly SiteCard[] = [
     logo: '/sites/lorcanaprices.png',
     width: 2172,
     height: 724,
+    accent: '#6A43BE',
   },
 ];
 
