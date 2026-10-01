@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import { listRecentSetsWithCounts, type LcSetSummary } from './browse';
 import { getPricedTiles, type DiscoveryTile } from './discovery';
 import { getLorcanaClient, getLorcanaGameId } from './client';
@@ -81,7 +82,13 @@ function describe(err: unknown): string {
   return String(err);
 }
 
-async function getHomepageStats(): Promise<HomepageStats> {
+// Perf (2026-10-01): homepage stats are stable taxonomy counts
+// (card count, set count, Enchanted count) that only change on new
+// set releases. Wrap in unstable_cache so repeat homepage loads skip
+// three HEAD-count roundtrips. The cache is invalidated by bumping
+// the keyParts version here; tagged `lorcana:taxonomy` so a future
+// ingest step can revalidateTag() it on new-set-day.
+async function _getHomepageStats(): Promise<HomepageStats> {
   const supabase = getLorcanaClient();
   const gameId = await getLorcanaGameId(supabase);
 
@@ -97,6 +104,12 @@ async function getHomepageStats(): Promise<HomepageStats> {
     enchantedCount: enchCount,
   };
 }
+
+const getHomepageStats = unstable_cache(
+  _getHomepageStats,
+  ['lorcana:homepage:stats', 'v1'],
+  { revalidate: 3_600, tags: ['lorcana:taxonomy'] },
+);
 
 async function countRows(
   supabase: ReturnType<typeof getLorcanaClient>,

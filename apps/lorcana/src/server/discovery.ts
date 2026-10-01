@@ -365,6 +365,7 @@ export interface FinishSplit {
 }
 export async function getFinishSplitForSet(
   cards: readonly TcgCard[],
+  preloadedPrintings?: readonly TcgPrinting[],
 ): Promise<FinishSplit> {
   const supabase = getLorcanaClient();
   if (cards.length === 0) {
@@ -374,17 +375,22 @@ export async function getFinishSplitForSet(
       nonfoilCoverage: 0, foilCoverage: 0,
     };
   }
-  const cardIds = cards.map((c) => c.id);
-  const printingBatches = await Promise.all(
-    chunk(cardIds, 100).map((batch) =>
-      supabase.from('tcg_printings').select('*').in('tcg_card_id', batch as string[]),
-    ),
-  );
-  const printings: TcgPrinting[] = [];
-  for (const r of printingBatches) {
-    if (!r.error) printings.push(...(((r.data as TcgPrinting[]) ?? [])));
+  let printings: TcgPrinting[];
+  if (preloadedPrintings) {
+    const cardIdSet = new Set(cards.map((c) => c.id));
+    printings = preloadedPrintings.filter((p) => cardIdSet.has(p.tcg_card_id));
+  } else {
+    const cardIds = cards.map((c) => c.id);
+    const printingBatches = await Promise.all(
+      chunk(cardIds, 100).map((batch) =>
+        supabase.from('tcg_printings').select('*').in('tcg_card_id', batch as string[]),
+      ),
+    );
+    printings = [];
+    for (const r of printingBatches) {
+      if (!r.error) printings.push(...(((r.data as TcgPrinting[]) ?? [])));
+    }
   }
-  const printingsById = new Map(printings.map((p) => [p.id, p]));
   const priced = await priceLookup(supabase, printings.map((p) => p.id));
 
   let nonfoilTotal = 0, foilTotal = 0;

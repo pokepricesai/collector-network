@@ -12,12 +12,19 @@ import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import PriceHistorySpark from '@/components/card/PriceHistorySpark';
 import { AddToCollection } from '@/components/AddToCollection';
+import { WatchButton } from '@/components/WatchButton';
+import { isPrintingOnWatchlist } from '@/server/watchlist';
+import EbayFindButton, { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
+import { resolveLorcanaMarketplace } from '@/lib/lorcana/ebay';
+import { getRequestCountry } from '@/lib/lorcana/request-country';
 import { GradedPricesPanel } from '@/components/GradedPricesPanel';
 import { getPrintingHistory } from '@/server/history';
-import { getGradedRowsForAnchor } from '@/server/graded';
+import { getGradedRowsForAnchor, type TcgGradedRow } from '@/server/graded';
 import type { LcCardView, LcPrintingView } from '@/server/read';
 import type { TcgCard } from '@collector-network/database';
 import { getLorcanaCurrency } from '@/lib/currency-server';
+import CardFaq from '@/components/card/CardFaq';
+import { buildExactCollectibleFaq } from '@/lib/card-faq';
 
 // Specific-printing page. URL: /set/{code}/card/{cn-slug}. Resolves to
 // a single tcg_cards row + all its treatment printings from that set,
@@ -136,6 +143,36 @@ export default async function PrintingPage({
 
   const anchorPrinting = inThisSet[0]?.printingView;
   const heroImage = pickCardImage(anchorCardView.card.images);
+
+  // One graded fetch for both the FAQ count and the Graded panel. This
+  // keeps us honest on "no extra DB queries" — the panel used to run
+  // this itself.
+  const gradedRows: TcgGradedRow[] = anchorPrinting
+    ? await getGradedRowsForAnchor({
+        printingId: anchorPrinting.printing.id,
+        cardId: anchorCardView.card.id,
+      })
+    : [];
+
+  // Siblings for the FAQ "What other versions of {CardName} exist?"
+  // question. Both lists are built above as printing-level tuples; the
+  // FAQ wants card-view uniqueness so dedupe by card_id.
+  const siblingSameSetCards = Array.from(
+    new Map(sameSetSiblings.map((s) => [s.cardView.card.id, s.cardView])).values(),
+  );
+  const siblingOtherSetCards = Array.from(
+    new Map(otherSets.map((s) => [s.cardView.card.id, s.cardView])).values(),
+  );
+
+  const exactFaqEntries = buildExactCollectibleFaq({
+    cardName: bundle.name,
+    anchorCard: anchorCardView,
+    anchorPrinting: anchorPrinting ?? null,
+    siblingSameSet: siblingSameSetCards,
+    siblingOtherSets: siblingOtherSetCards,
+    gradedRowCount: gradedRows.length,
+    currency,
+  });
 
   const canonicalSetLabel =
     anchorPrinting?.set?.code?.toUpperCase() ??
@@ -256,24 +293,30 @@ export default async function PrintingPage({
             )}
 
             {anchorPrinting && (
-              <AddToCollection
+              <ExactActions
                 cardId={anchorCardView.card.id}
                 printingId={anchorPrinting.printing.id}
                 cardName={bundle.name}
-                isSignedIn={!!(await getCurrentUser())}
+                setName={anchorCardView.set?.name ?? null}
+                setCode={anchorCardView.set?.code ?? null}
+                collectorNumber={resolved.matched.collector_number ?? null}
+                rarityLabel={anchorCardView.rarity.label}
+                finish={anchorPrinting.printing.finish ?? null}
+                currency={currency}
               />
             )}
           </div>
         </div>
 
-        {anchorPrinting && (
-          <GradedPanelForPrinting
-            printingId={anchorPrinting.printing.id}
-            cardId={anchorCardView.card.id}
-            setCode={canonicalSetLabel}
-            collectorNumber={resolved.matched.collector_number}
-            finish={anchorPrinting.printing.finish}
-          />
+        {anchorPrinting && gradedRows.length > 0 && (
+          <div style={{ marginTop: 28 }}>
+            <GradedPricesPanel
+              rows={gradedRows}
+              setCode={canonicalSetLabel}
+              collectorNumber={resolved.matched.collector_number}
+              finish={anchorPrinting.printing.finish}
+            />
+          </div>
         )}
 
         <section style={{ marginTop: 36, display: 'grid', gap: 20 }}>
@@ -462,33 +505,79 @@ export default async function PrintingPage({
             </ul>
           </section>
         )}
+
+        <CardFaq
+          title={`FAQ — ${bundle.name}${resolved.matched.collector_number ? ` #${resolved.matched.collector_number}` : ''}`}
+          entries={exactFaqEntries}
+        />
+        <EbayAffiliateDisclosure />
       </div>
     </div>
   );
 }
 
-async function GradedPanelForPrinting({
-  printingId,
-  cardId,
-  setCode,
-  collectorNumber,
-  finish,
-}: {
-  printingId: string;
+//  Watch + Add + eBay action strip for the exact collectible page.
+//  Server component — reads auth session, request country and resolves
+//  the regional eBay marketplace before rendering so the <a> tag
+//  carries the correct host.
+async function ExactActions(props: {
   cardId: string;
-  setCode: string;
+  printingId: string;
+  cardName: string;
+  setName: string | null;
+  setCode: string | null;
   collectorNumber: string | null;
+  rarityLabel: string | null;
   finish: string | null;
+  currency: 'USD' | 'EUR';
 }) {
-  const rows = await getGradedRowsForAnchor({ printingId, cardId });
-  if (rows.length === 0) return null;
+  const [user, country, watchingResult] = await Promise.all([
+    getCurrentUser(),
+    getRequestCountry(),
+    isPrintingOnWatchlist(props.printingId),
+  ]);
+  const marketplace = resolveLorcanaMarketplace(country, props.currency);
+  const watching =
+    watchingResult.ok === true ? watchingResult.value : false;
+  const currentPathname =
+    props.setCode && props.collectorNumber
+      ? `/set/${props.setCode.toLowerCase()}/card/${encodeURIComponent(
+          `${props.collectorNumber}-${slugifyCardName(props.cardName)}`,
+        )}`
+      : '/';
+  //  Pass rarity to eBay only when the collectible genuinely has an
+  //  Enchanted / Iconic / Promo / Super rare label. Base-rarity
+  //  collectibles don't need the modifier — the collector number
+  //  disambiguates reprints better.
+  const narrowRarity =
+    props.rarityLabel && /enchanted|iconic|epic|promo|super rare/i.test(props.rarityLabel)
+      ? props.rarityLabel
+      : null;
   return (
-    <div style={{ marginTop: 28 }}>
-      <GradedPricesPanel
-        rows={rows}
-        setCode={setCode}
-        collectorNumber={collectorNumber}
-        finish={finish}
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+      <AddToCollection
+        cardId={props.cardId}
+        printingId={props.printingId}
+        cardName={props.cardName}
+        isSignedIn={!!user}
+      />
+      <WatchButton
+        tcgCardId={props.cardId}
+        tcgPrintingId={props.printingId}
+        initialWatching={watching}
+        signedIn={!!user}
+        currentPathname={currentPathname}
+      />
+      <EbayFindButton
+        cardName={props.cardName}
+        setName={props.setName}
+        setCode={props.setCode}
+        collectorNumber={props.collectorNumber}
+        rarity={narrowRarity}
+        finish={props.finish}
+        marketplace={marketplace}
+        source="lorcana-card-exact"
+        size="md"
       />
     </div>
   );

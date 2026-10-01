@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import {
   countCardsAndUniqueInSets,
   getCardsBySet,
@@ -21,7 +22,7 @@ export interface LcSetSummary {
   uniqueCardCount: number;
 }
 
-export async function listSetsWithCounts(): Promise<LcSetSummary[]> {
+async function _listSetsWithCounts(): Promise<LcSetSummary[]> {
   const supabase = getLorcanaClient();
   const gameId = await getLorcanaGameId(supabase);
   const sets = await listAllSets(supabase, gameId);
@@ -35,6 +36,17 @@ export async function listSetsWithCounts(): Promise<LcSetSummary[]> {
     }))
     .sort(byReleaseDateDesc);
 }
+
+// Perf (2026-10-01): set directory + per-set card counts are stable
+// taxonomy data — only churn on new-set-day. unstable_cache so
+// homepage, /browse and other callers share one warm result instead
+// of each paying for a full listAllSets + countCardsAndUniqueInSets
+// scan. Tagged `lorcana:taxonomy` so set ingest can revalidate it.
+export const listSetsWithCounts = unstable_cache(
+  _listSetsWithCounts,
+  ['lorcana:sets:with-counts', 'v1'],
+  { revalidate: 3_600, tags: ['lorcana:taxonomy'] },
+);
 
 /** Same as listSetsWithCounts but limited to the N most recent. Used
  *  by the homepage. */

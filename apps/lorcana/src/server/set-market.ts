@@ -55,7 +55,15 @@ export interface LcSetMarket {
 export async function getSetMarketForLorcana(
   setId: string,
   cards: readonly TcgCard[],
-  opts: { topN?: number; currency?: LorcanaCurrency } = {},
+  opts: {
+    topN?: number;
+    currency?: LorcanaCurrency;
+    /** Pre-loaded printings for the set. When provided, skips the
+     *  internal getPrintingsForCards call so a caller fetching
+     *  getPrintingsBySet(setId) once at page level can share the result
+     *  with other helpers (e.g. getFinishSplitForSet). */
+    preloadedPrintings?: readonly TcgPrinting[];
+  } = {},
 ): Promise<LcSetMarket> {
   const supabase = getLorcanaClient();
   void (await getLorcanaGameId(supabase));
@@ -100,7 +108,18 @@ export async function getSetMarketForLorcana(
   // heavy card doesn't underprice the family by pinning to the base
   // rarity printing that isn't for sale.
   const heroCardIds = heroes.map((h) => h.id);
-  const printings = await getPrintingsForCards(supabase, heroCardIds);
+  const heroCardIdSet = new Set(heroCardIds);
+  let printings: TcgPrinting[];
+  if (opts.preloadedPrintings) {
+    // Reuse the caller's set-wide printings — same tcg_card_id scope
+    // once filtered down to heroes, so semantically identical to
+    // getPrintingsForCards(heroCardIds).
+    printings = opts.preloadedPrintings.filter((p) =>
+      heroCardIdSet.has(p.tcg_card_id),
+    );
+  } else {
+    printings = await getPrintingsForCards(supabase, heroCardIds);
+  }
   const printingsByCard = new Map<string, TcgPrinting[]>();
   for (const p of printings) {
     const list = printingsByCard.get(p.tcg_card_id) ?? [];

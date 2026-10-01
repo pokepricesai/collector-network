@@ -24,7 +24,8 @@ import FinishSplitPanel from '@/components/set/FinishSplitPanel';
 import ChaseCounts from '@/components/set/ChaseCounts';
 import SetTaxonomyLinks from '@/components/set/SetTaxonomyLinks';
 import { summariseSetTaxonomy } from '@/server/internal-links';
-import type { TcgCard } from '@collector-network/database';
+import { getPrintingsBySet, type TcgCard } from '@collector-network/database';
+import { getLorcanaClient } from '@/server/client';
 import { getLorcanaCurrency } from '@/lib/currency-server';
 
 export const revalidate = 900;
@@ -205,17 +206,32 @@ export default async function SetPage({
   }
   const uniqueNames = [...byName.keys()].sort((a, b) => a.localeCompare(b));
 
-  // Fetch market overview + rarity distribution + finish split +
-  // (signed-in) set-completion in parallel. Each is a small server
-  // helper — no shared client cost.
-  const user = await getCurrentUser();
-  const currency = await getLorcanaCurrency();
+  // Perf (2026-10-01): fetch user, currency, and ALL set printings in
+  // one parallel wave. The printings result then feeds BOTH
+  // getSetMarketForLorcana AND getFinishSplitForSet so we don't do
+  // two near-identical SELECTs over tcg_printings per set page load.
+  // getSetCompletionForCurrentUser is also handed the already-loaded
+  // cards so it skips its internal `SELECT ... from tcg_cards where
+  // set_id = ...` roundtrip.
+  const supabaseForPrintings = getLorcanaClient();
+  const [user, currency, setPrintings] = await Promise.all([
+    getCurrentUser(),
+    getLorcanaCurrency(),
+    getPrintingsBySet(supabaseForPrintings, set.id).catch(() => []),
+  ]);
   const [market, rarityRows, finishSplit, completion] = await Promise.all([
-    getSetMarketForLorcana(set.id, cards, { topN: 5, currency }),
+    getSetMarketForLorcana(set.id, cards, {
+      topN: 5,
+      currency,
+      preloadedPrintings: setPrintings,
+    }),
     getRarityDistributionForSet(set.id, cards),
-    getFinishSplitForSet(cards),
+    getFinishSplitForSet(cards, setPrintings),
     user
-      ? getSetCompletionForCurrentUser({ setId: set.id }).catch(() => null)
+      ? getSetCompletionForCurrentUser({
+          setId: set.id,
+          preloadedCards: cards,
+        }).catch(() => null)
       : Promise.resolve(null),
   ]);
 
@@ -334,7 +350,6 @@ export default async function SetPage({
               source="lorcana-set-sealed"
               size="md"
               label={`Find sealed ${set.name} on eBay`}
-              disclose
             />
           </div>
         </div>

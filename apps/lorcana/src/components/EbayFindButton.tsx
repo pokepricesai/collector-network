@@ -5,7 +5,18 @@
 // apps/lorcana/src/lib/lorcana/ebay.ts. Silent when the campaign env
 // is absent — still returns a working search link so the user gets a
 // useful outbound in every environment.
+//
+// Server-rendered. Callers pass:
+//   - the collectible identity (cardName, setName, setCode, cn)
+//   - the exact rarity ONLY when the collectible truly has that
+//     rarity (Enchanted, Iconic, Promo, etc.) — never fabricated
+//   - the exact finish ONLY when the printing is actually that
+//     finish (foil / nonfoil) — see TreatmentPanel for conservative
+//     invocation
+//   - a `marketplace` prop resolved on the server from request
+//     country + currency via resolveLorcanaMarketplace()
 
+import type { EbayMarketplace } from '@collector-network/affiliate';
 import { buildLorcanaEbayLink } from '../lib/lorcana/ebay';
 
 export type EbayFindButtonSize = 'sm' | 'md' | 'lg';
@@ -15,15 +26,22 @@ export interface EbayFindButtonProps {
   setName?: string | null;
   setCode?: string | null;
   collectorNumber?: string | null;
+  /** Lorcana rarity label — ONLY pass when the collectible actually
+   *  has it. Appended to the search query verbatim. */
+  rarity?: string | null;
+  /** 'foil' | 'nonfoil' | null. */
+  finish?: string | null;
+  /** @deprecated — prefer the explicit `rarity` + `finish` pair. */
   finishOrTreatment?: string | null;
+  /** Server-resolved regional marketplace (see
+   *  resolveLorcanaMarketplace in lib/lorcana/ebay.ts). */
+  marketplace?: EbayMarketplace;
   /** For sealed / set-scope buttons; overrides cardName in query. */
   sealedSearchTerm?: string;
   /** EPN customid analytics origin. */
   source: string;
   size?: EbayFindButtonSize;
   label?: string;
-  /** Show short affiliate disclosure inline (small, muted). */
-  disclose?: boolean;
 }
 
 const SIZES: Record<EbayFindButtonSize, { padding: string; fontSize: number; borderRadius: number }> = {
@@ -36,19 +54,24 @@ export default function EbayFindButton(props: EbayFindButtonProps) {
   const link = buildLorcanaEbayLink({
     cardName: props.sealedSearchTerm ?? props.cardName ?? 'Disney Lorcana',
     setName: props.setName ?? null,
+    setCode: props.setCode ?? null,
     collectorNumber: props.collectorNumber ?? null,
+    rarity: props.rarity ?? null,
+    finish: props.finish ?? null,
     finishOrTreatment: props.finishOrTreatment ?? null,
+    marketplace: props.marketplace,
     source: props.source,
   });
-  // Default to 'sm' — the previous 'lg' was visually overpowering
-  // the primary Add-to-Collection action. Callers who want a bigger
-  // treatment can still request it.
   const size = SIZES[props.size ?? 'sm'];
   const baseLabel = props.label ?? (props.sealedSearchTerm
     ? `Find sealed ${props.setName ?? 'Lorcana'} on eBay`
-    : (props.finishOrTreatment ? `Find ${props.finishOrTreatment} copies on eBay` : `Find on eBay`));
-  // Single asterisk footnote marker per launch brief. Long disclosure
-  // now lives in the page footer (EbayAffiliateDisclosure component).
+    : props.rarity
+    ? `Find ${props.rarity} copies on eBay`
+    : props.finishOrTreatment
+    ? `Find ${props.finishOrTreatment} copies on eBay`
+    : props.cardName
+    ? `Find ${props.cardName} on eBay`
+    : 'Find on eBay');
   return (
     <a
       href={link.href}
@@ -93,7 +116,9 @@ export function EbayAffiliateDisclosure() {
       }}
     >
       * Affiliate link. LorcanaPrices may earn a commission from
-      qualifying purchases at no additional cost to you.
+      qualifying purchases at no additional cost to you. LorcanaPrices
+      is not affiliated with, endorsed by, or sponsored by eBay or
+      Disney.
     </p>
   );
 }

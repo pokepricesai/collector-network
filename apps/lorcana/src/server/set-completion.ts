@@ -40,13 +40,20 @@ export interface SetCompletion {
  * base-slot rule above. Returns `null` if the caller isn't signed in.
  * Returns { owned: 0, total: <n> } if the set has cards but the user
  * owns none.
+ *
+ * `preloadedCards` lets a caller that already loaded the set's cards
+ * (e.g. /set/[slug] via getSetBundle) skip the redundant tcg_cards
+ * SELECT. Must be the full set card list (same filter as
+ * `eq('set_id', setId)`), not a subset.
  */
 export async function getSetCompletionForCurrentUser({
   setId,
   missingLimit = 12,
+  preloadedCards,
 }: {
   setId: string;
   missingLimit?: number;
+  preloadedCards?: readonly TcgCard[];
 }): Promise<SetCompletion | null> {
   const supabase = await createServerSupabase();
   const {
@@ -54,20 +61,25 @@ export async function getSetCompletionForCurrentUser({
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Total = distinct tcg_card_id rows in this set. Equivalent to the
-  // distinct collector_number count per the base-slot rule above.
-  // Narrow projection (2026-09-30 perf pass): the set page render
-  // only needs id + name + collector_number + rarity to enumerate a
-  // missing sample; pulling `*` was dragging gamedata JSON on every
-  // set-page load for signed-in users.
-  const { data: allCards, error: cardsErr } = await supabase
-    .from('tcg_cards')
-    .select('id, name, collector_number, rarity, set_id')
-    .eq('set_id', setId);
-  if (cardsErr) {
-    throw new Error(`[lorcana/set-completion] cards ${setId}: ${cardsErr.message}`);
+  let cards: TcgCard[];
+  if (preloadedCards) {
+    cards = [...preloadedCards];
+  } else {
+    // Total = distinct tcg_card_id rows in this set. Equivalent to the
+    // distinct collector_number count per the base-slot rule above.
+    // Narrow projection (2026-09-30 perf pass): the set page render
+    // only needs id + name + collector_number + rarity to enumerate a
+    // missing sample; pulling `*` was dragging gamedata JSON on every
+    // set-page load for signed-in users.
+    const { data: allCards, error: cardsErr } = await supabase
+      .from('tcg_cards')
+      .select('id, name, collector_number, rarity, set_id')
+      .eq('set_id', setId);
+    if (cardsErr) {
+      throw new Error(`[lorcana/set-completion] cards ${setId}: ${cardsErr.message}`);
+    }
+    cards = (allCards as TcgCard[] | null) ?? [];
   }
-  const cards = (allCards as TcgCard[] | null) ?? [];
   const total = cards.length;
   if (total === 0) return { owned: 0, total: 0, missingSample: [] };
 

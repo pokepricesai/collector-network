@@ -12,12 +12,14 @@ import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import EffectText from '@/components/card/EffectText';
 import EbayFindButton, { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
+import { resolveLorcanaMarketplace } from '@/lib/lorcana/ebay';
+import { getRequestCountry } from '@/lib/lorcana/request-country';
 import LogicalAddToCollection, {
   type PrintingPick,
 } from '@/components/card/LogicalAddToCollection';
 import AskLorcanaPanel from '@/components/card/AskLorcanaPanel';
-import Faq from '@/components/Faq';
-import { buildCardFaq } from '@/server/faq-card';
+import CardFaq from '@/components/card/CardFaq';
+import { buildLogicalCardFaq } from '@/lib/card-faq';
 import { getCurrentUser } from '@collector-network/auth';
 import LogicalWatch, { type WatchablePrinting } from '@/components/card/LogicalWatch';
 import { watchedPrintingIdsFor } from '@/server/watchlist';
@@ -101,6 +103,11 @@ export default async function LogicalCardPage({
   // which native retail feed the per-treatment price row displays.
   const currentUser = await getCurrentUser();
   const currency = await getLorcanaCurrency();
+  //  Pick the eBay marketplace once, server-side, from the request
+  //  country header + currency hint. See lib/lorcana/ebay.ts for the
+  //  conservative resolution policy.
+  const country = await getRequestCountry();
+  const marketplace = resolveLorcanaMarketplace(country, currency);
 
   // Materialise a flat list of every real printing the user could
   // legitimately add to their collection. The LogicalAddToCollection
@@ -150,8 +157,12 @@ export default async function LogicalCardPage({
         : Promise.resolve([]),
     ]);
 
-  // Compute deterministic FAQ from the bundle. Prices pulled from the
-  // printings' known retail (`market`) rows.
+  // Compute deterministic FAQ from the bundle. All inputs come from
+  // data already loaded above — never a fresh DB round trip.
+  //
+  // Price band is still used by AskLorcana's context summary and the
+  // product JSON-LD. We derive it strictly within the dominant currency
+  // so we never mix USD + EUR into one headline.
   const allPrices: Array<{ amount: number; currency: string }> = [];
   for (const { printingView } of flat) {
     const p = printingView.pricing?.market;
@@ -161,7 +172,6 @@ export default async function LogicalCardPage({
       }
     }
   }
-  // Rank strictly within the dominant currency.
   const currCounts = new Map<string, number>();
   for (const p of allPrices) currCounts.set(p.currency, (currCounts.get(p.currency) ?? 0) + 1);
   const dominant = Array.from(currCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
@@ -170,13 +180,22 @@ export default async function LogicalCardPage({
     ? { amount: Math.min(...inCurrency.map((p) => p.amount)), currency: dominant! } : null;
   const dearestPrice = inCurrency.length
     ? { amount: Math.max(...inCurrency.map((p) => p.amount)), currency: dominant! } : null;
-  const cardFaqEntries = buildCardFaq({
-    name: bundle.name,
+
+  // Graded row count derived from already-loaded printing pricing —
+  // printing-attributed only (the only graded data on the bundle). The
+  // logical FAQ labels these honestly as card-family level.
+  let bundleGradedCount = 0;
+  for (const { printingView } of flat) {
+    bundleGradedCount += printingView.pricing?.graded?.length ?? 0;
+  }
+
+  const cardFaqEntries = buildLogicalCardFaq({
+    cardName: bundle.name,
     cards: bundle.cards,
     flatPrintings: flat,
     hero: heroCard,
-    cheapestPrice,
-    dearestPrice,
+    gradedRowCount: bundleGradedCount,
+    currency,
   });
 
   const canonical = canonicalFor(`/card/${slugifyCardName(bundle.name)}`);
@@ -341,6 +360,7 @@ export default async function LogicalCardPage({
               setName={heroCard.set?.name ?? null}
               setCode={heroCard.set?.code ?? null}
               collectorNumber={heroCard.card.collector_number ?? null}
+              marketplace={marketplace}
               source="lorcana-card"
               size="sm"
               label={`Find ${bundle.name} on eBay`}
@@ -427,7 +447,7 @@ export default async function LogicalCardPage({
         ]}
       />
 
-      <Faq title={`FAQ — ${bundle.name}`} entries={cardFaqEntries} />
+      <CardFaq title={`FAQ — ${bundle.name}`} entries={cardFaqEntries} />
 
       <CardInternalLinks
         cardName={bundle.name}

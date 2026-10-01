@@ -146,14 +146,26 @@ export async function getCharacterBySlug(slug: string): Promise<CharacterPageDat
   //  Lorcana names contain apostrophes and punctuation but no % or
   //  _ characters in practice; keep the escape defensive anyway.
   const escaped = match.name.replace(/[\\%_]/g, (m) => `\\${m}`);
+  // Perf (2026-10-01): narrow projection. The character page only
+  // reads card.{id,name,collector_number,rarity,gamedata,images} and
+  // set.{code,name,released_at}. Pulling `*, tcg_sets(*)` was dragging
+  // the full TcgCard (including heavy JSON columns we don't need) and
+  // every TcgSet column (released_at is used; most are not).
   const { data, error } = await sb
     .from('tcg_cards')
-    .select('*, tcg_sets(*)')
+    .select(
+      'id, name, collector_number, rarity, gamedata, images, set_id, game_id, tcg_sets(code, name, released_at)',
+    )
     .eq('game_id', LORCANA_GAME_ID)
     .or(`name.eq.${match.name},name.ilike.${escaped} - %`);
   if (error) throw new Error(`[lorcana/characters] getBySlug ${slug}: ${error.message}`);
+  // Perf-narrowed projection — cast through unknown because the typed
+  // TcgCard shape expects columns we deliberately didn't SELECT above
+  // (artist, tcggraph_card_id, language, ...). The downstream consumer
+  // only reads id, name, collector_number, rarity, gamedata, images,
+  // and the joined tcg_sets subset.
   type Joined = TcgCard & { tcg_sets: TcgSet | null };
-  const rows = (data as Joined[] | null) ?? [];
+  const rows = (data as unknown as Joined[] | null) ?? [];
 
   const versions: CharacterVersion[] = [];
   const inks = new Set<string>();
