@@ -6,11 +6,13 @@ export const SITE_LAUNCHED = process.env['SITE_LAUNCHED'] === 'true';
 
 // Deployment writes NEXT_PUBLIC_SITE_URL. Default here is the
 // intended production origin; it is safe to expose because it is
-// public. Never www; always https.
+// public. Vercel's project domain config permanently redirects the
+// apex to www, so canonicals + auth redirectTo values use www to
+// avoid a double-hop at serve time.
 const RAW =
   process.env['NEXT_PUBLIC_SITE_URL'] ??
   process.env['SITE_URL'] ??
-  'https://lorcanaprice.io';
+  'https://www.lorcanaprices.io';
 
 // Strip trailing slash so callers can build `${SITE_URL}${path}` safely.
 export const SITE_URL = RAW.replace(/\/+$/, '');

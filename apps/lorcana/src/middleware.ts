@@ -1,22 +1,20 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { readMiddlewareSession } from '@collector-network/auth';
 
-// Canonical origin for LorcanaPrices. www gets a 308 to apex so
-// browsers and crawlers converge. Vercel deployment hosts
-// (lorcana-web.vercel.app) are left alone so preview/CI still work.
-const CANONICAL_HOST = 'lorcanaprice.io';
+// Canonical origin for LorcanaPrices. Vercel's project-domain config
+// forces apex → www (308), so our middleware does not need to canonical
+// anything by itself. The Vercel deployment host
+// (lorcana-web.vercel.app) is left alone so preview/CI still work.
+const CANONICAL_HOST = 'www.lorcanaprices.io';
 
 // Session-refresh middleware. Runs on every routable path so the
 // Supabase auth cookie stays fresh across navigation. Per-route
 // protection lives inside route handlers via requireUser().
 export async function middleware(request: NextRequest) {
-  const host = request.headers.get('host') ?? '';
-  if (host === `www.${CANONICAL_HOST}`) {
-    const url = request.nextUrl.clone();
-    url.host = CANONICAL_HOST;
-    url.protocol = 'https:';
-    return NextResponse.redirect(url, 308);
-  }
+  // Keep the middleware passive — just a touch for the session cookie
+  // refresh. All host canonicalisation is handled by Vercel's own
+  // apex→www domain redirect.
+  void CANONICAL_HOST;
   const response = NextResponse.next();
   await readMiddlewareSession({ request, response });
   return response;

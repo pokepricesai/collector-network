@@ -10,6 +10,8 @@ import {
 } from '@collector-network/database';
 import { getLorcanaClient, getLorcanaGameId } from './client';
 
+const LORCANA_GAME_ID = 'lorcana';
+
 // Set-directory and set-detail composition helpers.
 //
 // listAllSets returns every set for the game. On top of that we layer
@@ -54,6 +56,39 @@ export async function listRecentSetsWithCounts(limit = 8): Promise<LcSetSummary[
   const all = await listSetsWithCounts();
   return all.slice(0, limit);
 }
+
+/** Map of `set_id → tcg_card_id[]` for every Lorcana set. Used by
+ *  the signed-in set-index completion math — the browse page can
+ *  intersect this with the user's owned-card-id set in memory
+ *  rather than firing one query per set. Cached under the shared
+ *  taxonomy tag so new-set ingests invalidate it with everything
+ *  else. */
+async function _listCardIdsBySet(): Promise<Record<string, string[]>> {
+  const sb = getLorcanaClient();
+  const CHUNK = 1000;
+  const out: Record<string, string[]> = {};
+  for (let from = 0; from < 60_000; from += CHUNK) {
+    const { data, error } = await sb
+      .from('tcg_cards')
+      .select('id, set_id')
+      .eq('game_id', LORCANA_GAME_ID)
+      .range(from, from + CHUNK - 1);
+    if (error) throw new Error(`[lorcana/browse] cards-by-set: ${error.message}`);
+    const rows = (data as Array<{ id: string; set_id: string }> | null) ?? [];
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      (out[row.set_id] ??= []).push(row.id);
+    }
+    if (rows.length < CHUNK) break;
+  }
+  return out;
+}
+
+export const listCardIdsBySet = unstable_cache(
+  _listCardIdsBySet,
+  ['lorcana:cards:by-set', 'v1'],
+  { revalidate: 21_600, tags: ['lorcana:taxonomy'] },
+);
 
 export async function getSetBundle(code: string): Promise<LcSetBundle | null> {
   const supabase = getLorcanaClient();

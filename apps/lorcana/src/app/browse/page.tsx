@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { listSetsWithCounts } from '@/server/browse';
+import { listCardIdsBySet, listSetsWithCounts } from '@/server/browse';
 import { SITE_URL } from '@/lib/site-url';
+import { getCurrentUser } from '@collector-network/auth';
+import { getOwnedCardIdSetForCurrentUser } from '@/server/collection-state';
+import SetsGrid, { type SetTileData } from '@/components/browse/SetsGrid';
 
 export const revalidate = 3600;
 export const dynamic = 'force-dynamic';
@@ -14,16 +16,37 @@ export const metadata: Metadata = {
 };
 
 export default async function BrowsePage() {
-  const sets = await listSetsWithCounts();
+  const [sets, user] = await Promise.all([listSetsWithCounts(), getCurrentUser()]);
+  const [owned, cardIdsBySet] = user
+    ? await Promise.all([
+        getOwnedCardIdSetForCurrentUser(),
+        listCardIdsBySet(),
+      ])
+    : [new Set<string>(), {} as Record<string, string[]>];
+
+  const entries: SetTileData[] = sets.map((s) => {
+    let ownedCount = 0;
+    if (user && owned.size > 0) {
+      for (const id of cardIdsBySet[s.set.id] ?? []) {
+        if (owned.has(id)) ownedCount++;
+      }
+    }
+    return {
+      code: s.set.code,
+      name: s.set.name,
+      releasedAt: s.set.released_at,
+      uniqueCardCount: s.uniqueCardCount,
+      variantCount: s.variantCount,
+      ownedCount,
+    };
+  });
 
   return (
     <div style={{ padding: '32px 24px' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <header className="lc-page-hero" style={{ marginBottom: 24 }}>
+        <header className="lc-page-hero" style={{ marginBottom: 16 }}>
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
-              Sets
-            </div>
+            <div className="label-mono" style={{ color: 'var(--accent-2)' }}>Sets</div>
             <h1 style={{ margin: '4px 0 6px', fontSize: 'clamp(24px, 4.5vw, 30px)' }}>
               Every Lorcana set
             </h1>
@@ -38,9 +61,21 @@ export default async function BrowsePage() {
             >
               {sets.length > 0 ? (
                 <>
-                  {sets.length} set{sets.length === 1 ? '' : 's'}, newest first.
-                  Card and treatment counts include Enchanted, Iconic, Epic,
-                  Legendary and Promo overprints across foil and nonfoil.
+                  {sets.length} set{sets.length === 1 ? '' : 's'}. Card and treatment
+                  counts include Enchanted, Iconic, Epic, Legendary and Promo
+                  overprints across foil and nonfoil.
+                  {!user && (
+                    <>
+                      {' '}
+                      <a
+                        href="/sign-in?returnTo=/browse"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        Sign in to track completion
+                      </a>
+                      .
+                    </>
+                  )}
                 </>
               ) : (
                 <>Sets are on their way — every main product, starter deck and promo pack.</>
@@ -52,67 +87,7 @@ export default async function BrowsePage() {
         {sets.length === 0 ? (
           <EmptyState />
         ) : (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
-              gap: 14,
-            }}
-          >
-            {sets.map((s) => (
-              <Link
-                key={s.set.id}
-                href={`/set/${encodeURIComponent(s.set.code.toLowerCase())}`}
-                className="lc-hover lc-hover-gold"
-                style={{
-                  display: 'grid',
-                  gap: 10,
-                  padding: 16,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 14,
-                  textDecoration: 'none',
-                  color: 'var(--text)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span className="label-mono" style={{ color: 'var(--text-muted)' }}>
-                    {s.set.code.toUpperCase()}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {formatReleased(s.set.released_at)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontFamily: "'Outfit', sans-serif",
-                    fontWeight: 700,
-                    fontSize: 16,
-                    color: 'var(--text-strong)',
-                    lineHeight: 1.25,
-                  }}
-                >
-                  {s.set.name}
-                </div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                  <span>
-                    {s.uniqueCardCount} card{s.uniqueCardCount === 1 ? '' : 's'}
-                  </span>
-                  {s.variantCount > s.uniqueCardCount && (
-                    <span
-                      style={{
-                        color: 'var(--accent-2)',
-                        marginLeft: 8,
-                        fontWeight: 600,
-                      }}
-                    >
-                      · +{s.variantCount - s.uniqueCardCount} treatments
-                    </span>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
+          <SetsGrid entries={entries} isSignedIn={Boolean(user)} />
         )}
       </div>
     </div>
@@ -135,16 +110,4 @@ function EmptyState() {
       deck and promo will appear here.
     </div>
   );
-}
-
-function formatReleased(iso: string | null): string {
-  if (!iso) return 'TBA';
-  try {
-    return new Date(iso).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-    });
-  } catch {
-    return iso;
-  }
 }

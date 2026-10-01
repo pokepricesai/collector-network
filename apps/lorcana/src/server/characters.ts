@@ -23,6 +23,10 @@ export interface CharacterListEntry {
   cardCount: number;    // number of tcg_cards rows with this character
   representativeImage: string | null;
   ink: string | null;   // most common ink for the character (informational)
+  /** Every tcg_card_id that belongs to this character — used by callers
+   *  that need to compute owned/missing in memory against the shared
+   *  user owned-set. See `getOwnedCardIdSetForCurrentUser`. */
+  cardIds: string[];
 }
 
 export interface CharacterVersion {
@@ -77,15 +81,15 @@ async function _listCharacters(): Promise<CharacterListEntry[]> {
     collected.push(...rows);
     if (rows.length < CHUNK) break;
   }
-  const grouped = new Map<string, { name: string; count: number; images: string[]; inks: Map<string, number> }>();
+  const grouped = new Map<string, { name: string; cardIds: string[]; images: string[]; inks: Map<string, number> }>();
   for (const r of collected) {
     const gd = toLcGamedata(r.gamedata);
     if (gd.cardType !== 'character') continue;
     const charName = characterKeyFromName(r.name);
     const key = slugifyCardName(charName);
     if (!key) continue;
-    const bucket = grouped.get(key) ?? { name: charName, count: 0, images: [], inks: new Map<string, number>() };
-    bucket.count += 1;
+    const bucket = grouped.get(key) ?? { name: charName, cardIds: [], images: [], inks: new Map<string, number>() };
+    bucket.cardIds.push(r.id);
     const img = pickImage(r.images);
     if (img) bucket.images.push(img);
     for (const ink of gd.inks) bucket.inks.set(ink, (bucket.inks.get(ink) ?? 0) + 1);
@@ -97,9 +101,10 @@ async function _listCharacters(): Promise<CharacterListEntry[]> {
     out.push({
       slug,
       name: b.name,
-      cardCount: b.count,
+      cardCount: b.cardIds.length,
       representativeImage: b.images[0] ?? null,
       ink: topInk,
+      cardIds: b.cardIds,
     });
   }
   out.sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
@@ -120,11 +125,10 @@ async function _listCharacters(): Promise<CharacterListEntry[]> {
 
 export const listCharacters = unstable_cache(
   _listCharacters,
-  //  keyParts version bumped 2026-09-30 (v2): invalidates the stale
-  //  "5 characters across 7 Character-cards" Data Cache entry that
-  //  was written under v1 during a stub-mode render. Bump this again
-  //  after any future fix that must invalidate production reads.
-  ['lorcana:characters:list', 'v2'],
+  //  keyParts version bumped 2026-10-01 (v3): CharacterListEntry now
+  //  carries `cardIds` so callers can compute user-collection
+  //  completion in memory. v2 entries lacked that field.
+  ['lorcana:characters:list', 'v3'],
   { revalidate: 21_600, tags: ['lorcana:taxonomy'] },
 );
 

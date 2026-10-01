@@ -22,7 +22,15 @@ const LC_SITE_CODE = "lorcana";
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const returnTo = safeReturnTo(url.searchParams.get('returnTo'));
+  // `next` is the Supabase template-default name for the post-auth
+  // return path (reset-password email). Accept either and run both
+  // through safeReturnTo so neither can carry an external URL.
+  const rawReturn =
+    url.searchParams.get('returnTo') ?? url.searchParams.get('next');
+  const returnTo = safeReturnTo(rawReturn);
+  // ALWAYS build the destination against *this* request's origin so a
+  // post-auth redirect can never cross-site, even if the Supabase email
+  // template contained a stale/different origin.
   const dest = new URL(returnTo, url.origin);
 
   if (code) {

@@ -5,7 +5,7 @@ import { getCharacterBySlug } from '../../../server/characters';
 import { canonicalFor } from '../../../lib/seo';
 import { slugifyCardName } from '../../../lib/lorcana/slug';
 import { getLorcanaCurrency } from '../../../lib/currency-server';
-import { CURRENCY_SOURCE_KEY, CURRENCY_SOURCE_NAME, formatPrice, type LorcanaCurrency } from '../../../lib/currency';
+import { CURRENCY_SOURCE_KEY, type LorcanaCurrency } from '../../../lib/currency';
 import { getCurrentUser, createServerSupabase } from '@collector-network/auth';
 import { getLorcanaClient } from '../../../server/client';
 import { toLcGamedata } from '../../../lib/lorcana/gamedata';
@@ -15,9 +15,10 @@ import {
   buildCharacterFaq,
   type CharacterContentInput,
 } from '../../../lib/character-content';
-import CharacterTileAdd, {
-  type CharacterTilePrinting,
-} from '../../../components/character/CharacterTileAdd';
+import { type CharacterTilePrinting } from '../../../components/character/CharacterTileAdd';
+import CharacterVersionsGrid, {
+  type CharacterVersionTileData,
+} from '../../../components/character/CharacterVersionsGrid';
 
 // /character/[slug] — every printing of a specific Lorcana character.
 // Character key = base card name with " - Subtitle" stripped
@@ -246,6 +247,48 @@ export default async function CharacterPage({ params }: Props) {
     ).values(),
   ];
 
+  //  Serialisable tile data for the client-rendered versions grid.
+  //  Everything is pre-derived here so the browser bundle only does
+  //  compare/sort math, never DB work.
+  const versionTiles: CharacterVersionTileData[] = data.versions.map((v) => {
+    const printings = (pricing.printingsByCard.get(v.card.id) ?? []) as CharacterTilePrinting[];
+    const price = pricing.priceByCard.get(v.card.id) ?? null;
+    return {
+      cardId: v.card.id,
+      cardName: v.card.name,
+      cardSlug: slugifyCardName(v.card.name),
+      subtitle: v.versionSubtitle,
+      setCode: v.set?.code ?? null,
+      setName: v.set?.name ?? null,
+      releasedAt: v.set?.released_at ?? null,
+      collectorNumber: v.card.collector_number ?? null,
+      rarity: v.rarity,
+      ink: v.ink,
+      image: v.image,
+      isOwned: ownedSet.has(v.card.id),
+      price,
+      priceSourceLabel:
+        CURRENCY_SOURCE_KEY[currency] === 'tcggraph.tcgplayer' ? 'TCGPlayer' : 'Cardmarket',
+      printings,
+    };
+  });
+
+  const availableSets = [
+    ...new Map(
+      versionTiles
+        .filter((t) => !!t.setCode)
+        .map((t) => [t.setCode!, { value: t.setCode!, label: t.setName ?? t.setCode!.toUpperCase() }]),
+    ).values(),
+  ].sort((a, b) => a.label.localeCompare(b.label));
+  const availableInks = [...new Set(versionTiles.map((t) => t.ink).filter((x): x is string => !!x))]
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
+  const availableRarities = [
+    ...new Set(versionTiles.map((t) => t.rarity).filter((x): x is string => !!x)),
+  ]
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
+
   return (
     <div className="lc-container lc-section">
       <script
@@ -387,122 +430,17 @@ export default async function CharacterPage({ params }: Props) {
         )}
       </section>
 
-      {/* Versions grid with ownership state */}
-      <section
-        id="missing"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-          gap: 16,
-          marginBottom: 32,
-        }}
-      >
-        {data.versions.map((v) => {
-          const cardSlug = slugifyCardName(v.card.name);
-          const isOwned = ownedSet.has(v.card.id);
-          const tilePrintings = pricing.printingsByCard.get(v.card.id) ?? [];
-          const tilePrice = pricing.priceByCard.get(v.card.id) ?? null;
-          const cardLinkStyle = {
-            color: 'var(--text)',
-            textDecoration: 'none',
-            display: 'block',
-          } as const;
-          return (
-            <div
-              key={v.card.id}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                padding: 14,
-                borderRadius: 12,
-                border: `1px solid ${isOwned ? 'var(--primary, #6A43BE)' : 'var(--border)'}`,
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                position: 'relative',
-                minWidth: 0,
-                gap: 10,
-              }}
-            >
-              {user && isOwned && (
-                <span
-                  aria-label="Owned"
-                  style={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                    background: 'var(--primary, #6A43BE)',
-                    color: '#fff',
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    zIndex: 1,
-                  }}
-                >
-                  OWNED
-                </span>
-              )}
-              <Link href={`/card/${cardSlug}`} style={cardLinkStyle}>
-                {v.image && (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={v.image}
-                    alt={v.card.name}
-                    loading="lazy"
-                    style={{
-                      width: '100%',
-                      aspectRatio: '5 / 7',
-                      objectFit: 'cover',
-                      borderRadius: 8,
-                      marginBottom: 10,
-                      background: 'var(--bg-strong)',
-                    }}
-                  />
-                )}
-                <div style={{ fontWeight: 700, fontSize: 14 }}>
-                  {v.versionSubtitle ? v.versionSubtitle : v.card.name}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  {v.set?.code?.toUpperCase() ?? ''} {v.card.collector_number ?? ''}
-                  {v.rarity ? ` · ${v.rarity}` : ''}
-                  {v.ink ? ` · ${v.ink}` : ''}
-                </div>
-              </Link>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  marginTop: 'auto',
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 800,
-                    fontSize: tilePrice == null ? 12 : 15,
-                    color: tilePrice == null ? 'var(--text-muted)' : 'var(--text-strong)',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  {formatPrice(tilePrice, currency)}
-                </div>
-                <div style={{ fontSize: 10.5, color: 'var(--text-subtle, var(--text-muted))' }}>
-                  {CURRENCY_SOURCE_NAME[currency]}
-                </div>
-              </div>
-              <CharacterTileAdd
-                cardId={v.card.id}
-                cardName={v.card.name}
-                isSignedIn={Boolean(user)}
-                returnPath={returnPath}
-                printings={tilePrintings as CharacterTilePrinting[]}
-                isOwned={isOwned}
-              />
-            </div>
-          );
-        })}
+      {/* Versions grid with ownership state + search / filter / sort */}
+      <section style={{ marginBottom: 32 }}>
+        <CharacterVersionsGrid
+          tiles={versionTiles}
+          currency={currency}
+          isSignedIn={Boolean(user)}
+          returnPath={returnPath}
+          availableSets={availableSets}
+          availableInks={availableInks}
+          availableRarities={availableRarities}
+        />
       </section>
 
       {/* FAQ */}
