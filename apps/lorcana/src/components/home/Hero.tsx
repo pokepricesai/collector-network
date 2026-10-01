@@ -1,5 +1,6 @@
 import HomeSearch from '@/components/HomeSearch';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { DiscoveryTile } from '@/server/discovery';
 import { pickCardImage } from '@/lib/lorcana/image';
 import { buildPrintingSlug, slugifyCardName } from '@/lib/lorcana/slug';
@@ -55,6 +56,15 @@ export default function Hero({
       >
         {/* ── LEFT: proposition + search + CTAs ─────────────── */}
         <div style={{ display: 'grid', gap: 18, minWidth: 0 }}>
+          <Image
+            src="/logo.png"
+            alt="LorcanaPrices"
+            width={2172}
+            height={724}
+            priority
+            className="lc-hero-logo"
+            style={{ height: 72, width: 'auto', marginBottom: 4 }}
+          />
           <div>
             <h1 style={{ margin: 0, letterSpacing: '-0.015em', lineHeight: 1.1 }}>
               Track every Lorcana card, printing and{' '}

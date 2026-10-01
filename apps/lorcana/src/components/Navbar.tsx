@@ -136,9 +136,10 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
           height: 48,
         }}
       >
-        {/* Horizontal wordmark. Source asset is 2172×724 (3:1); we
-            render at ~46px tall in the 68px header — the emblem is
-            baked in on the left so no separate icon is needed. */}
+        {/* Horizontal wordmark. Source asset is 2172×724 (3:1); the
+            baseline height is a touch larger than the historic 46px
+            so the wordmark reads clearly in the 68px bar — mobile
+            override below keeps it comfortable on small screens. */}
         <Image
           src="/logo.png"
           alt="LorcanaPrices"
@@ -146,7 +147,7 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
           height={724}
           priority
           className="lc-nav-logo"
-          style={{ height: 46, width: 'auto' }}
+          style={{ height: 54, width: 'auto' }}
         />
       </Link>
 
@@ -345,6 +346,9 @@ export default function Navbar({ accountSlot }: { accountSlot?: ReactNode }) {
           .nav-search { display: none !important; }
           .nav-account-slot { display: none !important; }
           .mobile-menu-btn { display: inline-flex !important; }
+        }
+        @media (max-width: 768px) {
+          :global(.lc-nav-logo) { height: 44px !important; }
         }
         @media (max-width: 480px) {
           :global(.lc-nav-logo) { height: 38px !important; }

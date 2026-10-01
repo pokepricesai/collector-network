@@ -716,6 +716,10 @@ button.nav-link, button.btn, button.chip {
 @media (min-width: 720px) {
   .lc-hero { padding: 60px 24px 50px; }
 }
+.lc-hero-logo { max-width: 100%; }
+@media (max-width: 720px) {
+  .lc-hero-logo { height: 54px !important; }
+}
 
 /* Six-ink wheel (very low opacity, behind hero) */
 .lc-ink-wheel {

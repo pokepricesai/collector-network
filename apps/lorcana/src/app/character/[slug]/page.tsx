@@ -5,7 +5,7 @@ import { getCharacterBySlug } from '../../../server/characters';
 import { canonicalFor } from '../../../lib/seo';
 import { slugifyCardName } from '../../../lib/lorcana/slug';
 import { getLorcanaCurrency } from '../../../lib/currency-server';
-import { CURRENCY_SOURCE_KEY, formatPrice, type LorcanaCurrency } from '../../../lib/currency';
+import { CURRENCY_SOURCE_KEY, CURRENCY_SOURCE_NAME, formatPrice, type LorcanaCurrency } from '../../../lib/currency';
 import { getCurrentUser, createServerSupabase } from '@collector-network/auth';
 import { getLorcanaClient } from '../../../server/client';
 import { toLcGamedata } from '../../../lib/lorcana/gamedata';
@@ -15,6 +15,9 @@ import {
   buildCharacterFaq,
   type CharacterContentInput,
 } from '../../../lib/character-content';
+import CharacterTileAdd, {
+  type CharacterTilePrinting,
+} from '../../../components/character/CharacterTileAdd';
 
 // /character/[slug] — every printing of a specific Lorcana character.
 // Character key = base card name with " - Subtitle" stripped
@@ -49,37 +52,96 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-async function fetchHighestPricedVersion(
+interface CharacterCardPricing {
+  /** Printings grouped by tcg_card_id — used by the tile Add control. */
+  printingsByCard: Map<string, CharacterTilePrinting[]>;
+  /** Cheapest native-source price per tcg_card_id — shown on the tile. */
+  priceByCard: Map<string, number>;
+  /** The single highest-priced version across the whole character —
+   *  feeds the "About X" content block. */
+  highest: { cardId: string; price: number } | null;
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+async function fetchCharacterCardPricing(
   cardIds: readonly string[],
   currency: LorcanaCurrency,
-): Promise<{ cardId: string; price: number } | null> {
-  if (cardIds.length === 0) return null;
+): Promise<CharacterCardPricing> {
+  const empty: CharacterCardPricing = {
+    printingsByCard: new Map(),
+    priceByCard: new Map(),
+    highest: null,
+  };
+  if (cardIds.length === 0) return empty;
+
   const sb = getLorcanaClient();
   const source = CURRENCY_SOURCE_KEY[currency];
-  //  Market prices live per-tcg_printing_id; roll up by card.
-  const { data: printings } = await sb
-    .from('tcg_printings')
-    .select('id, tcg_card_id')
-    .in('tcg_card_id', cardIds as string[]);
-  const cardByPrinting = new Map<string, string>();
-  for (const p of printings ?? []) cardByPrinting.set((p as { id: string }).id, (p as { tcg_card_id: string }).tcg_card_id);
-  const printingIds = [...cardByPrinting.keys()];
-  if (printingIds.length === 0) return null;
-  const { data: prices } = await sb
-    .from('tcg_market_prices_current')
-    .select('tcg_printing_id, price')
-    .in('tcg_printing_id', printingIds)
-    .eq('source', source)
-    .eq('currency', currency)
-    .not('price', 'is', null)
-    .order('price', { ascending: false })
-    .limit(50);
-  for (const r of prices ?? []) {
-    const row = r as { tcg_printing_id: string; price: number };
-    const cardId = cardByPrinting.get(row.tcg_printing_id);
-    if (cardId) return { cardId, price: Number(row.price) };
+
+  // One chunked batch to pull every printing for every card on this
+  // page — the character page tile needs the whole printing list so
+  // the Add picker can show finish options without an N+1 round trip.
+  const printingBatches = await Promise.all(
+    chunk(cardIds, 100).map((batch) =>
+      sb
+        .from('tcg_printings')
+        .select('id, tcg_card_id, finish')
+        .in('tcg_card_id', batch as string[]),
+    ),
+  );
+  const allPrintings: Array<{ id: string; tcg_card_id: string; finish: string | null }> = [];
+  for (const r of printingBatches) {
+    const rows = (r.data as typeof allPrintings | null) ?? [];
+    allPrintings.push(...rows);
   }
-  return null;
+
+  const printingsByCard = new Map<string, CharacterTilePrinting[]>();
+  const cardByPrinting = new Map<string, string>();
+  for (const p of allPrintings) {
+    cardByPrinting.set(p.id, p.tcg_card_id);
+    const bucket = printingsByCard.get(p.tcg_card_id) ?? [];
+    bucket.push({ id: p.id, finish: p.finish ?? null });
+    printingsByCard.set(p.tcg_card_id, bucket);
+  }
+
+  // One chunked batch of native-source prices across every printing.
+  // Native-only — no FX conversion, no cross-currency fallback.
+  const printingIds = [...cardByPrinting.keys()];
+  if (printingIds.length === 0) {
+    return { printingsByCard, priceByCard: new Map(), highest: null };
+  }
+  const priceBatches = await Promise.all(
+    chunk(printingIds, 100).map((batch) =>
+      sb
+        .from('tcg_market_prices_current')
+        .select('tcg_printing_id, price')
+        .in('tcg_printing_id', batch)
+        .eq('source', source)
+        .eq('currency', currency)
+        .not('price', 'is', null),
+    ),
+  );
+
+  const priceByCard = new Map<string, number>();
+  let highest: { cardId: string; price: number } | null = null;
+  for (const r of priceBatches) {
+    const rows = (r.data as Array<{ tcg_printing_id: string; price: number | string }> | null) ?? [];
+    for (const row of rows) {
+      const cardId = cardByPrinting.get(row.tcg_printing_id);
+      if (!cardId) continue;
+      const price = Number(row.price);
+      if (!Number.isFinite(price)) continue;
+      const prev = priceByCard.get(cardId);
+      if (prev == null || price < prev) priceByCard.set(cardId, price);
+      if (!highest || price > highest.price) highest = { cardId, price };
+    }
+  }
+
+  return { printingsByCard, priceByCard, highest };
 }
 
 async function fetchOwnedCardIds(
@@ -109,10 +171,12 @@ export default async function CharacterPage({ params }: Props) {
   if (!data) notFound();
 
   const cardIds = data.versions.map((v) => v.card.id);
-  const [ownedSet, highestPricedPair] = await Promise.all([
+  const [ownedSet, pricing] = await Promise.all([
     user ? fetchOwnedCardIds(cardIds) : Promise.resolve(new Set<string>()),
-    fetchHighestPricedVersion(cardIds, currency),
+    fetchCharacterCardPricing(cardIds, currency),
   ]);
+  const highestPricedPair = pricing.highest;
+  const returnPath = `/character/${data.slug}`;
 
   //  Build the Content + FAQ inputs. Only cite rarities present on
   //  real versions — never fabricate.
@@ -336,10 +400,16 @@ export default async function CharacterPage({ params }: Props) {
         {data.versions.map((v) => {
           const cardSlug = slugifyCardName(v.card.name);
           const isOwned = ownedSet.has(v.card.id);
+          const tilePrintings = pricing.printingsByCard.get(v.card.id) ?? [];
+          const tilePrice = pricing.priceByCard.get(v.card.id) ?? null;
+          const cardLinkStyle = {
+            color: 'var(--text)',
+            textDecoration: 'none',
+            display: 'block',
+          } as const;
           return (
-            <Link
+            <div
               key={v.card.id}
-              href={`/card/${cardSlug}`}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -348,9 +418,9 @@ export default async function CharacterPage({ params }: Props) {
                 border: `1px solid ${isOwned ? 'var(--primary, #6A43BE)' : 'var(--border)'}`,
                 background: 'var(--surface)',
                 color: 'var(--text)',
-                textDecoration: 'none',
                 position: 'relative',
                 minWidth: 0,
+                gap: 10,
               }}
             >
               {user && isOwned && (
@@ -367,36 +437,70 @@ export default async function CharacterPage({ params }: Props) {
                     fontSize: 10.5,
                     fontWeight: 700,
                     letterSpacing: '0.04em',
+                    zIndex: 1,
                   }}
                 >
                   OWNED
                 </span>
               )}
-              {v.image && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={v.image}
-                  alt={v.card.name}
-                  loading="lazy"
+              <Link href={`/card/${cardSlug}`} style={cardLinkStyle}>
+                {v.image && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={v.image}
+                    alt={v.card.name}
+                    loading="lazy"
+                    style={{
+                      width: '100%',
+                      aspectRatio: '5 / 7',
+                      objectFit: 'cover',
+                      borderRadius: 8,
+                      marginBottom: 10,
+                      background: 'var(--bg-strong)',
+                    }}
+                  />
+                )}
+                <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  {v.versionSubtitle ? v.versionSubtitle : v.card.name}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {v.set?.code?.toUpperCase() ?? ''} {v.card.collector_number ?? ''}
+                  {v.rarity ? ` · ${v.rarity}` : ''}
+                  {v.ink ? ` · ${v.ink}` : ''}
+                </div>
+              </Link>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  marginTop: 'auto',
+                }}
+              >
+                <div
                   style={{
-                    width: '100%',
-                    aspectRatio: '5 / 7',
-                    objectFit: 'cover',
-                    borderRadius: 8,
-                    marginBottom: 10,
-                    background: 'var(--bg-strong)',
+                    fontWeight: 800,
+                    fontSize: tilePrice == null ? 12 : 15,
+                    color: tilePrice == null ? 'var(--text-muted)' : 'var(--text-strong)',
+                    letterSpacing: '-0.01em',
                   }}
-                />
-              )}
-              <div style={{ fontWeight: 700, fontSize: 14 }}>
-                {v.versionSubtitle ? v.versionSubtitle : v.card.name}
+                >
+                  {formatPrice(tilePrice, currency)}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--text-subtle, var(--text-muted))' }}>
+                  {CURRENCY_SOURCE_NAME[currency]}
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                {v.set?.code?.toUpperCase() ?? ''} {v.card.collector_number ?? ''}
-                {v.rarity ? ` · ${v.rarity}` : ''}
-                {v.ink ? ` · ${v.ink}` : ''}
-              </div>
-            </Link>
+              <CharacterTileAdd
+                cardId={v.card.id}
+                cardName={v.card.name}
+                isSignedIn={Boolean(user)}
+                returnPath={returnPath}
+                printings={tilePrintings as CharacterTilePrinting[]}
+                isOwned={isOwned}
+              />
+            </div>
           );
         })}
       </section>
