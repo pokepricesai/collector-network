@@ -209,6 +209,26 @@ export default async function LogicalCardPage({
         setCode={heroCard.set?.code}
         setName={heroCard.set?.name}
       />
+      {isCharacter && (() => {
+        //  "View all [Character] cards" — pulls the base-character
+        //  slug by stripping the " - Subtitle" tail off bundle.name.
+        //  Only emitted for cardType='character' bundles so Items,
+        //  Actions, Songs and Locations never see a stray link.
+        const sep = bundle.name.indexOf(' - ');
+        const baseName = sep > 0 ? bundle.name.slice(0, sep).trim() : bundle.name.trim();
+        const charSlug = slugifyCardName(baseName);
+        if (!charSlug) return null;
+        return (
+          <div style={{ fontSize: 13, marginBottom: 8 }}>
+            <Link
+              href={`/character/${charSlug}`}
+              style={{ color: 'var(--primary, #6A43BE)', fontWeight: 600 }}
+            >
+              View all {baseName} cards →
+            </Link>
+          </div>
+        );
+      })()}
 
       <div className="lc-card-hero-grid lc-halo" style={isChase ? { ['--lc-halo' as string]: 'radial-gradient(60% 60% at 50% 35%, rgba(122,78,240,0.28), transparent 70%)' } as React.CSSProperties : undefined}>
         <div>

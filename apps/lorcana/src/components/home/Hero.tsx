@@ -2,7 +2,7 @@ import HomeSearch from '@/components/HomeSearch';
 import Link from 'next/link';
 import type { DiscoveryTile } from '@/server/discovery';
 import { pickCardImage } from '@/lib/lorcana/image';
-import { slugifyCardName } from '@/lib/lorcana/slug';
+import { buildPrintingSlug, slugifyCardName } from '@/lib/lorcana/slug';
 import { formatPrice as formatCurrencyPrice } from '@/lib/lorcana/format-price';
 import { CURRENCY_SOURCE_NAME, DEFAULT_CURRENCY, type LorcanaCurrency } from '@/lib/currency';
 
@@ -134,9 +134,15 @@ export default function Hero({
 }
 
 function TopValueCard({ tile, currency }: { tile: DiscoveryTile; currency: LorcanaCurrency }) {
+  // Route to the specific collectible (set × collector number), not the
+  // logical name-only page — the logical page's rarity-ranked hero can
+  // land on a different tcg_cards row than the tile represents.
+  const href = tile.setCode && tile.collectorNumber
+    ? `/set/${encodeURIComponent(tile.setCode.toLowerCase())}/card/${encodeURIComponent(buildPrintingSlug(tile.collectorNumber, tile.name))}`
+    : `/card/${slugifyCardName(tile.name)}`;
   return (
     <Link
-      href={`/card/${slugifyCardName(tile.name)}`}
+      href={href}
       style={{
         display: 'block',
         borderRadius: 16,

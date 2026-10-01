@@ -106,22 +106,35 @@ export default async function PrintingPage({
   if (!bundle) notFound();
   const currency = await getLorcanaCurrency();
 
-  // Filter to just the printings that live in *this* set, so the page
-  // is set-specific. The /card/[slug] URL is where every set gets shown.
+  // Pin the anchor to the *exact* tcg_cards row the URL resolved to,
+  // not the first printing that happens to sit in the set. Multiple
+  // tcg_cards rows can share both name AND set (e.g. Elsa - Ice Maker
+  // set 7 has cn=224 Super Rare Amethyst-ink alt-art AND cn=69 Super
+  // Rare) — using inThisSet[0] can otherwise flip the hero image and
+  // stat rail onto a sibling collectible.
+  const anchorCardView =
+    bundle.cards.find((c) => c.card.id === resolved.cardId) ?? bundle.cards[0]!;
+
+  // Split printings into: those attached to the anchor tcg_cards row
+  // (rendered as the hero + treatment list), the same-set siblings
+  // (linked from a "Other collectibles in this set" strip), and other
+  // sets (the pre-existing "Also printed in" strip).
   const inThisSet: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
+  const sameSetSiblings: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
   const otherSets: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
   for (const c of bundle.cards) {
-    for (const p of c.printings) {
-      const inSet =
-        (p.set?.code ?? '').toLowerCase() === slug.toLowerCase() ||
-        (c.set?.code ?? '').toLowerCase() === slug.toLowerCase();
-      if (inSet) inThisSet.push({ cardView: c, printingView: p });
-      else otherSets.push({ cardView: c, printingView: p });
+    const inSet =
+      (c.set?.code ?? '').toLowerCase() === slug.toLowerCase();
+    if (c.card.id === resolved.cardId) {
+      for (const p of c.printings) inThisSet.push({ cardView: c, printingView: p });
+    } else if (inSet) {
+      for (const p of c.printings) sameSetSiblings.push({ cardView: c, printingView: p });
+    } else {
+      for (const p of c.printings) otherSets.push({ cardView: c, printingView: p });
     }
   }
 
   const anchorPrinting = inThisSet[0]?.printingView;
-  const anchorCardView = inThisSet[0]?.cardView ?? bundle.cards[0]!;
   const heroImage = pickCardImage(anchorCardView.card.images);
 
   const canonicalSetLabel =
@@ -310,6 +323,78 @@ export default async function PrintingPage({
             <PriceHistoryBlock printingId={inThisSet[0].printingView.printing.id} />
           )}
         </section>
+
+        {sameSetSiblings.length > 0 && (
+          <section style={{ marginTop: 40, display: 'grid', gap: 16 }}>
+            <header>
+              <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
+                In this set — other collectibles
+              </div>
+              <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
+                Other {bundle.name} versions in {canonicalSetLabel}
+              </h2>
+              <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                Same name, different collector number or rarity — a distinct collectible with its own artwork.
+              </p>
+            </header>
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'grid',
+                gap: 6,
+              }}
+            >
+              {Array.from(
+                new Map(sameSetSiblings.map((s) => [s.cardView.card.id, s])).values(),
+              ).map(({ cardView }) => {
+                const setCode = cardView.set?.code ?? '';
+                const slugRow = buildPrintingSlug(
+                  cardView.card.collector_number,
+                  cardView.card.name,
+                );
+                const href = `/set/${encodeURIComponent(setCode.toLowerCase())}/card/${encodeURIComponent(slugRow)}`;
+                return (
+                  <li key={cardView.card.id}>
+                    <Link
+                      href={href}
+                      className="lc-hover"
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px 14px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        textDecoration: 'none',
+                        color: 'var(--text)',
+                      }}
+                    >
+                      <span style={{ display: 'grid', gap: 2 }}>
+                        <span style={{ fontWeight: 700, fontSize: 14 }}>
+                          #{cardView.card.collector_number ?? '—'} · {cardView.rarity.label}
+                        </span>
+                        <span
+                          className="label-mono"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          {setCode.toUpperCase()}
+                        </span>
+                      </span>
+                      <span
+                        className={`treatment-badge treatment-badge--${cardView.rarity.code.toLowerCase()}`}
+                      >
+                        {cardView.rarity.label}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {otherSets.length > 0 && (
           <section style={{ marginTop: 40, display: 'grid', gap: 16 }}>

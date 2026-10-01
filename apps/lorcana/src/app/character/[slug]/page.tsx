@@ -4,12 +4,30 @@ import { notFound } from 'next/navigation';
 import { getCharacterBySlug } from '../../../server/characters';
 import { canonicalFor } from '../../../lib/seo';
 import { slugifyCardName } from '../../../lib/lorcana/slug';
+import { getLorcanaCurrency } from '../../../lib/currency-server';
+import { CURRENCY_SOURCE_KEY, formatPrice, type LorcanaCurrency } from '../../../lib/currency';
+import { getCurrentUser, createServerSupabase } from '@collector-network/auth';
+import { getLorcanaClient } from '../../../server/client';
+import { toLcGamedata } from '../../../lib/lorcana/gamedata';
+import type { LcInk } from '../../../lib/lorcana/ink';
+import {
+  buildCharacterContent,
+  buildCharacterFaq,
+  type CharacterContentInput,
+} from '../../../lib/character-content';
 
 // /character/[slug] — every printing of a specific Lorcana character.
 // Character key = base card name with " - Subtitle" stripped
 // (see server/characters.ts). Version subtitle is preserved on the
 // individual card tiles so collectors can pick the exact edition
 // they own or want.
+//
+// Signed-in users see a collection-completion panel ("Your Elsa
+// collection"); signed-out users see a sign-in CTA. The character
+// also carries an "About X" editorial block (only populated when
+// we're highly confident about the Disney facts; otherwise falls
+// back to card-data-driven copy) and a deterministic FAQ with
+// matching FAQPage JSON-LD.
 
 export const revalidate = 3_600;
 
@@ -31,13 +49,146 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+async function fetchHighestPricedVersion(
+  cardIds: readonly string[],
+  currency: LorcanaCurrency,
+): Promise<{ cardId: string; price: number } | null> {
+  if (cardIds.length === 0) return null;
+  const sb = getLorcanaClient();
+  const source = CURRENCY_SOURCE_KEY[currency];
+  //  Market prices live per-tcg_printing_id; roll up by card.
+  const { data: printings } = await sb
+    .from('tcg_printings')
+    .select('id, tcg_card_id')
+    .in('tcg_card_id', cardIds as string[]);
+  const cardByPrinting = new Map<string, string>();
+  for (const p of printings ?? []) cardByPrinting.set((p as { id: string }).id, (p as { tcg_card_id: string }).tcg_card_id);
+  const printingIds = [...cardByPrinting.keys()];
+  if (printingIds.length === 0) return null;
+  const { data: prices } = await sb
+    .from('tcg_market_prices_current')
+    .select('tcg_printing_id, price')
+    .in('tcg_printing_id', printingIds)
+    .eq('source', source)
+    .eq('currency', currency)
+    .not('price', 'is', null)
+    .order('price', { ascending: false })
+    .limit(50);
+  for (const r of prices ?? []) {
+    const row = r as { tcg_printing_id: string; price: number };
+    const cardId = cardByPrinting.get(row.tcg_printing_id);
+    if (cardId) return { cardId, price: Number(row.price) };
+  }
+  return null;
+}
+
+async function fetchOwnedCardIds(
+  cardIds: readonly string[],
+): Promise<Set<string>> {
+  if (cardIds.length === 0) return new Set();
+  const sb = await createServerSupabase();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return new Set();
+  const { data, error } = await sb
+    .from('lorcana_collection_items')
+    .select('tcg_card_id')
+    .in('tcg_card_id', cardIds as string[]);
+  if (error) return new Set();
+  const out = new Set<string>();
+  for (const r of data ?? []) out.add((r as { tcg_card_id: string }).tcg_card_id);
+  return out;
+}
+
 export default async function CharacterPage({ params }: Props) {
   const { slug } = await params;
-  const data = await getCharacterBySlug(slug);
+  const [data, currency, user] = await Promise.all([
+    getCharacterBySlug(slug),
+    getLorcanaCurrency(),
+    getCurrentUser(),
+  ]);
   if (!data) notFound();
+
+  const cardIds = data.versions.map((v) => v.card.id);
+  const [ownedSet, highestPricedPair] = await Promise.all([
+    user ? fetchOwnedCardIds(cardIds) : Promise.resolve(new Set<string>()),
+    fetchHighestPricedVersion(cardIds, currency),
+  ]);
+
+  //  Build the Content + FAQ inputs. Only cite rarities present on
+  //  real versions — never fabricate.
+  const rarities = [
+    ...new Set(data.versions.map((v) => v.rarity).filter((r): r is string => !!r)),
+  ];
+  const setNames = [
+    ...new Set(data.versions.map((v) => v.set?.name).filter((s): s is string => !!s)),
+  ];
+  const hasEnchantedOrIconic = rarities.some((r) =>
+    /enchanted|iconic/i.test(r),
+  );
+  const highestPricedVersion = highestPricedPair
+    ? (() => {
+        const v = data.versions.find((x) => x.card.id === highestPricedPair.cardId);
+        if (!v) return null;
+        return {
+          fullName: v.card.name,
+          subtitle: v.versionSubtitle,
+          price: highestPricedPair.price,
+          currency,
+          rarity: v.rarity,
+        };
+      })()
+    : null;
+
+  const contentInput: CharacterContentInput = {
+    characterName: data.name,
+    slug: data.slug,
+    versionCount: data.totalCards,
+    inks: data.inks as LcInk[],
+    setNames,
+    raritiesPresent: rarities,
+    hasEnchantedOrIconic,
+    highestPricedVersion,
+  };
+  const content = buildCharacterContent(contentInput);
+  const faq = buildCharacterFaq({
+    ...contentInput,
+    currency,
+    characterUrl: canonicalFor(`/character/${data.slug}`),
+  });
+
+  //  Completion math (signed-in only).
+  const owned = ownedSet.size;
+  const total = cardIds.length;
+  const pct = total > 0 ? Math.round((owned / total) * 100) : 0;
+
+  //  FAQ JSON-LD must match the visible FAQ exactly.
+  const faqLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map((e) => ({
+      '@type': 'Question',
+      name: e.q,
+      acceptedAnswer: { '@type': 'Answer', text: e.a },
+    })),
+  };
+
+  //  Sets grouped for linking.
+  const setLinks = [
+    ...new Map(
+      data.versions
+        .map((v) => v.set)
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map((s) => [s.code, s]),
+    ).values(),
+  ];
 
   return (
     <div className="lc-container lc-section">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+      />
+
       <nav aria-label="Breadcrumb" style={{ fontSize: 13, marginBottom: 12 }}>
         <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Home</Link>
         <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
@@ -46,7 +197,7 @@ export default async function CharacterPage({ params }: Props) {
         <span>{data.name}</span>
       </nav>
 
-      <header style={{ marginBottom: 24 }}>
+      <header style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 32, margin: 0 }}>{data.name}</h1>
         <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>
           {data.totalCards} Lorcana card{data.totalCards === 1 ? '' : 's'} featuring this character
@@ -54,7 +205,127 @@ export default async function CharacterPage({ params }: Props) {
         </p>
       </header>
 
+      {/* Collection completion / sign-in CTA */}
+      {user ? (
+        <section
+          style={{
+            padding: 16,
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            background: 'var(--surface)',
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 10 }}>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Your {data.name} collection</h2>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {owned} / {total} cards owned · {pct}% complete
+              {owned < total && (
+                <>
+                  {' '}· {total - owned} missing
+                </>
+              )}
+            </div>
+          </div>
+          <div
+            aria-hidden
+            style={{
+              marginTop: 10,
+              height: 10,
+              borderRadius: 999,
+              background: 'var(--bg-light, rgba(0,0,0,0.06))',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${pct}%`,
+                height: '100%',
+                background: 'var(--primary, #6A43BE)',
+                transition: 'width 240ms ease',
+              }}
+            />
+          </div>
+          {owned < total && (
+            <p style={{ margin: '10px 0 0', fontSize: 13 }}>
+              <a href="#missing" style={{ color: 'var(--primary)' }}>
+                Show missing cards ({total - owned})
+              </a>
+            </p>
+          )}
+        </section>
+      ) : (
+        <section
+          style={{
+            padding: 16,
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            background: 'var(--surface)',
+            marginBottom: 24,
+          }}
+        >
+          <h2 style={{ margin: '0 0 6px', fontSize: 16 }}>Track your {data.name} collection</h2>
+          <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', fontSize: 13 }}>
+            Sign in to see which {data.name} cards you own and which you're still chasing.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Link
+              href={`/sign-up?returnTo=/character/${data.slug}`}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 10,
+                background: 'var(--primary, #6A43BE)',
+                color: '#fff',
+                textDecoration: 'none',
+                fontSize: 13.5,
+                fontWeight: 700,
+              }}
+            >
+              Create free account
+            </Link>
+            <Link
+              href={`/sign-in?returnTo=/character/${data.slug}`}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+                textDecoration: 'none',
+                fontSize: 13.5,
+                fontWeight: 700,
+              }}
+            >
+              Sign in
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* About X */}
       <section
+        style={{
+          padding: 20,
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          background: 'var(--surface)',
+          marginBottom: 24,
+        }}
+      >
+        <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>About {data.name}</h2>
+        <p style={{ margin: '0 0 10px', lineHeight: 1.55 }}>{content.introParagraph}</p>
+        <p style={{ margin: '0 0 10px', lineHeight: 1.55, color: 'var(--text-muted)' }}>
+          {content.cardSummary}
+        </p>
+        {content.highestValueLine && (
+          <p style={{ margin: 0, lineHeight: 1.55, color: 'var(--text-muted)' }}>
+            {content.highestValueLine}
+          </p>
+        )}
+      </section>
+
+      {/* Versions grid with ownership state */}
+      <section
+        id="missing"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
@@ -64,6 +335,7 @@ export default async function CharacterPage({ params }: Props) {
       >
         {data.versions.map((v) => {
           const cardSlug = slugifyCardName(v.card.name);
+          const isOwned = ownedSet.has(v.card.id);
           return (
             <Link
               key={v.card.id}
@@ -73,12 +345,33 @@ export default async function CharacterPage({ params }: Props) {
                 flexDirection: 'column',
                 padding: 14,
                 borderRadius: 12,
-                border: '1px solid var(--border)',
+                border: `1px solid ${isOwned ? 'var(--primary, #6A43BE)' : 'var(--border)'}`,
                 background: 'var(--surface)',
                 color: 'var(--text)',
                 textDecoration: 'none',
+                position: 'relative',
+                minWidth: 0,
               }}
             >
+              {user && isOwned && (
+                <span
+                  aria-label="Owned"
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: 'var(--primary, #6A43BE)',
+                    color: '#fff',
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  OWNED
+                </span>
+              )}
               {v.image && (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -108,6 +401,30 @@ export default async function CharacterPage({ params }: Props) {
         })}
       </section>
 
+      {/* FAQ */}
+      <section
+        style={{
+          padding: 20,
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          background: 'var(--surface)',
+          marginBottom: 24,
+        }}
+      >
+        <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>FAQ · {data.name}</h2>
+        <dl style={{ margin: 0 }}>
+          {faq.map((entry, i) => (
+            <div key={i} style={{ marginBottom: 14 }}>
+              <dt style={{ fontWeight: 700, marginBottom: 4 }}>{entry.q}</dt>
+              <dd style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+                {entry.a}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {/* Related links */}
       <section
         style={{
           padding: 20,
@@ -119,6 +436,11 @@ export default async function CharacterPage({ params }: Props) {
         <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>Related</h2>
         <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.7, fontSize: 14 }}>
           <li><Link href="/characters">All Lorcana characters</Link></li>
+          {setLinks.map((s) => (
+            <li key={s.code}>
+              <Link href={`/set/${s.code.toLowerCase()}`}>{s.name ?? s.code.toUpperCase()}</Link>
+            </li>
+          ))}
           {data.inks.map((ink) => (
             <li key={ink}>
               <Link href={`/inks/${ink.toLowerCase()}`}>All {ink} cards</Link>

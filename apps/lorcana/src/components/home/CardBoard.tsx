@@ -57,7 +57,18 @@ export default function CardBoard({
 
 function CardTile({ tile, variant, compact }: { tile: DiscoveryTile; variant: 'default' | 'dark'; compact: boolean }) {
   const rarity = normaliseRarity(tile.rarity);
-  const href = `/card/${encodeURIComponent(slugifyCardName(tile.name))}`;
+  // Route to the SPECIFIC tcg_cards row the tile represents (set × collector
+  // number × rarity), not the logical /card/[slug] page. Multiple Lorcana
+  // tcg_cards rows share a name — e.g. "Elsa - Ice Maker" has 4 rows across
+  // sets 7 (SR, cn=224 Amethyst-ink alt-art; SR, cn=69) and c2 (Promo cn=2;
+  // Promo cn=6). The logical page picks a hero by rarity so a Promo tile
+  // used to land on the Super Rare hero image. The per-printing route
+  // (/set/{code}/card/{cn-slug}) resolves to the exact tcg_cards row we
+  // showed. When setCode + collectorNumber are missing (should be rare) we
+  // fall back to the logical page to preserve navigability.
+  const href = tile.setCode && tile.collectorNumber
+    ? `/set/${encodeURIComponent(tile.setCode.toLowerCase())}/card/${encodeURIComponent(buildPrintingSlug(tile.collectorNumber, tile.name))}`
+    : `/card/${encodeURIComponent(slugifyCardName(tile.name))}`;
   const isDark = variant === 'dark';
 
   return (

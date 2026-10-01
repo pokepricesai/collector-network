@@ -52,6 +52,15 @@ export function characterKeyFromName(name: string): string {
 
 //  Aggregate the whole Lorcana character catalogue. Cached under a
 //  long TTL — new releases move slowly.
+//
+//  Forensic 2026-09-30 (scripts/lorcana-characters-forensic.mjs): the
+//  production DB has 3198 tcg_cards for Lorcana, 2459 characters and
+//  674 distinct base-character slugs. The earlier "5 characters
+//  across 7 cards" render on /characters was the fixture snapshot
+//  (5 base names, 7 CHARACTER rows in preview-fixture.ts) baked into
+//  the Data Cache by a stub-mode render in an earlier deploy. The
+//  cache keyParts version below is bumped whenever that stale entry
+//  needs invalidating.
 async function _listCharacters(): Promise<CharacterListEntry[]> {
   const sb = getLorcanaClient();
   const CHUNK = 1000;
@@ -94,12 +103,28 @@ async function _listCharacters(): Promise<CharacterListEntry[]> {
     });
   }
   out.sort((a, b) => b.cardCount - a.cardCount || a.name.localeCompare(b.name));
+
+  //  Diagnostic assertion. Lorcana has hundreds of unique characters;
+  //  anything less than 100 means either the stub client is running
+  //  (missing SUPABASE_URL / SUPABASE_ANON_KEY at runtime) or the
+  //  normaliseCardType rule stopped recognising production shape. Log
+  //  loudly so a future silent break gets noticed.
+  if (out.length < 100) {
+    console.warn(
+      `[lorcana/characters] Only ${out.length} distinct characters (${collected.length} total rows scanned). ` +
+      `Expected ≥ 100. Check SUPABASE_URL/SUPABASE_ANON_KEY and gamedata.cardType shape.`,
+    );
+  }
   return out;
 }
 
 export const listCharacters = unstable_cache(
   _listCharacters,
-  ['lorcana:characters:list', 'v1'],
+  //  keyParts version bumped 2026-09-30 (v2): invalidates the stale
+  //  "5 characters across 7 Character-cards" Data Cache entry that
+  //  was written under v1 during a stub-mode render. Bump this again
+  //  after any future fix that must invalidate production reads.
+  ['lorcana:characters:list', 'v2'],
   { revalidate: 21_600, tags: ['lorcana:taxonomy'] },
 );
 

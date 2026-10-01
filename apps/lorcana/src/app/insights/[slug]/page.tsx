@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { canonicalFor, SITE_ORIGIN } from '@/lib/seo';
 import { findArticle, LORCANA_ARTICLES } from '@/lib/insights';
 import { getPricedTiles } from '@/server/discovery';
-import { slugifyCardName } from '@/lib/lorcana/slug';
+import { buildPrintingSlug, slugifyCardName } from '@/lib/lorcana/slug';
 import { getLorcanaCurrency } from '@/lib/currency-server';
 import { formatPrice as formatCurrencyPrice } from '@/lib/lorcana/format-price';
 import { CURRENCY_SOURCE_NAME, type LorcanaCurrency } from '@/lib/currency';
@@ -147,9 +147,13 @@ async function MostValuableBody(currency: LorcanaCurrency): Promise<React.ReactE
       </p>
       {top.length > 0 ? (
         <ol style={{ paddingLeft: 20, margin: '10px 0 24px' }}>
-          {top.map((tile) => (
+          {top.map((tile) => {
+            const href = tile.setCode && tile.collectorNumber
+              ? `/set/${encodeURIComponent(tile.setCode.toLowerCase())}/card/${encodeURIComponent(buildPrintingSlug(tile.collectorNumber, tile.name))}`
+              : `/card/${slugifyCardName(tile.name)}`;
+            return (
             <li key={tile.cardId} style={{ marginBottom: 10 }}>
-              <Link href={`/card/${slugifyCardName(tile.name)}`} style={{ fontWeight: 700 }}>
+              <Link href={href} style={{ fontWeight: 700 }}>
                 {tile.name}
               </Link>{' '}
               — {formatCurrencyPrice(tile.priceUsd, tile.priceCurrency || currency)}
@@ -157,7 +161,8 @@ async function MostValuableBody(currency: LorcanaCurrency): Promise<React.ReactE
               {tile.finish && ` · ${tile.finish}`}
               {tile.setName && ` · ${tile.setName}`}
             </li>
-          ))}
+            );
+          })}
         </ol>
       ) : (
         <p><em>No priced rows yet — check back after the next data refresh.</em></p>
