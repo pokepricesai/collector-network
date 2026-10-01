@@ -2,7 +2,20 @@
 // public launch state. Kept minimal so every page metadata / sitemap
 // route reaches for the same values.
 
-export const SITE_LAUNCHED = process.env['SITE_LAUNCHED'] === 'true';
+// Launch gate.
+// Primary signal is Vercel's own VERCEL_ENV — only `production` is
+// index/follow. Preview and local dev stay noindex automatically so
+// a preview URL can never enter the index. `SITE_LAUNCHED` is kept
+// as an explicit override, both to force-enable launch locally and
+// to act as a kill-switch (SITE_LAUNCHED=false) on production.
+const RAW_LAUNCHED =
+  (process.env['SITE_LAUNCHED'] ?? '').replace(/[﻿​\s"]+/g, '').toLowerCase();
+export const SITE_LAUNCHED =
+  RAW_LAUNCHED === 'false'
+    ? false
+    : RAW_LAUNCHED === 'true'
+    ? true
+    : process.env['VERCEL_ENV'] === 'production';
 
 // Deployment writes NEXT_PUBLIC_SITE_URL. Default here is the
 // intended production origin; it is safe to expose because it is

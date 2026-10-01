@@ -11,7 +11,11 @@ const BUILD_ISO = new Date().toISOString();
 export const revalidate = 3600;
 
 export async function GET() {
-  const sub: string[] = ['sitemap-pages.xml', 'sitemap-sets.xml'];
+  const sub: string[] = [
+    'sitemap-pages.xml',
+    'sitemap-sets.xml',
+    'sitemap-characters.xml',
+  ];
   for (let i = 1; i <= CARD_SITEMAP_SHARDS; i++) {
     sub.push(`sitemap-cards-${i}.xml`);
   }

@@ -9,16 +9,19 @@ import { LORCANA_ARTICLES } from '@/lib/insights';
 const BUILD_ISO = new Date().toISOString();
 
 const STATIC: Array<{ path: string; priority: string; changefreq: string }> = [
-  { path: '/',            priority: '1.0',  changefreq: 'daily'   },
-  { path: '/browse',      priority: '0.9',  changefreq: 'daily'   },
-  { path: '/market',      priority: '0.85', changefreq: 'daily'   },
-  { path: '/card-finder', priority: '0.85', changefreq: 'weekly'  },
-  { path: '/leaders',     priority: '0.8',  changefreq: 'weekly'  },
-  { path: '/inks',     priority: '0.8',  changefreq: 'weekly'  },
-  { path: '/insights',    priority: '0.75', changefreq: 'weekly'  },
-  { path: '/contact',     priority: '0.3',  changefreq: 'monthly' },
-  { path: '/privacy',     priority: '0.3',  changefreq: 'yearly'  },
-  { path: '/terms',       priority: '0.3',  changefreq: 'yearly'  },
+  { path: '/',                 priority: '1.0',  changefreq: 'daily'   },
+  { path: '/browse',           priority: '0.9',  changefreq: 'daily'   },
+  { path: '/characters',       priority: '0.9',  changefreq: 'weekly'  },
+  { path: '/market',           priority: '0.85', changefreq: 'daily'   },
+  { path: '/market/enchanted', priority: '0.8',  changefreq: 'weekly'  },
+  { path: '/market/iconic',    priority: '0.8',  changefreq: 'weekly'  },
+  { path: '/card-finder',      priority: '0.85', changefreq: 'weekly'  },
+  { path: '/inks',             priority: '0.8',  changefreq: 'weekly'  },
+  { path: '/ai',               priority: '0.7',  changefreq: 'monthly' },
+  { path: '/insights',         priority: '0.75', changefreq: 'weekly'  },
+  { path: '/contact',          priority: '0.3',  changefreq: 'monthly' },
+  { path: '/privacy',          priority: '0.3',  changefreq: 'yearly'  },
+  { path: '/terms',            priority: '0.3',  changefreq: 'yearly'  },
 ];
 
 export async function GET() {
