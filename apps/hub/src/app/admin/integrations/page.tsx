@@ -46,6 +46,11 @@ export default async function IntegrationsPage() {
         eyebrow="Platform"
         title="Integrations"
         description="Live registry of planned external connections. Secrets never land in this table; the credential_env column names the environment variable the server will read."
+        actions={
+          <a href="/admin/integrations/google-diagnostic" className="admin-signout-btn">
+            Run Google credential diagnostic
+          </a>
+        }
       />
       <Panel>
         <Table
