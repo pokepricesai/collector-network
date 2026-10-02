@@ -161,6 +161,12 @@ export async function syncGscProperty(
   url_query_daily: number;
   latest_date: string | null;
 }> {
+  // Guard: if the date range is empty (new property, settlement lag
+  // means no data yet), bail cleanly so the caller doesn't surface
+  // Google's "end date cannot precede start date" error.
+  if (startDate > endDate) {
+    return { site_daily: 0, url_daily: 0, query_daily: 0, url_query_daily: 0, latest_date: null };
+  }
   // Site-level daily (date dimension only — gives site totals + avg position).
   const siteRows = await gscQueryAll(prop.property_id, startDate, endDate, ['date']);
   // URL-level daily (date + page).
@@ -297,6 +303,7 @@ export async function syncGa4Property(
   startDate: string,
   endDate: string,
 ): Promise<{ rows: number; latest_date: string | null }> {
+  if (startDate > endDate) return { rows: 0, latest_date: null };
   const rows = await ga4RunReport(prop.property_id, startDate, endDate);
   const dbRows = rows.map((r) => ({
     site_id: prop.site_id,
@@ -365,14 +372,44 @@ export async function syncAllGa4(sb: SupabaseClient, today: Date): Promise<{
 }
 
 // --- Backfill wrappers --------------------------------------------
+//
+// Chunk by date-window to stay within Supabase's single-statement
+// timeout. PokePrices alone is large enough that a 90-day
+// url+query upsert in one shot can exceed the default. 10 days per
+// chunk is well under any practical limit.
+const BACKFILL_CHUNK_DAYS = 10;
+
 export async function backfillGscProperty(
   sb: SupabaseClient,
   prop: GooglePropertyRow,
   today: Date,
-): Promise<{ site_daily: number; url_daily: number; query_daily: number; url_query_daily: number; latest_date: string | null }> {
+): Promise<{ site_daily: number; url_daily: number; query_daily: number; url_query_daily: number; latest_date: string | null; windows: number }> {
   const end = dateMinusDays(today, GSC_SETTLE_LAG_DAYS);
   const start = prop.backfill_from ? new Date(prop.backfill_from) : dateMinusDays(end, 90);
-  return syncGscProperty(sb, prop, iso(start), iso(end));
+  if (start > end) {
+    // Property is too new — GSC has no data yet because
+    // backfill_from is more recent than today - settlement-lag.
+    return { site_daily: 0, url_daily: 0, query_daily: 0, url_query_daily: 0, latest_date: null, windows: 0 };
+  }
+  const totals = { site_daily: 0, url_daily: 0, query_daily: 0, url_query_daily: 0 };
+  let latest: string | null = null;
+  let windowStart = new Date(start);
+  let windows = 0;
+  while (windowStart <= end) {
+    const windowEnd = new Date(windowStart);
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + BACKFILL_CHUNK_DAYS - 1);
+    const clampedEnd = windowEnd > end ? end : windowEnd;
+    const r = await syncGscProperty(sb, prop, iso(windowStart), iso(clampedEnd));
+    totals.site_daily += r.site_daily;
+    totals.url_daily += r.url_daily;
+    totals.query_daily += r.query_daily;
+    totals.url_query_daily += r.url_query_daily;
+    if (r.latest_date && (!latest || r.latest_date > latest)) latest = r.latest_date;
+    windows++;
+    windowStart = new Date(clampedEnd);
+    windowStart.setUTCDate(windowStart.getUTCDate() + 1);
+  }
+  return { ...totals, latest_date: latest, windows };
 }
 
 export async function backfillGa4Property(
@@ -382,5 +419,8 @@ export async function backfillGa4Property(
 ): Promise<{ rows: number; latest_date: string | null }> {
   const end = dateMinusDays(today, 1);
   const start = prop.backfill_from ? new Date(prop.backfill_from) : dateMinusDays(end, 90);
+  if (start > end) {
+    return { rows: 0, latest_date: null };
+  }
   return syncGa4Property(sb, prop, iso(start), iso(end));
 }
