@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/sync/gsc",           "schedule": "15 2 * * *" },
+    { "path": "/api/sync/ga4",           "schedule": "30 2 * * *" },
+    { "path": "/api/sync/opportunities", "schedule": "0 3 * * *" }
+  ]
+}

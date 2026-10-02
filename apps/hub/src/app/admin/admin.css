@@ -291,6 +291,16 @@
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
+.metric-grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.metric-grid--compact .metric-card {
+  min-height: 72px;
+  padding: 10px 12px;
+}
+.metric-grid--compact .metric-value {
+  font-size: 18px;
+}
 .metric-card {
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
