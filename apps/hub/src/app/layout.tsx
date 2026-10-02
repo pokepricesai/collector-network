@@ -1,13 +1,16 @@
 import type { Metadata, Viewport } from 'next';
 import { ReactNode } from 'react';
-import './globals.css';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import { SITE_NAME, SITE_URL } from '@/lib/sites';
 
 const PRODUCTION_DOMAIN = process.env['VERCEL_ENV'] === 'production';
 const DESCRIPTION =
   'Collector Network brings together specialist pricing, market data and collection platforms for Pokémon, Magic: The Gathering, Yu-Gi-Oh!, One Piece and Disney Lorcana collectors.';
+
+// Root layout. Deliberately minimal — the public site and the
+// private admin surface have different shells. The public shell
+// (header + footer + global styles) lives in `(site)/layout.tsx`;
+// the admin shell (left rail + top bar + admin styles) lives in
+// `admin/layout.tsx`. Only `<html>` and `<body>` live here.
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -64,11 +67,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           rel="stylesheet"
         />
       </head>
-      <body>
-        <Header />
-        <main>{children}</main>
-        <Footer />
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

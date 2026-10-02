@@ -7,7 +7,10 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/api/'],
+      // Admin is the private Collector Network OS. The real security
+      // boundary is server-side authentication; this disallow saves
+      // crawl budget and keeps the admin out of SERPs.
+      disallow: ['/api/', '/admin/', '/admin'],
     },
   };
   if (launched) {
