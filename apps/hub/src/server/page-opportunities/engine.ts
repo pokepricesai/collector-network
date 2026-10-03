@@ -119,79 +119,60 @@ export async function generatePageOpportunities(
   const shardMeta = (snap as { metadata?: { shards?: Array<{ url: string }> } } | null)?.metadata?.shards ?? [];
   const sitemapHints = new Set(shardMeta.map((s) => s.url));
 
-  let generated = 0;
-  let updated = 0;
+  // Pre-fetch existing rows so we can distinguish generated vs updated.
+  const { data: existingRows } = await sb
+    .from('network_page_opportunities')
+    .select('kind, template_label')
+    .eq('site_id', siteId);
+  const existingKeys = new Set(((existingRows ?? []) as Array<{ kind: string; template_label: string }>)
+    .map((r) => `${r.kind}|${r.template_label}`));
 
-  for (const tpl of catalog) {
-    // Related queries + evidence.
+  const now = new Date().toISOString();
+  const rows = catalog.map((tpl) => {
     let impressions = 0;
     let clicks = 0;
     const related: Array<{ q: string; imp: number }> = [];
     for (const [q, m] of queryTotals) {
       if (tpl.queryPatterns.some((re) => re.test(q))) {
-        impressions += m.impressions;
-        clicks += m.clicks;
+        impressions += m.impressions; clicks += m.clicks;
         related.push({ q, imp: m.impressions });
       }
     }
     related.sort((a, b) => b.imp - a.imp);
     const relatedQueries = related.slice(0, 10).map((r) => r.q);
-
-    // Existence probe (crude): check if any sitemap shard URL
-    // suggests this template exists.
     const templateExists = tpl.pathPatterns.some((re) =>
       [...sitemapHints].some((u) => re.test(u))
     );
-
-    // We propose a template when there's at least some demand OR when
-    // the catalog says it's a known evergreen opportunity even if GSC
-    // demand is tiny today.
     const priority: 'critical' | 'high' | 'normal' | 'low' =
       impressions >= 10_000 ? 'high' :
       impressions >= 1_000  ? 'normal' : 'low';
-
-    const buildStatus = templateExists ? 'live' : 'proposed';
-    const status = templateExists ? 'actioned' : 'open';
-
-    const { data: existing } = await sb
-      .from('network_page_opportunities')
-      .select('id')
-      .eq('site_id', siteId)
-      .eq('kind', tpl.kind)
-      .eq('template_label', tpl.label)
-      .maybeSingle();
-
-    const row = {
+    return {
       site_id: siteId,
       kind: tpl.kind,
       template_label: tpl.label,
       reason: tpl.reason,
       priority,
-      available_count: 0, // we don't yet have an entity catalog to count against
+      available_count: 0,
       gsc_impressions_28d: impressions,
       gsc_clicks_28d: clicks,
       related_queries: relatedQueries,
       evidence: { related_queries_full: related.slice(0, 50), template_exists_hint: templateExists },
-      build_status: buildStatus,
-      status,
+      build_status: templateExists ? 'live' : 'proposed',
+      status: templateExists ? 'actioned' : 'open',
+      last_seen_at: now,
     };
-    if (!existing) {
-      const { error } = await sb.from('network_page_opportunities').insert(row);
-      if (!error) generated++;
-    } else {
-      const { error } = await sb.from('network_page_opportunities')
-        .update({
-          priority: row.priority,
-          gsc_impressions_28d: row.gsc_impressions_28d,
-          gsc_clicks_28d: row.gsc_clicks_28d,
-          related_queries: row.related_queries,
-          evidence: row.evidence,
-          build_status: row.build_status,
-          last_seen_at: new Date().toISOString(),
-        })
-        .eq('id', (existing as { id: string }).id);
-      if (!error) updated++;
-    }
+  });
+
+  if (rows.length === 0) return { generated: 0, updated: 0 };
+  const { error } = await sb.from('network_page_opportunities')
+    .upsert(rows, { onConflict: 'site_id,kind,template_label' });
+  if (error) throw new Error(`[page-opps] upsert: ${error.message}`);
+
+  let generated = 0;
+  let updated = 0;
+  for (const r of rows) {
+    const k = `${r.kind}|${r.template_label}`;
+    if (existingKeys.has(k)) updated++; else generated++;
   }
   return { generated, updated };
 }

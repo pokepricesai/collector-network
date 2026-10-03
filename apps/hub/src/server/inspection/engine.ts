@@ -51,19 +51,36 @@ interface RawInspectResp {
   };
 }
 
+const INSPECTION_FETCH_TIMEOUT_MS = 15000;
+
 export async function inspectUrl(propertyId: string, url: string): Promise<InspectionResult> {
   const tok = await mintGoogleAccessToken(SCOPES);
-  const res = await fetch(INSPECTION_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${tok.token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      inspectionUrl: url,
-      siteUrl: propertyId,
-    }),
-  });
+  // Each call has a hard timeout so a slow Google response doesn't
+  // monopolise the per-site budget.
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), INSPECTION_FETCH_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(INSPECTION_URL, {
+      method: 'POST',
+      signal: ctl.signal,
+      headers: {
+        Authorization: `Bearer ${tok.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inspectionUrl: url,
+        siteUrl: propertyId,
+      }),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`[inspection] timeout after ${INSPECTION_FETCH_TIMEOUT_MS}ms for ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(t);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`[inspection] HTTP ${res.status}: ${text.slice(0, 400)}`);

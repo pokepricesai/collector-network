@@ -101,6 +101,127 @@ async function runSitemapForOneSite(sb: SupabaseClient, slug: SiteSlug): Promise
   }
 }
 
+/** Per-site URL inspection runner. One job_run per invocation, 50-URL
+ *  cap per site, quota-aware. Each inspection HTTP call is bounded.
+ *  Comfortably well under Vercel's 300s cap even at 50 × 3s = 150s. */
+async function runInspectionForOneSite(sb: SupabaseClient, slug: SiteSlug): Promise<{
+  rowsInserted: number;
+  rowsExamined: number;
+  rowsRejected: number;
+  summary: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}> {
+  const site = await loadSiteDescriptor(sb, slug);
+  // Need the GSC property URL for the Inspection API call.
+  const { data: prop, error: propErr } = await sb
+    .from('network_google_properties')
+    .select('property_id')
+    .eq('site_id', site.id).eq('kind', 'gsc').eq('status', 'active')
+    .maybeSingle();
+  if (propErr) throw new Error(`[inspection/${slug}] load property: ${propErr.message}`);
+  if (!prop) throw new Error(`[inspection/${slug}] no active GSC property`);
+  const propertyId = (prop as { property_id: string }).property_id;
+
+  const jobStart = Date.now();
+  const { data: jobId } = await sb.rpc('network_start_job_run', {
+    p_job_name: 'inspection.cycle',
+    p_job_type: 'sync',
+    p_site_id: site.id,
+    p_metadata: { site: slug, property_id: propertyId, trigger: 'per-site' } as unknown as Record<string, unknown>,
+  });
+  try {
+    const { enqueued } = await buildInspectionQueue(sb, site.id);
+    // 25 URLs/site: at Google's typical 2-5s/call that's 50-125s per
+    // invocation — comfortably under the 300s Vercel cap even with
+    // overhead. Operators can run twice to work through the queue.
+    const r = await processInspectionQueue(sb, site.id, propertyId, 25);
+    await sb.rpc('network_complete_job_run', {
+      p_id: jobId,
+      p_status: r.errors.length === 0 && !r.quotaExceeded ? 'success' : 'warning',
+      p_rows_examined: r.processed,
+      p_rows_inserted: r.inspected,
+      p_rows_updated: 0,
+      p_rows_rejected: r.errors.length,
+      p_error_summary: r.quotaExceeded ? 'quota exceeded' : null,
+      p_metadata: {
+        site: slug, enqueued,
+        duration_ms: Date.now() - jobStart,
+        quota_exceeded: r.quotaExceeded,
+        first_error: r.errors[0]?.error ?? null,
+      } as unknown as Record<string, unknown>,
+    });
+    return {
+      rowsInserted: r.inspected,
+      rowsExamined: r.processed,
+      rowsRejected: r.errors.length,
+      summary: { site: slug, enqueued, processed: r.processed, inspected: r.inspected, quota_exceeded: r.quotaExceeded, errors: r.errors.length },
+      metadata: { site: slug, enqueued, inspected: r.inspected, errors: r.errors.length, duration_ms: Date.now() - jobStart },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await sb.rpc('network_fail_job_run', {
+      p_id: jobId,
+      p_error_summary: msg.slice(0, 500),
+      p_metadata: { site: slug, duration_ms: Date.now() - jobStart } as unknown as Record<string, unknown>,
+    });
+    throw err;
+  }
+}
+
+/** Per-site intelligence runner. One job_run per invocation; the
+ *  underlying engines now do bulk upserts so even PokePrices (~900
+ *  opportunities) completes in <5s. */
+async function runIntelForOneSite(sb: SupabaseClient, slug: SiteSlug): Promise<{
+  rowsInserted: number;
+  rowsUpdated: number;
+  summary: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}> {
+  const site = await loadSiteDescriptor(sb, slug);
+  const jobStart = Date.now();
+  const { data: jobId } = await sb.rpc('network_start_job_run', {
+    p_job_name: 'intel.links_and_pages',
+    p_job_type: 'analysis',
+    p_site_id: site.id,
+    p_metadata: { site: slug, trigger: 'per-site' } as unknown as Record<string, unknown>,
+  });
+  try {
+    const today = new Date();
+    const [internal, pages] = await Promise.all([
+      generateInternalLinkOpportunities(sb, site.id, today),
+      generatePageOpportunities(sb, slug, site.id, today),
+    ]);
+    const inserted = internal.generated + pages.generated;
+    const updated  = internal.updated   + pages.updated;
+    await sb.rpc('network_complete_job_run', {
+      p_id: jobId,
+      p_status: 'success',
+      p_rows_examined: 0,
+      p_rows_inserted: inserted,
+      p_rows_updated: updated,
+      p_rows_rejected: 0,
+      p_error_summary: null,
+      p_metadata: {
+        site: slug, internal, pages,
+        duration_ms: Date.now() - jobStart,
+      } as unknown as Record<string, unknown>,
+    });
+    return {
+      rowsInserted: inserted, rowsUpdated: updated,
+      summary: { site: slug, internal, pages, duration_ms: Date.now() - jobStart },
+      metadata: { site: slug, internal, pages, duration_ms: Date.now() - jobStart },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await sb.rpc('network_fail_job_run', {
+      p_id: jobId,
+      p_error_summary: msg.slice(0, 500),
+      p_metadata: { site: slug, duration_ms: Date.now() - jobStart } as unknown as Record<string, unknown>,
+    });
+    throw err;
+  }
+}
+
 export interface JobRunResult {
   ok: boolean;
   slug: string;
@@ -219,118 +340,19 @@ export const JOBS: Record<string, JobDefinition> = {
     wrapsOuter: false,
     run: async (sb) => runSitemapForOneSite(sb, 'lorcana'),
   },
-  'inspection.cycle': {
-    slug: 'inspection.cycle',
-    jobName: 'inspection.cycle',
-    group: 'analysis',
-    label: 'URL inspection cycle',
-    description: 'Rebuilds the inspection queue from current state, then processes up to 50 URLs per site. Quota-aware.',
-    wrapsOuter: false,
-    run: async (sb) => {
-      const { data: props, error } = await sb
-        .from('network_google_properties')
-        .select('site_id, property_id, network_sites!inner(slug)')
-        .eq('kind', 'gsc')
-        .eq('status', 'active');
-      if (error) throw new Error(`[jobs/inspection] load props: ${error.message}`);
-      const rows = (props ?? []) as unknown as Array<{ site_id: string; property_id: string; network_sites: { slug: string } }>;
-      const perSite: Array<{ site: string; enqueued: number; processed: number; inspected: number; quotaExceeded: boolean; errors: number }> = [];
-      let totalInspected = 0;
-      let totalErrors = 0;
-      for (const r of rows) {
-        const jobStart = Date.now();
-        const { data: jobId } = await sb.rpc('network_start_job_run', {
-          p_job_name: 'inspection.cycle',
-          p_job_type: 'sync',
-          p_site_id: r.site_id,
-          p_metadata: { property_id: r.property_id } as unknown as Record<string, unknown>,
-        });
-        try {
-          const { enqueued } = await buildInspectionQueue(sb, r.site_id);
-          const res = await processInspectionQueue(sb, r.site_id, r.property_id, 50);
-          perSite.push({ site: r.network_sites.slug, enqueued, processed: res.processed, inspected: res.inspected, quotaExceeded: res.quotaExceeded, errors: res.errors.length });
-          totalInspected += res.inspected;
-          totalErrors += res.errors.length;
-          await sb.rpc('network_complete_job_run', {
-            p_id: jobId,
-            p_status: res.errors.length === 0 && !res.quotaExceeded ? 'success' : 'warning',
-            p_rows_examined: res.processed,
-            p_rows_inserted: res.inspected,
-            p_rows_updated: 0,
-            p_rows_rejected: res.errors.length,
-            p_error_summary: res.quotaExceeded ? 'quota exceeded' : null,
-            p_metadata: { enqueued, duration_ms: Date.now() - jobStart } as unknown as Record<string, unknown>,
-          });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          await sb.rpc('network_fail_job_run', { p_id: jobId, p_error_summary: msg.slice(0, 500), p_metadata: null as unknown as Record<string, unknown> });
-          totalErrors++;
-        }
-      }
-      return {
-        rowsInserted: totalInspected,
-        rowsRejected: totalErrors,
-        summary: { perSite },
-        metadata: { per_site: perSite },
-      };
-    },
-  },
-  'intel.links_and_pages': {
-    slug: 'intel.links_and_pages',
-    jobName: 'intel.links_and_pages',
-    group: 'analysis',
-    label: 'Internal links + page opportunities',
-    description: 'Internal-link opportunity engine (orphan / authority_handoff / query_cluster) + per-TCG page-opportunity engine. Needs GSC data to be useful.',
-    wrapsOuter: false,
-    run: async (sb) => {
-      const { data: sites, error } = await sb
-        .from('network_sites')
-        .select('id, slug')
-        .eq('status', 'active');
-      if (error) throw new Error(`[jobs/intel] load sites: ${error.message}`);
-      const rows = (sites ?? []) as Array<{ id: string; slug: string }>;
-      const today = new Date();
-      const perSite: Array<{ site: string; internal: { generated: number; updated: number }; pages: { generated: number; updated: number } }> = [];
-      let totalInserted = 0, totalUpdated = 0;
-      for (const s of rows) {
-        const jobStart = Date.now();
-        const { data: jobId } = await sb.rpc('network_start_job_run', {
-          p_job_name: 'intel.links_and_pages',
-          p_job_type: 'analysis',
-          p_site_id: s.id,
-          p_metadata: {} as unknown as Record<string, unknown>,
-        });
-        try {
-          const [internal, pages] = await Promise.all([
-            generateInternalLinkOpportunities(sb, s.id, today),
-            generatePageOpportunities(sb, s.slug, s.id, today),
-          ]);
-          perSite.push({ site: s.slug, internal, pages });
-          totalInserted += internal.generated + pages.generated;
-          totalUpdated += internal.updated + pages.updated;
-          await sb.rpc('network_complete_job_run', {
-            p_id: jobId,
-            p_status: 'success',
-            p_rows_examined: 0,
-            p_rows_inserted: internal.generated + pages.generated,
-            p_rows_updated: internal.updated + pages.updated,
-            p_rows_rejected: 0,
-            p_error_summary: null,
-            p_metadata: { internal, pages, duration_ms: Date.now() - jobStart } as unknown as Record<string, unknown>,
-          });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          await sb.rpc('network_fail_job_run', { p_id: jobId, p_error_summary: msg.slice(0, 500), p_metadata: null as unknown as Record<string, unknown> });
-        }
-      }
-      return {
-        rowsInserted: totalInserted,
-        rowsUpdated: totalUpdated,
-        summary: { perSite },
-        metadata: { per_site: perSite },
-      };
-    },
-  },
+  // --- URL inspection (per site) --------------------------------
+  'inspection.pokemon':  { slug: 'inspection.pokemon',  jobName: 'inspection.cycle', group: 'analysis', label: 'URL inspection · PokePrices',     description: 'Inspects up to 50 priority PokePrices URLs via GSC URL Inspection API. Quota-aware. ~1–3min typical.',     wrapsOuter: false, run: async (sb) => runInspectionForOneSite(sb, 'pokemon') },
+  'inspection.mtg':      { slug: 'inspection.mtg',      jobName: 'inspection.cycle', group: 'analysis', label: 'URL inspection · MTGPrices',      description: 'Inspects up to 50 priority MTGPrices URLs via GSC URL Inspection API.',      wrapsOuter: false, run: async (sb) => runInspectionForOneSite(sb, 'mtg') },
+  'inspection.ygo':      { slug: 'inspection.ygo',      jobName: 'inspection.cycle', group: 'analysis', label: 'URL inspection · YGOPrices',      description: 'Inspects up to 50 priority YGOPrices URLs via GSC URL Inspection API.',      wrapsOuter: false, run: async (sb) => runInspectionForOneSite(sb, 'ygo') },
+  'inspection.onepiece': { slug: 'inspection.onepiece', jobName: 'inspection.cycle', group: 'analysis', label: 'URL inspection · OnePiecePrices', description: 'Inspects up to 50 priority OnePiecePrices URLs via GSC URL Inspection API.', wrapsOuter: false, run: async (sb) => runInspectionForOneSite(sb, 'onepiece') },
+  'inspection.lorcana':  { slug: 'inspection.lorcana',  jobName: 'inspection.cycle', group: 'analysis', label: 'URL inspection · LorcanaPrices',  description: 'Inspects up to 50 priority LorcanaPrices URLs via GSC URL Inspection API.',  wrapsOuter: false, run: async (sb) => runInspectionForOneSite(sb, 'lorcana') },
+
+  // --- Intel (internal links + page opportunities, per site) ----
+  'intel.pokemon':  { slug: 'intel.pokemon',  jobName: 'intel.links_and_pages', group: 'analysis', label: 'Intel · PokePrices',     description: 'Internal-link + page-opportunity engines for PokePrices. Bulk-upserts into Supabase; <5s typical.',    wrapsOuter: false, run: async (sb) => runIntelForOneSite(sb, 'pokemon') },
+  'intel.mtg':      { slug: 'intel.mtg',      jobName: 'intel.links_and_pages', group: 'analysis', label: 'Intel · MTGPrices',      description: 'Internal-link + page-opportunity engines for MTGPrices.',      wrapsOuter: false, run: async (sb) => runIntelForOneSite(sb, 'mtg') },
+  'intel.ygo':      { slug: 'intel.ygo',      jobName: 'intel.links_and_pages', group: 'analysis', label: 'Intel · YGOPrices',      description: 'Internal-link + page-opportunity engines for YGOPrices.',      wrapsOuter: false, run: async (sb) => runIntelForOneSite(sb, 'ygo') },
+  'intel.onepiece': { slug: 'intel.onepiece', jobName: 'intel.links_and_pages', group: 'analysis', label: 'Intel · OnePiecePrices', description: 'Internal-link + page-opportunity engines for OnePiecePrices.', wrapsOuter: false, run: async (sb) => runIntelForOneSite(sb, 'onepiece') },
+  'intel.lorcana':  { slug: 'intel.lorcana',  jobName: 'intel.links_and_pages', group: 'analysis', label: 'Intel · LorcanaPrices',  description: 'Internal-link + page-opportunity engines for LorcanaPrices.',  wrapsOuter: false, run: async (sb) => runIntelForOneSite(sb, 'lorcana') },
   'bq.pokeprices_analysis': {
     slug: 'bq.pokeprices_analysis',
     jobName: 'bq.pokeprices_analysis',

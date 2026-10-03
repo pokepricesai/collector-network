@@ -245,36 +245,60 @@ export async function generateInternalLinkOpportunities(
   }
 
   // --- Upsert -----------------------------------------------------
+  //
+  // One-shot upsert using the (site_id, source_url, target_url, reason)
+  // unique constraint. For PokePrices we see ~900 opportunities per
+  // run; the per-row select+insert loop took ~240s. A single
+  // chunked upsert takes ~1s.
+  //
+  // Returning the opportunity id lets us tell "newly inserted"
+  // apart from "updated" by comparing first_seen_at vs now.
+  const now = new Date().toISOString();
+  if (opps.length === 0) return { generated: 0, updated: 0 };
+
+  const uniqueKey = new Set<string>();
+  const dedupOpps = opps.filter((o) => {
+    const k = `${o.source_url}|${o.target_url}|${o.reason}`;
+    if (uniqueKey.has(k)) return false;
+    uniqueKey.add(k); return true;
+  });
+
+  const rows = dedupOpps.map((o) => ({
+    site_id: siteId,
+    source_url: o.source_url,
+    target_url: o.target_url,
+    reason: o.reason,
+    relationship: o.relationship,
+    priority: o.priority,
+    confidence: o.confidence,
+    evidence: o.evidence,
+    last_seen_at: now,
+  }));
+
+  const CHUNK = 500;
+  let totalBeforeIds = 0;
+  // First get the set of existing ids so we can tell apart generated vs updated.
+  const { data: existingRows } = await sb
+    .from('network_internal_link_opportunities')
+    .select('id, source_url, target_url, reason')
+    .eq('site_id', siteId)
+    .in('reason', [...new Set(dedupOpps.map((o) => o.reason))]);
+  const existingKeys = new Set(((existingRows ?? []) as Array<{ source_url: string; target_url: string; reason: string }>)
+    .map((r) => `${r.source_url}|${r.target_url}|${r.reason}`));
+  totalBeforeIds = existingKeys.size;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const slice = rows.slice(i, i + CHUNK);
+    const { error } = await sb.from('network_internal_link_opportunities')
+      .upsert(slice, { onConflict: 'site_id,source_url,target_url,reason' });
+    if (error) throw new Error(`[internal-links] upsert: ${error.message}`);
+  }
   let generated = 0;
   let updated = 0;
-  const now = new Date().toISOString();
-  for (const o of opps) {
-    const { data: existing } = await sb
-      .from('network_internal_link_opportunities')
-      .select('id, status')
-      .eq('site_id', siteId)
-      .eq('source_url', o.source_url)
-      .eq('target_url', o.target_url)
-      .eq('reason', o.reason)
-      .maybeSingle();
-    if (!existing) {
-      const { error } = await sb.from('network_internal_link_opportunities').insert({
-        site_id: siteId,
-        source_url: o.source_url,
-        target_url: o.target_url,
-        reason: o.reason,
-        relationship: o.relationship,
-        priority: o.priority,
-        confidence: o.confidence,
-        evidence: o.evidence,
-      });
-      if (!error) generated++;
-    } else {
-      const { error } = await sb.from('network_internal_link_opportunities').update({
-        priority: o.priority, confidence: o.confidence, evidence: o.evidence, last_seen_at: now,
-      }).eq('id', (existing as { id: string }).id);
-      if (!error) updated++;
-    }
+  for (const o of dedupOpps) {
+    const k = `${o.source_url}|${o.target_url}|${o.reason}`;
+    if (existingKeys.has(k)) updated++;
+    else generated++;
   }
+  void totalBeforeIds;
   return { generated, updated };
 }

@@ -58,8 +58,9 @@ export default async function JobsPage() {
     return r.site_id ? `${r.job_name}|${r.site_id}` : r.job_name;
   }
   function keyForJob(j: typeof jobs[number]): string {
-    // Per-site jobs encode the slug suffix as the site slug.
-    const siteSuffixMatch = j.slug.match(/^sitemaps\.(\w+)$/);
+    // Per-site jobs encode the site slug after the first dot:
+    //   sitemaps.pokemon, inspection.mtg, intel.ygo, ...
+    const siteSuffixMatch = j.slug.match(/^(?:sitemaps|inspection|intel)\.(\w+)$/);
     if (siteSuffixMatch && siteSuffixMatch[1]) {
       const site = sites.find((s) => s.slug === siteSuffixMatch[1]);
       return site ? `${j.jobName}|${site.id}` : j.jobName;
