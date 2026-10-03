@@ -10,13 +10,25 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
     label: 'Overview',
     items: [
       { href: '/admin',       label: 'Overview' },
+      { href: '/admin/brief', label: 'Daily brief' },
       { href: '/admin/sites', label: 'Sites' },
+    ],
+  },
+  {
+    label: 'SEO',
+    items: [
+      { href: '/admin/seo',                   label: 'SEO overview' },
+      { href: '/admin/seo/opportunities',     label: 'Opportunities' },
+      { href: '/admin/seo/internal-links',    label: 'Internal links' },
+      { href: '/admin/seo/page-opportunities',label: 'Page opportunities' },
+      { href: '/admin/seo/sitemaps',          label: 'Sitemaps' },
+      { href: '/admin/seo/indexing',          label: 'Indexing' },
+      { href: '/admin/seo/changes',           label: 'Changes' },
     ],
   },
   {
     label: 'Portfolio',
     items: [
-      { href: '/admin/seo',     label: 'SEO' },
       { href: '/admin/health',  label: 'Health' },
       { href: '/admin/content', label: 'Content' },
       { href: '/admin/social',  label: 'Social' },

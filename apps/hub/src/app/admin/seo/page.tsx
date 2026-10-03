@@ -67,10 +67,15 @@ export default async function SeoOverviewPage() {
           ? `Google Search Console data through ${gscMaxDate}. GSC has a ~3-day settling lag — recent days should be treated as provisional.`
           : 'Google Search Console is configured but no data yet. Trigger /api/sync/backfill?kind=gsc to populate.'}
         actions={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Link className="status-badge status-active" href="/admin/seo/pages">Pages →</Link>
-            <Link className="status-badge status-active" href="/admin/seo/queries">Queries →</Link>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <Link className="status-badge status-active"      href="/admin/seo/pages">Pages →</Link>
+            <Link className="status-badge status-active"      href="/admin/seo/queries">Queries →</Link>
             <Link className="status-badge status-opportunity" href="/admin/seo/opportunities">Opportunities →</Link>
+            <Link className="status-badge status-opportunity" href="/admin/seo/internal-links">Internal links →</Link>
+            <Link className="status-badge status-opportunity" href="/admin/seo/page-opportunities">Page opportunities →</Link>
+            <Link className="status-badge status-active"      href="/admin/seo/sitemaps">Sitemaps →</Link>
+            <Link className="status-badge status-active"      href="/admin/seo/indexing">Indexing →</Link>
+            <Link className="status-badge status-active"      href="/admin/seo/changes">Changes →</Link>
           </div>
         }
       />

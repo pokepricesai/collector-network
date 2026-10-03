@@ -1,7 +1,12 @@
 {
   "crons": [
-    { "path": "/api/sync/gsc",           "schedule": "15 2 * * *" },
-    { "path": "/api/sync/ga4",           "schedule": "30 2 * * *" },
-    { "path": "/api/sync/opportunities", "schedule": "0 3 * * *" }
+    { "path": "/api/sync/gsc",            "schedule": "15 2 * * *" },
+    { "path": "/api/sync/ga4",            "schedule": "30 2 * * *" },
+    { "path": "/api/sync/opportunities",  "schedule": "0 3 * * *" },
+    { "path": "/api/sync/sitemaps",       "schedule": "15 3 * * *" },
+    { "path": "/api/sync/inspection",     "schedule": "30 3 * * *" },
+    { "path": "/api/sync/internal-links", "schedule": "45 3 * * *" },
+    { "path": "/api/sync/bigquery",       "schedule": "0 4 * * *" },
+    { "path": "/api/sync/brief",          "schedule": "30 4 * * *" }
   ]
 }

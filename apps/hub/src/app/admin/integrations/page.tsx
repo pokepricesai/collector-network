@@ -20,6 +20,7 @@ interface IntegrationRow {
 const PROVIDER_LABEL: Record<string, string> = {
   gsc: 'Google Search Console',
   ga4: 'Google Analytics',
+  bigquery: 'BigQuery (PokePrices export)',
   bing_wmt: 'Bing Webmaster',
   indexnow: 'IndexNow',
   internal_db: 'Site database',

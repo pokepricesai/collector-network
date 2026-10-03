@@ -36,6 +36,35 @@ export default async function OverviewPage() {
     fetchFreshness(sb),
   ]);
 
+  // Phase-2 counts for the dashboard quick-glance panel.
+  const [
+    { count: openOppsCount },
+    { count: openIlCount },
+    { count: openPageOppsCount },
+    { count: openSitemapIssues },
+    { count: openIndexingIssues },
+    { count: recentSeoChanges },
+  ] = await Promise.all([
+    sb.from('network_opportunities').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+    sb.from('network_internal_link_opportunities').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+    sb.from('network_page_opportunities').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+    sb.from('network_sitemap_issues').select('*', { count: 'exact', head: true }).is('resolved_at', null),
+    sb.from('network_url_inspections').select('*', { count: 'exact', head: true }).ilike('coverage_state', '%not indexed%'),
+    sb.from('network_seo_changes').select('*', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
+  ]);
+
+  // Build a lightweight "today's priorities" preview (top 5 brief actions)
+  // without re-running the full brief engine; we read the latest persisted
+  // brief if present and fall back to a live rebuild.
+  const { data: cachedBriefRow } = await sb
+    .from('network_daily_briefs')
+    .select('for_date, payload')
+    .order('for_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  type BriefAction = { id: string; priority: 'critical' | 'high' | 'normal' | 'low'; title: string; description: string; link: string; source: string };
+  const cachedActions = ((cachedBriefRow as { payload?: { actions?: BriefAction[] } } | null)?.payload?.actions ?? []).slice(0, 5);
+
   const gscMaxDate = freshness
     .filter((f) => f.kind === 'gsc' && f.lastDataDate)
     .map((f) => f.lastDataDate!)
@@ -135,6 +164,43 @@ export default async function OverviewPage() {
           <MetricCard key={m.label} label={m.label} state="not-connected" helper={m.helper} />
         ))}
       </div>
+
+      <Panel
+        title="Today's priorities"
+        eyebrow={cachedBriefRow ? `Brief for ${(cachedBriefRow as { for_date: string }).for_date}` : 'Daily brief'}
+        actions={<Link className="status-badge status-opportunity" href="/admin/brief">Open brief →</Link>}
+      >
+        {cachedActions.length === 0 ? (
+          <div className="admin-empty admin-empty--muted">
+            <div className="admin-empty-title">No actions queued.</div>
+            <div className="admin-empty-desc">Trigger <code>/api/sync/brief</code> after a GSC sync to populate.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {cachedActions.map((a) => (
+              <div key={a.id} style={{ padding: '8px 12px', border: '1px solid #E6E6E6', borderRadius: 6, display: 'flex', gap: 10, alignItems: 'center' }}>
+                <StatusBadge state={a.priority} />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Link href={a.link} style={{ fontWeight: 600, fontSize: 13 }}>{a.title}</Link>
+                  <span className="col-dim" style={{ fontSize: 11 }}>{a.description}</span>
+                </div>
+                <Link className="status-badge status-not_connected" href={a.link}>Open →</Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="SEO workload" eyebrow="Open items">
+        <div className="metric-grid metric-grid--compact">
+          <MetricCard label="SEO opportunities" value={formatInt(openOppsCount ?? 0)} helper="deterministic, open" />
+          <MetricCard label="Internal-link opps" value={formatInt(openIlCount ?? 0)} />
+          <MetricCard label="Page opportunities" value={formatInt(openPageOppsCount ?? 0)} />
+          <MetricCard label="Sitemap issues"    value={formatInt(openSitemapIssues ?? 0)} helper="unresolved" />
+          <MetricCard label="Indexing issues"   value={formatInt(openIndexingIssues ?? 0)} helper="inspected as not-indexed" />
+          <MetricCard label="SEO changes (7d)"  value={formatInt(recentSeoChanges ?? 0)} />
+        </div>
+      </Panel>
 
       <Panel title="7-day pulse" eyebrow="Trailing 7 days">
         <div className="metric-grid metric-grid--compact">
