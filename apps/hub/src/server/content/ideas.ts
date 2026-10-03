@@ -2,26 +2,39 @@ import 'server-only';
 
 // Content idea engine. Deterministic — no LLM.
 //
-// Reads Phase 2 intelligence and generates evidence-backed article
-// ideas. Dedup is keyed on (site_id, dedupe_key) where dedupe_key
-// combines origin kind + a normalised slug derived from the primary
-// query or target URL. Re-running the engine refreshes evidence +
-// last_seen_at on existing ideas instead of creating duplicates.
+// POST-ROUTING-FIX taxonomy: this engine ONLY emits genuinely
+// editorial / new-content ideas. On-page SEO signals are routed to
+// network_tasks by src/server/content/routing.ts.
 //
-// Sources, in order of signal strength:
-//   • network_opportunities with status='open' and severity high+ →
-//     target the specific query/page
-//   • network_page_opportunities with status='open' → template-level
-//     ideas ("build Pokemon species pages")
-//   • network_content_gap_findings status='open' → "cover this query"
-//   • network_cannibalization_findings status='open' → consolidation /
-//     clarification ideas
+// Sources that become article ideas:
 //
-// Each idea carries:
-//   origin_type / origin_id — so we never lose provenance
-//   evidence JSONB — the exact metrics that made us flag it
+//   • opportunity.new_query — a query first appeared with ≥20
+//     impressions in the trailing 7d AND no existing site URL
+//     currently ranks for it. These are candidates for a dedicated
+//     page.
+//   • content_gap_findings where ranking_url is NULL or path depth
+//     ≤ 1 (homepage / hub pages — the site has no entity-specific
+//     page for the query). Entity-depth ranking URLs fall through
+//     to the routing engine as seo_rewrite tasks instead.
+//   • manual admin-entered ideas (handled by the UI; not by this
+//     engine).
+//
+// What this engine deliberately NO LONGER emits:
+//
+//   • opportunity.zero_click / low_ctr / striking_distance /
+//     declining / gaining when the opportunity has a `page` field —
+//     these are on-page optimisation signals and belong in
+//     network_tasks.
+//   • page_opportunities (bulk template work) — handled by
+//     /admin/seo/page-opportunities, not by the editorial pipeline.
+//   • cannibalization_findings — handled by routing.ts as
+//     consolidation tasks.
+//
+// Dedup: (site_id, dedupe_key). Re-runs refresh evidence +
+// last_seen_at. Ideas whose dedupe_key disappears → status='stale'.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { routeAllForSite } from './routing';
 
 export interface IdeaInput {
   site_id: string;
@@ -32,26 +45,14 @@ export interface IdeaInput {
   secondary_queries?: string[];
   summary?: string;
   priority: 'critical' | 'high' | 'normal' | 'low';
-  origin_type: 'opportunity' | 'page_opp' | 'content_gap' | 'cannibal' | 'manual' | 'refresh';
+  origin_type: 'new_query_opportunity' | 'content_gap' | 'manual' | 'refresh';
   origin_id?: string | null;
   evidence: Record<string, unknown>;
   dedupe_key: string;
 }
 
 function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, ' ')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60);
-}
-
-function priorityFromImpressions(impressions: number): 'critical' | 'high' | 'normal' | 'low' {
-  if (impressions >= 10_000) return 'high';
-  if (impressions >= 2_000) return 'normal';
-  return 'low';
+  return s.toLowerCase().replace(/[^\w\s-]/g, ' ').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 }
 
 export async function generateIdeasForSite(
@@ -61,171 +62,133 @@ export async function generateIdeasForSite(
 ): Promise<{ generated: number; refreshed: number; dismissed_stale: number }> {
   const ideas: IdeaInput[] = [];
 
-  // 1. From network_opportunities (striking_distance + zero_click only —
-  // these two naturally map to "write a dedicated page"). Low_ctr and
-  // declining typically call for an EDIT of an existing page, not a
-  // new article. Gaining = reinforce = refresh. new_query is handled
-  // via content_gap already.
-  const { data: opps } = await sb
-    .from('network_opportunities')
-    .select('id, kind, title, severity, page, query, metrics')
-    .eq('site_id', siteId)
-    .eq('status', 'open')
-    .in('kind', ['striking_distance', 'zero_click'])
-    .in('severity', ['critical', 'high', 'normal'])
-    .limit(200);
-  for (const o of ((opps ?? []) as Array<{ id: string; kind: string; title: string; severity: 'critical' | 'high' | 'normal' | 'low'; page: string; query: string; metrics: Record<string, number> }>)) {
-    if (!o.query) continue;
-    const impr = Number(o.metrics?.impressions_28d ?? 0);
-    const workingTitle = o.kind === 'striking_distance'
-      ? `Dedicated page for "${o.query}" (striking distance from page 1)`
-      : `Rewrite target for "${o.query}" (${impr.toLocaleString()} impressions, zero clicks)`;
+  // Run routing FIRST. It writes the non-editorial Phase 2 signals
+  // into network_tasks and hands back the editorial candidates
+  // (opportunities whose page is a hub/homepage; content_gap
+  // findings without a specific-entity ranking URL).
+  const route = await routeAllForSite(sb, siteId);
+
+  // --- Source 1: opportunity-born editorial candidates --------------
+  for (const c of route.opp.editorial_candidates) {
+    const impr28 = Number(c.metrics?.impressions_28d ?? 0);
     ideas.push({
       site_id: siteId,
       content_type: 'seo_article',
-      working_title: workingTitle,
-      primary_query: o.query,
-      summary: `GSC flags this query as a ${o.kind.replace(/_/g, ' ')} opportunity. Current ranking page: ${o.page || '—'}.`,
-      priority: o.severity,
-      origin_type: 'opportunity',
-      origin_id: o.id,
-      evidence: { opportunity_kind: o.kind, metrics: o.metrics, existing_page: o.page },
-      dedupe_key: `opportunity:${slugify(o.query)}`,
+      working_title: `Dedicated page for "${c.query}" (currently landing on ${c.page})`,
+      primary_query: c.query,
+      summary: `${impr28.toLocaleString()} impressions over 28d for "${c.query}" are landing on a hub/homepage URL (${c.page}) rather than a dedicated page. A focused editorial piece targeting this intent could absorb the demand.`,
+      priority: c.severity,
+      origin_type: 'new_query_opportunity',
+      origin_id: c.id,
+      evidence: { opportunity_kind: c.kind, metrics: c.metrics, weak_ranking_page: c.page },
+      dedupe_key: `editorial_from_opportunity:${slugify(c.query)}`,
     });
   }
 
-  // 2. From network_page_opportunities (template-level ideas).
-  const { data: pageOpps } = await sb
-    .from('network_page_opportunities')
-    .select('id, kind, template_label, reason, gsc_impressions_28d, gsc_clicks_28d, related_queries, priority')
-    .eq('site_id', siteId)
-    .eq('status', 'open')
-    .in('priority', ['critical', 'high', 'normal'])
+  // --- Source 2: new_query opportunities ---------------------------
+  //
+  // Phase 2's opportunity engine emits kind='new_query' when a query
+  // first appeared with ≥20 impressions in the trailing 7d. These
+  // are candidates for dedicated pages when no entity page already
+  // ranks for the query.
+  const { data: newQ } = await sb
+    .from('network_opportunities')
+    .select('id, title, severity, page, query, metrics')
+    .eq('site_id', siteId).eq('status', 'open').eq('kind', 'new_query')
     .limit(100);
-  for (const p of ((pageOpps ?? []) as Array<{ id: string; kind: string; template_label: string; reason: string; gsc_impressions_28d: number; gsc_clicks_28d: number; related_queries: string[]; priority: 'critical' | 'high' | 'normal' | 'low' }>)) {
-    const impr = Number(p.gsc_impressions_28d ?? 0);
-    const topQueries = (p.related_queries ?? []).slice(0, 5);
+  for (const o of ((newQ ?? []) as Array<{ id: string; title: string; severity: 'critical' | 'high' | 'normal' | 'low'; page: string; query: string; metrics: Record<string, number> }>)) {
+    if (!o.query) continue;
+    // Entity-depth ranking means an on-page SEO signal, not a
+    // content gap. These are handled by the routing engine.
+    if (o.page && new URL(o.page).pathname.split('/').filter(Boolean).length >= 2) continue;
+    const impr7 = Number(o.metrics?.impressions_7d ?? 0);
     ideas.push({
       site_id: siteId,
-      content_type: 'evergreen_guide',
-      working_title: `Build out: ${p.template_label}`,
-      primary_query: topQueries[0] ?? '',
-      secondary_queries: topQueries.slice(1),
-      summary: p.reason,
-      priority: p.priority,
-      origin_type: 'page_opp',
-      origin_id: p.id,
-      evidence: { kind: p.kind, impressions_28d: impr, clicks_28d: Number(p.gsc_clicks_28d ?? 0), related_queries: topQueries },
-      dedupe_key: `page_opp:${slugify(p.kind + '-' + p.template_label)}`,
+      content_type: 'seo_article',
+      working_title: `New search intent: "${o.query}"`,
+      primary_query: o.query,
+      summary: `A new query surfaced in the last 7 days with ${impr7} impressions. ${o.page ? `Currently landing weakly on ${o.page}.` : 'No dedicated page exists.'} Candidate for a focused editorial piece.`,
+      priority: o.severity,
+      origin_type: 'new_query_opportunity',
+      origin_id: o.id,
+      evidence: { opportunity_kind: 'new_query', metrics: o.metrics, weak_ranking_page: o.page || null },
+      dedupe_key: `new_query:${slugify(o.query)}`,
     });
   }
 
-  // 3. From network_content_gap_findings (BigQuery-fed; currently
-  // only PokePrices has findings but the schema is network-wide).
-  const { data: gaps } = await sb
-    .from('network_content_gap_findings')
-    .select('id, query, ranking_url, impressions_28d, clicks_28d, position_28d, gap_reason, severity')
-    .eq('site_id', siteId)
-    .eq('status', 'open')
-    .limit(100);
-  for (const g of ((gaps ?? []) as Array<{ id: string; query: string; ranking_url: string | null; impressions_28d: number; clicks_28d: number; position_28d: number; gap_reason: string; severity: 'critical' | 'high' | 'normal' | 'low' }>)) {
-    const impr = Number(g.impressions_28d ?? 0);
+  // --- Source 3: content_gap_findings (editorial-shaped only) ------
+  for (const g of route.gap.editorial_candidates) {
     ideas.push({
       site_id: siteId,
       content_type: 'seo_article',
       working_title: `Content gap: write a dedicated page for "${g.query}"`,
       primary_query: g.query,
-      summary: `Reason: ${g.gap_reason}. Current ranking page: ${g.ranking_url ?? '—'} at avg position ${g.position_28d?.toFixed(1) ?? '—'}.`,
+      summary: `${g.impressions_28d.toLocaleString()} impressions over 28d with no specific-entity page ranking. Reason flagged: ${g.gap_reason}.`,
       priority: g.severity,
       origin_type: 'content_gap',
       origin_id: g.id,
-      evidence: { gap_reason: g.gap_reason, impressions_28d: impr, clicks_28d: Number(g.clicks_28d ?? 0), position_28d: g.position_28d, ranking_url: g.ranking_url },
+      evidence: {
+        gap_reason: g.gap_reason,
+        impressions_28d: g.impressions_28d,
+        clicks_28d: g.clicks_28d,
+        position_28d: g.position_28d,
+      },
       dedupe_key: `content_gap:${slugify(g.query)}`,
     });
   }
 
-  // 4. From network_cannibalization_findings — flag as a "consolidation
-  // or clarification" idea rather than a brand-new article.
-  const { data: cannibal } = await sb
-    .from('network_cannibalization_findings')
-    .select('id, query, url_count, total_impressions, total_clicks, severity, urls')
-    .eq('site_id', siteId)
-    .eq('status', 'open')
-    .limit(50);
-  for (const c of ((cannibal ?? []) as Array<{ id: string; query: string; url_count: number; total_impressions: number; total_clicks: number; severity: 'critical' | 'high' | 'normal' | 'low'; urls: Array<{ url: string }> }>)) {
-    ideas.push({
-      site_id: siteId,
-      content_type: 'editorial',
-      working_title: `Consolidation review: "${c.query}" ranks on ${c.url_count} URLs`,
-      primary_query: c.query,
-      summary: `Multiple pages on the site share the "${c.query}" query. Decide whether to consolidate, differentiate, or add a definitive hub.`,
-      priority: c.severity,
-      origin_type: 'cannibal',
-      origin_id: c.id,
-      evidence: { url_count: c.url_count, total_impressions: Number(c.total_impressions ?? 0), total_clicks: Number(c.total_clicks ?? 0), urls: (c.urls ?? []).slice(0, 10) },
-      dedupe_key: `cannibal:${slugify(c.query)}`,
-    });
-  }
-  void siteSlug; // reserved for site-specific heuristics in later blocks
+  void siteSlug;
 
-  // --- Dedup within this run (same dedupe_key within a batch should
-  // only emit once; later wins because evidence is more specific).
+  // --- Dedup within this run --------------------------------------
   const batch = new Map<string, IdeaInput>();
   for (const i of ideas) batch.set(i.dedupe_key, i);
   const final = [...batch.values()];
 
-  // --- Upsert into network_content_ideas. Idempotent on
-  // (site_id, dedupe_key); existing rows get evidence + priority
-  // refreshed and last_seen_at bumped.
+  // Early-exit: if nothing to emit AND there are no 'new' ideas to
+  // mark stale, we're done. But we DO still need to run the stale
+  // sweep to retire ideas whose origin disappeared.
   const now = new Date().toISOString();
-  if (final.length === 0) {
-    return { generated: 0, refreshed: 0, dismissed_stale: 0 };
-  }
 
-  // Fetch existing dedupe_keys for this site so we can tell generated
-  // vs refreshed apart without an extra round-trip per row.
-  const { data: existing } = await sb
+  const existing = await sb
     .from('network_content_ideas')
-    .select('dedupe_key')
-    .eq('site_id', siteId);
-  const existingKeys = new Set(((existing ?? []) as Array<{ dedupe_key: string }>).map((r) => r.dedupe_key));
+    .select('dedupe_key').eq('site_id', siteId);
+  const existingKeys = new Set(((existing.data ?? []) as Array<{ dedupe_key: string }>).map((r) => r.dedupe_key));
 
-  const rows = final.map((i) => ({
-    site_id: i.site_id,
-    content_type: i.content_type,
-    working_title: i.working_title,
-    primary_query: i.primary_query ?? null,
-    secondary_queries: i.secondary_queries ?? [],
-    summary: i.summary ?? null,
-    priority: i.priority,
-    status: 'new' as const,
-    origin_type: i.origin_type,
-    origin_id: i.origin_id ?? null,
-    evidence: i.evidence,
-    dedupe_key: i.dedupe_key,
-    last_seen_at: now,
-  }));
-
-  const CHUNK = 500;
-  for (let s = 0; s < rows.length; s += CHUNK) {
-    const slice = rows.slice(s, s + CHUNK);
-    const { error } = await sb.from('network_content_ideas')
-      .upsert(slice, { onConflict: 'site_id,dedupe_key', ignoreDuplicates: false });
-    if (error) throw new Error(`[ideas] upsert: ${error.message}`);
+  if (final.length > 0) {
+    const rows = final.map((i) => ({
+      site_id: i.site_id, content_type: i.content_type,
+      working_title: i.working_title,
+      primary_query: i.primary_query ?? null,
+      secondary_queries: i.secondary_queries ?? [],
+      summary: i.summary ?? null, priority: i.priority,
+      status: 'new' as const,
+      origin_type: i.origin_type, origin_id: i.origin_id ?? null,
+      evidence: i.evidence, dedupe_key: i.dedupe_key,
+      last_seen_at: now,
+    }));
+    const CHUNK = 500;
+    for (let s = 0; s < rows.length; s += CHUNK) {
+      const slice = rows.slice(s, s + CHUNK);
+      const { error } = await sb.from('network_content_ideas')
+        .upsert(slice, { onConflict: 'site_id,dedupe_key' });
+      if (error) throw new Error(`[ideas] upsert: ${error.message}`);
+    }
   }
 
-  // Mark stale: previously-'new' ideas whose dedupe_key wasn't emitted
-  // this run (origin disappeared) → 'stale'.
   const emittedKeys = new Set(final.map((i) => i.dedupe_key));
   const { data: openIdeas } = await sb
     .from('network_content_ideas')
-    .select('id, dedupe_key')
-    .eq('site_id', siteId)
-    .eq('status', 'new');
+    .select('id, dedupe_key, origin_type')
+    .eq('site_id', siteId).eq('status', 'new');
   let dismissed = 0;
-  for (const r of ((openIdeas ?? []) as Array<{ id: string; dedupe_key: string }>)) {
+  for (const r of ((openIdeas ?? []) as Array<{ id: string; dedupe_key: string; origin_type: string }>)) {
+    // Only stale-sweep ideas whose origin_type the current engine
+    // actively manages. Manual ideas and anything with an unknown
+    // origin_type are left alone.
+    if (!['new_query_opportunity', 'content_gap'].includes(r.origin_type)) continue;
     if (!emittedKeys.has(r.dedupe_key)) {
-      await sb.from('network_content_ideas').update({ status: 'stale', last_seen_at: now }).eq('id', r.id);
+      await sb.from('network_content_ideas')
+        .update({ status: 'stale', last_seen_at: now }).eq('id', r.id);
       dismissed++;
     }
   }
