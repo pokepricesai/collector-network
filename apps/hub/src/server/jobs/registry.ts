@@ -23,13 +23,83 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceRoleSupabase } from '../admin/service-role';
 import { syncAllGsc, syncAllGa4 } from '../google/sync';
 import { generateOpportunities } from '../opportunities/engine';
-import { runSitemapsForAllSites } from '../sitemaps/engine';
+import { runSitemapCheck, recordSitemapSnapshot, type SiteDescriptor } from '../sitemaps/engine';
 import { buildInspectionQueue, processInspectionQueue } from '../inspection/engine';
 import { generateInternalLinkOpportunities } from '../internal-links/engine';
 import { generatePageOpportunities } from '../page-opportunities/engine';
 import { runPokepricesBqAnalysis, bigqueryDiagnostic } from '../bigquery/analysis';
 import { estimateBqCostUsd, formatBqBytes } from '../google/bigquery';
 import { buildBrief } from '../brief/engine';
+
+// The five sites are hard-coded here to keep the allowlist static.
+// Resolution to real UUIDs happens inside each run().
+const SITE_SLUGS = ['pokemon', 'mtg', 'ygo', 'onepiece', 'lorcana'] as const;
+type SiteSlug = typeof SITE_SLUGS[number];
+
+async function loadSiteDescriptor(sb: SupabaseClient, slug: SiteSlug): Promise<SiteDescriptor> {
+  const { data, error } = await sb.from('network_sites')
+    .select('id, slug, canonical_url').eq('slug', slug).maybeSingle();
+  if (error) throw new Error(`[jobs] load site ${slug}: ${error.message}`);
+  if (!data) throw new Error(`[jobs] site ${slug} not found`);
+  return { id: data.id as string, slug: data.slug as string, canonicalUrl: data.canonical_url as string };
+}
+
+/** Shared per-site sitemap executor. Writes one job_run per invocation
+ *  with site_id set, keeping manual + cron entries uniform. Returns
+ *  metrics for the outer wrapper (there isn't one — wrapsOuter=false). */
+async function runSitemapForOneSite(sb: SupabaseClient, slug: SiteSlug): Promise<{
+  rowsInserted: number;
+  rowsExamined: number;
+  rowsRejected: number;
+  summary: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}> {
+  const site = await loadSiteDescriptor(sb, slug);
+  const jobStart = Date.now();
+  const { data: jobId } = await sb.rpc('network_start_job_run', {
+    p_job_name: 'sitemap.check',
+    p_job_type: 'sync',
+    p_site_id: site.id,
+    p_metadata: { site: slug, trigger: 'per-site' } as unknown as Record<string, unknown>,
+  });
+  try {
+    const result = await runSitemapCheck(site);
+    const { snapshotId } = await recordSitemapSnapshot(sb, site, result);
+    await sb.rpc('network_complete_job_run', {
+      p_id: jobId,
+      p_status: result.issues.some((i) => i.severity === 'error') ? 'warning' : 'success',
+      p_rows_examined: result.submittedCount,
+      p_rows_inserted: 1,
+      p_rows_updated: 0,
+      p_rows_rejected: result.issues.filter((i) => i.severity === 'error').length,
+      p_error_summary: result.errorSummary,
+      p_metadata: {
+        snapshot_id: snapshotId,
+        shards: result.shardCount,
+        submitted: result.submittedCount,
+        valid_sampled: result.validSampled,
+        issues: result.issues.length,
+        duration_ms: result.durationMs,
+        budget_exceeded: result.budgetExceeded,
+      } as unknown as Record<string, unknown>,
+    });
+    return {
+      rowsInserted: 1,
+      rowsExamined: result.submittedCount,
+      rowsRejected: result.issues.filter((i) => i.severity === 'error').length,
+      summary: { site: slug, submitted: result.submittedCount, valid: result.validSampled, issues: result.issues.length, shards: result.shardCount, duration_ms: result.durationMs },
+      metadata: { site: slug, snapshot_id: snapshotId, duration_ms: result.durationMs, budget_exceeded: result.budgetExceeded },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await sb.rpc('network_fail_job_run', {
+      p_id: jobId,
+      p_error_summary: msg.slice(0, 500),
+      p_metadata: { site: slug, duration_ms: Date.now() - jobStart } as unknown as Record<string, unknown>,
+    });
+    throw err;
+  }
+}
 
 export interface JobRunResult {
   ok: boolean;
@@ -114,57 +184,40 @@ export const JOBS: Record<string, JobDefinition> = {
       };
     },
   },
-  'sitemaps.check': {
-    slug: 'sitemaps.check',
-    jobName: 'sitemap.check',
-    group: 'analysis',
-    label: 'Sitemap check',
-    description: 'Fetches each site\'s sitemap root + shards, HEAD-probes bounded URL samples, records snapshot + issues.',
+  'sitemaps.pokemon': {
+    slug: 'sitemaps.pokemon', jobName: 'sitemap.check', group: 'analysis',
+    label: 'Sitemap check · PokePrices',
+    description: 'Checks PokePrices sitemap root + shards + bounded HEAD probes. ~60s budget. Writes one network_sitemap_snapshots row.',
     wrapsOuter: false,
-    run: async (sb) => {
-      const { data: sites, error } = await sb
-        .from('network_sites')
-        .select('id, slug, canonical_url')
-        .eq('status', 'active');
-      if (error) throw new Error(`[jobs/sitemaps] load sites: ${error.message}`);
-      const descriptors = (sites ?? []).map((s: { id: string; slug: string; canonical_url: string }) => ({ id: s.id, slug: s.slug, canonicalUrl: s.canonical_url }));
-      // Each site run creates its own job_run inside the cron route.
-      // For the admin path we also want one outer entry so the admin
-      // page can show "last manual run"; we mimic the cron route's
-      // wrapping behaviour inside the runJob wrapper by setting
-      // wrapsOuter: false and starting an entry here.
-      const jobStart = Date.now();
-      const { data: jobId } = await sb.rpc('network_start_job_run', {
-        p_job_name: 'sitemap.check',
-        p_job_type: 'sync',
-        p_site_id: null,
-        p_metadata: {} as unknown as Record<string, unknown>,
-      });
-      try {
-        const { snapshots, errors } = await runSitemapsForAllSites(sb, descriptors);
-        const rowsInserted = snapshots.length;
-        const rowsExamined = snapshots.reduce((a, s) => a + s.result.submittedCount, 0);
-        await sb.rpc('network_complete_job_run', {
-          p_id: jobId,
-          p_status: errors.length === 0 ? 'success' : 'warning',
-          p_rows_examined: rowsExamined,
-          p_rows_inserted: rowsInserted,
-          p_rows_updated: 0,
-          p_rows_rejected: errors.length,
-          p_error_summary: errors.length === 0 ? null : errors.map((e) => `${e.site}:${e.error}`).join('; ').slice(0, 500),
-          p_metadata: { snapshots: snapshots.map((s) => ({ site: s.site, submitted: s.result.submittedCount, valid: s.result.validSampled, issues: s.result.issues.length, shards: s.result.shardCount })), duration_ms: Date.now() - jobStart } as unknown as Record<string, unknown>,
-        });
-        return {
-          rowsInserted, rowsExamined, rowsRejected: errors.length,
-          summary: { snapshots: snapshots.length, errors },
-          metadata: { per_site: snapshots.map((s) => ({ site: s.site, submitted: s.result.submittedCount, issues: s.result.issues.length })) },
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        await sb.rpc('network_fail_job_run', { p_id: jobId, p_error_summary: msg.slice(0, 500), p_metadata: null as unknown as Record<string, unknown> });
-        throw err;
-      }
-    },
+    run: async (sb) => runSitemapForOneSite(sb, 'pokemon'),
+  },
+  'sitemaps.mtg': {
+    slug: 'sitemaps.mtg', jobName: 'sitemap.check', group: 'analysis',
+    label: 'Sitemap check · MTGPrices',
+    description: 'Checks MTGPrices sitemap root + shards + bounded HEAD probes.',
+    wrapsOuter: false,
+    run: async (sb) => runSitemapForOneSite(sb, 'mtg'),
+  },
+  'sitemaps.ygo': {
+    slug: 'sitemaps.ygo', jobName: 'sitemap.check', group: 'analysis',
+    label: 'Sitemap check · YGOPrices',
+    description: 'Checks YGOPrices sitemap root + shards + bounded HEAD probes.',
+    wrapsOuter: false,
+    run: async (sb) => runSitemapForOneSite(sb, 'ygo'),
+  },
+  'sitemaps.onepiece': {
+    slug: 'sitemaps.onepiece', jobName: 'sitemap.check', group: 'analysis',
+    label: 'Sitemap check · OnePiecePrices',
+    description: 'Checks OnePiecePrices sitemap root + shards + bounded HEAD probes.',
+    wrapsOuter: false,
+    run: async (sb) => runSitemapForOneSite(sb, 'onepiece'),
+  },
+  'sitemaps.lorcana': {
+    slug: 'sitemaps.lorcana', jobName: 'sitemap.check', group: 'analysis',
+    label: 'Sitemap check · LorcanaPrices',
+    description: 'Checks LorcanaPrices sitemap root + shards + bounded HEAD probes.',
+    wrapsOuter: false,
+    run: async (sb) => runSitemapForOneSite(sb, 'lorcana'),
   },
   'inspection.cycle': {
     slug: 'inspection.cycle',
@@ -393,6 +446,55 @@ export function listJobs(): JobDefinition[] {
   return Object.values(JOBS);
 }
 
+/** Minutes after which a `running` job_run is considered abandoned. The
+ *  Vercel function budget is 5 minutes; any job stuck past that was
+ *  killed mid-flight and will never finalise itself. */
+export const STALE_RUN_MINUTES = 10;
+
+/**
+ * Scan network_job_runs for entries stuck in `running` past the stale
+ * threshold and mark them failed. Returns the count recovered. Safe to
+ * call on every /admin/jobs page render.
+ */
+export async function recoverStaleRuns(sb: SupabaseClient): Promise<number> {
+  const cutoff = new Date(Date.now() - STALE_RUN_MINUTES * 60_000).toISOString();
+  const { data, error } = await sb
+    .from('network_job_runs')
+    .select('id, job_name, started_at')
+    .eq('status', 'running')
+    .lt('started_at', cutoff);
+  if (error) return 0;
+  const rows = (data ?? []) as Array<{ id: string; job_name: string; started_at: string }>;
+  let recovered = 0;
+  for (const r of rows) {
+    const minutes = Math.round((Date.now() - new Date(r.started_at).getTime()) / 60_000);
+    await sb.rpc('network_fail_job_run', {
+      p_id: r.id,
+      p_error_summary: `stale-run recovery: ${minutes} minutes without finalisation. Likely killed by Vercel function budget. Not an application error — operator can re-trigger safely.`,
+      p_metadata: { recovered_at: new Date().toISOString(), recovery: 'auto', minutes_running: minutes } as unknown as Record<string, unknown>,
+    });
+    recovered++;
+  }
+  return recovered;
+}
+
+/** Is a job already running right now? Returns the current running
+ *  entry if so, otherwise null. Scoped by job_name since manual +
+ *  cron share the same job_name. */
+export async function findRunningJob(sb: SupabaseClient, jobName: string): Promise<{ id: string; started_at: string } | null> {
+  // Running past STALE_RUN_MINUTES is treated as abandoned, so we
+  // only block on fresh running entries.
+  const freshCutoff = new Date(Date.now() - STALE_RUN_MINUTES * 60_000).toISOString();
+  const { data } = await sb
+    .from('network_job_runs')
+    .select('id, started_at')
+    .eq('status', 'running').eq('job_name', jobName)
+    .gt('started_at', freshCutoff)
+    .order('started_at', { ascending: false })
+    .limit(1).maybeSingle();
+  return (data as { id: string; started_at: string } | null) ?? null;
+}
+
 /**
  * Execute a job by slug using the service-role Supabase client.
  *
@@ -405,6 +507,21 @@ export async function runJobBySlug(slug: string): Promise<JobRunResult> {
   const def = JOBS[slug];
   if (!def) throw new Error(`[jobs] unknown job: ${slug}`);
   const sb = createServiceRoleSupabase();
+
+  // Opportunistic stale-run recovery, then duplicate-run check.
+  await recoverStaleRuns(sb);
+  const alreadyRunning = await findRunningJob(sb, def.jobName);
+  if (alreadyRunning) {
+    const ageSec = Math.round((Date.now() - new Date(alreadyRunning.started_at).getTime()) / 1000);
+    return {
+      ok: false, slug, jobName: def.jobName, jobRunId: alreadyRunning.id,
+      durationMs: 0, summary: {},
+      rowsInserted: 0, rowsUpdated: 0, rowsExamined: 0, rowsRejected: 0,
+      errorSummary: `another run of ${def.jobName} is already in progress (${ageSec}s old, id=${alreadyRunning.id.slice(0, 8)})`,
+      metadata: { reason: 'duplicate_run_blocked', existing_run_id: alreadyRunning.id },
+    };
+  }
+
   const started = Date.now();
   let jobRunId: string | null = null;
   if (def.wrapsOuter) {
