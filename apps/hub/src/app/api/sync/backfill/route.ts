@@ -54,6 +54,9 @@ export async function GET(req: Request) {
           await sb.from('network_google_properties').update({
             last_sync_at: new Date().toISOString(),
             last_data_date: r.latest_date,
+          }).eq('id', p.id).or(`last_data_date.is.null,last_data_date.lt.${r.latest_date}`);
+          await sb.from('network_google_properties').update({
+            last_sync_at: new Date().toISOString(),
           }).eq('id', p.id);
         }
         results.push({ property: p.property_id, ...r });
@@ -65,6 +68,9 @@ export async function GET(req: Request) {
           await sb.from('network_google_properties').update({
             last_sync_at: new Date().toISOString(),
             last_data_date: r.latest_date,
+          }).eq('id', p.id).or(`last_data_date.is.null,last_data_date.lt.${r.latest_date}`);
+          await sb.from('network_google_properties').update({
+            last_sync_at: new Date().toISOString(),
           }).eq('id', p.id);
         }
         results.push({ property: p.property_id, ...r });

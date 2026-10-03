@@ -270,9 +270,15 @@ export async function syncAllGsc(sb: SupabaseClient, today: Date): Promise<{
       totals.query_daily += r.query_daily;
       totals.url_query_daily += r.url_query_daily;
       if (r.latest_date) {
+        // Only advance last_data_date forward — windowed backfills
+        // walk out of order and must not rewind the cursor.
         await sb.from('network_google_properties').update({
           last_sync_at: new Date().toISOString(),
           last_data_date: r.latest_date,
+        }).eq('id', p.id).or(`last_data_date.is.null,last_data_date.lt.${r.latest_date}`);
+        // Separately keep last_sync_at honest even when data_date doesn't move.
+        await sb.from('network_google_properties').update({
+          last_sync_at: new Date().toISOString(),
         }).eq('id', p.id);
       }
       await completeJob(sb, jobId, r.site_daily + r.url_daily + r.query_daily + r.url_query_daily, r.site_daily + r.url_daily + r.query_daily + r.url_query_daily, 0, {
@@ -346,9 +352,15 @@ export async function syncAllGa4(sb: SupabaseClient, today: Date): Promise<{
       const r = await syncGa4Property(sb, p, w.start, w.end);
       totals.rows += r.rows;
       if (r.latest_date) {
+        // Only advance last_data_date forward — windowed backfills
+        // walk out of order and must not rewind the cursor.
         await sb.from('network_google_properties').update({
           last_sync_at: new Date().toISOString(),
           last_data_date: r.latest_date,
+        }).eq('id', p.id).or(`last_data_date.is.null,last_data_date.lt.${r.latest_date}`);
+        // Separately keep last_sync_at honest even when data_date doesn't move.
+        await sb.from('network_google_properties').update({
+          last_sync_at: new Date().toISOString(),
         }).eq('id', p.id);
       }
       await completeJob(sb, jobId, r.rows, r.rows, 0, {
