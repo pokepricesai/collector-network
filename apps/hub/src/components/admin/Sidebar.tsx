@@ -41,6 +41,7 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
       { href: '/admin/tasks',      label: 'Tasks' },
       { href: '/admin/alerts',     label: 'Alerts' },
       { href: '/admin/approvals',  label: 'Approvals' },
+      { href: '/admin/jobs',       label: 'Jobs' },
       { href: '/admin/automation', label: 'Automation' },
     ],
   },
