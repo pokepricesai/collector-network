@@ -8,6 +8,10 @@ import { RunButton } from './RunButton';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+// Server actions on this page can run multi-minute jobs (sitemaps probes
+// 125 URLs, BigQuery analysis executes two aggregates). Default server
+// action timeout is far too short — raise to the Fluid Compute cap.
+export const maxDuration = 300;
 
 interface JobRunRow {
   id: string;

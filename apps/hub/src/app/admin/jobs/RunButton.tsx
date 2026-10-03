@@ -15,13 +15,21 @@ export function RunButton(props: {
 
   async function go(confirmedParam: boolean) {
     setMsg('Running…');
-    const r = await runAdminJob(props.slug, confirmedParam);
-    if (!r.ok) setMsg(`Error: ${r.error ?? 'unknown'}`);
-    else {
-      const dur = r.result?.durationMs ?? 0;
-      const inserted = r.result?.rowsInserted ?? 0;
-      const updated = r.result?.rowsUpdated ?? 0;
-      setMsg(`Done in ${(dur / 1000).toFixed(1)}s · +${inserted} / ~${updated}`);
+    try {
+      const r = await runAdminJob(props.slug, confirmedParam);
+      if (!r) {
+        setMsg('Error: no response (session expired?)');
+        return;
+      }
+      if (!r.ok) setMsg(`Error: ${r.error ?? 'unknown'}`);
+      else {
+        const dur = r.result?.durationMs ?? 0;
+        const inserted = r.result?.rowsInserted ?? 0;
+        const updated = r.result?.rowsUpdated ?? 0;
+        setMsg(`Done in ${(dur / 1000).toFixed(1)}s · +${inserted} / ~${updated}`);
+      }
+    } catch (err) {
+      setMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
