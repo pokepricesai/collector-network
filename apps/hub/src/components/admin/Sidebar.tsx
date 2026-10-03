@@ -27,10 +27,19 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
     ],
   },
   {
+    label: 'Content',
+    items: [
+      { href: '/admin/content',           label: 'Overview' },
+      { href: '/admin/content/ideas',     label: 'Ideas' },
+      { href: '/admin/content/briefs',    label: 'Briefs' },
+      { href: '/admin/content/articles',  label: 'Articles' },
+      { href: '/admin/content/calendar',  label: 'Calendar' },
+    ],
+  },
+  {
     label: 'Portfolio',
     items: [
       { href: '/admin/health',  label: 'Health' },
-      { href: '/admin/content', label: 'Content' },
       { href: '/admin/social',  label: 'Social' },
       { href: '/admin/revenue', label: 'Revenue' },
     ],

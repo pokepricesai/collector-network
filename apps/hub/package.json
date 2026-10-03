@@ -11,6 +11,7 @@
     "clean": "rimraf .next .turbo node_modules"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "@vercel/oidc": "^3.0.3",

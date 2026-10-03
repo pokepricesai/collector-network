@@ -7,6 +7,7 @@ import { siteUrl } from '../../../lib/site-url';
 import { findYgoArticle, YGO_ARTICLES } from '../../../lib/articles';
 import { safe } from '../../../server/safe';
 import { getYugiohHomepageData } from '../../../server/homepage';
+import { findNetworkArticle, renderMarkdownToHtml } from '../../../server/network-articles';
 
 const SITE_URL = siteUrl();
 
@@ -23,19 +24,31 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const article = findYgoArticle(slug);
-  if (!article) return { title: 'Article not found' };
   const canonical = `${SITE_URL}/insights/${slug}`;
-  return {
-    title: article.title,
-    description: article.description,
-    alternates: { canonical },
-    openGraph: {
+  if (article) {
+    return {
       title: article.title,
       description: article.description,
-      url: canonical,
-      type: 'article',
-      publishedTime: article.publishedIso,
-      modifiedTime: article.updatedIso,
+      alternates: { canonical },
+      openGraph: {
+        title: article.title, description: article.description,
+        url: canonical, type: 'article',
+        publishedTime: article.publishedIso, modifiedTime: article.updatedIso,
+      },
+    };
+  }
+  // Fall back to a Collector Network OS published article.
+  const net = await findNetworkArticle(slug);
+  if (!net) return { title: 'Article not found' };
+  return {
+    title: net.metaTitle ?? net.title,
+    description: net.metaDescription ?? net.summary ?? undefined,
+    alternates: { canonical },
+    openGraph: {
+      title: net.title, description: net.metaDescription ?? net.summary ?? undefined,
+      url: canonical, type: 'article',
+      publishedTime: net.publishedAt ?? undefined,
+      modifiedTime: net.updatedAt,
     },
   };
 }
@@ -47,9 +60,46 @@ export default async function ArticlePage({
 }) {
   const { slug } = await params;
   const article = findYgoArticle(slug);
-  if (!article) notFound();
+  // When the slug isn't in the hardcoded registry, fall back to the
+  // Collector Network OS published-article table. This is how
+  // operator-approved content is served on the public site.
+  const network = article ? null : await findNetworkArticle(slug);
+  if (!article && !network) notFound();
 
   const canonical = `${SITE_URL}/insights/${slug}`;
+  if (network) {
+    const bodyHtml = renderMarkdownToHtml(network.bodyMarkdown ?? '');
+    const netLd = {
+      '@context': 'https://schema.org', '@type': 'Article',
+      headline: network.title, description: network.summary ?? '',
+      datePublished: network.publishedAt ?? undefined,
+      dateModified: network.updatedAt,
+      author: { '@type': 'Organization', name: network.author ?? 'YGOPrices' },
+      publisher: { '@type': 'Organization', name: 'YGOPrices' },
+      mainEntityOfPage: canonical,
+    };
+    return (
+      <>
+        <Header compactSearch />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(netLd) }} />
+        <main style={{ maxWidth: 820, margin: '0 auto', padding: '32px 24px 64px' }}>
+          <article>
+            <header style={{ marginBottom: 20 }}>
+              <h1 style={{ margin: '4px 0 6px', fontSize: 30, letterSpacing: '-0.01em' }}>{network.title}</h1>
+              {network.summary && <p style={{ margin: 0, color: 'var(--ygo-text-muted, #6B7280)', fontSize: 15, lineHeight: 1.55 }}>{network.summary}</p>}
+            </header>
+            <div className="article-body" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+          </article>
+          <nav style={{ marginTop: 32 }}>
+            <Link href="/insights" style={{ fontSize: 13 }}>← All insights</Link>
+          </nav>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+  if (!article) notFound();
+
   const articleLd = {
     '@context': 'https://schema.org',
     '@type': 'Article',
