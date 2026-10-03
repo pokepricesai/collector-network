@@ -354,6 +354,292 @@ export async function getMarketMovers(
   };
 }
 
+// ================================================================
+// Explicit-date movers (calendar-aligned)
+// ================================================================
+//
+// `getMarketMovers` above uses the pre-computed sliding windows in
+// card_trends — fast, but always "N days from today". For
+// calendar-aligned editorial (e.g. "September 2026 movers") we must
+// read daily_prices directly for the exact start and end dates.
+//
+// Boundary resolution: a card without an observation on exactly
+// `startDate` falls back to the most recent prior observation
+// within `nearestWithinDays`. Same rule for endDate (nearest-prior).
+// Each returned mover carries the resolved dates so the article
+// honestly notes "end-of-month prices on Sep 29" when a Sep 30
+// observation was missing.
+
+export interface DatedPriceMover extends Omit<PriceMover, 'windowLabel'> {
+  startDate: string;              // the actual observation date used
+  endDate: string;
+  windowLabel: string;
+  startBoundaryShift: number;    // 0 = exact match, >0 = days back from startDate
+  endBoundaryShift: number;
+}
+
+export interface DatedMoversResult {
+  grade: PriceGrade;
+  windowLabel: string;
+  startDate: string;
+  endDate: string;
+  risers: DatedPriceMover[];
+  fallers: DatedPriceMover[];
+  filters: MarketMoversResult['filters'] & { nearestWithinDays: number };
+  exclusions: {
+    noStartObservation: number;
+    noEndObservation: number;
+    droppedBelowPriceFloor: number;
+    droppedBelowAbsChange: number;
+    droppedBelowLiquidity: number;
+    droppedAbovePctCap: number;
+    droppedMissingCard: number;
+    droppedSealed: number;
+    survivors: number;
+  };
+  provenance: {
+    tables_read: string[];
+    service_endpoint: string;
+    retrieved_at: string;
+    boundary_resolution: {
+      exact_start: number;
+      exact_end: number;
+      shifted_start: number;
+      shifted_end: number;
+    };
+  };
+}
+
+interface DailyRow { card_slug: string; raw_usd: number | null; psa10_usd: number | null; date?: string }
+
+async function fetchDailyPricesForDate(
+  sb: SupabaseClient,
+  date: string,
+  priceColumn: 'raw_usd' | 'psa10_usd',
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  let from = 0;
+  const PAGE = 1000;
+  for (;;) {
+    const { data, error } = await sb
+      .from('daily_prices')
+      .select(`card_slug, ${priceColumn}`)
+      .eq('date', date).not(priceColumn, 'is', null)
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`[pricing/dated] fetch ${date}: ${error.message}`);
+    const rows = (data ?? []) as unknown as Array<Record<string, string | number | null>>;
+    for (const r of rows) {
+      const v = Number(r[priceColumn] ?? 0);
+      if (v > 0) map.set(String(r['card_slug']), v);
+    }
+    if (rows.length < PAGE) break;
+    from += PAGE;
+    if (from > 500_000) break;
+  }
+  return map;
+}
+
+async function fetchNearestPriorBefore(
+  sb: SupabaseClient,
+  cardSlug: string,
+  cutoffDate: string,
+  withinDays: number,
+  priceColumn: 'raw_usd' | 'psa10_usd',
+): Promise<{ price: number; date: string; shiftDays: number } | null> {
+  const earliest = new Date(cutoffDate);
+  earliest.setUTCDate(earliest.getUTCDate() - withinDays);
+  const earliestIso = earliest.toISOString().slice(0, 10);
+  const { data } = await sb
+    .from('daily_prices')
+    .select(`date, ${priceColumn}`)
+    .eq('card_slug', cardSlug)
+    .lte('date', cutoffDate)
+    .gte('date', earliestIso)
+    .not(priceColumn, 'is', null)
+    .order('date', { ascending: false }).limit(1);
+  const row = (data?.[0] ?? null) as { date: string; raw_usd?: number; psa10_usd?: number } | null;
+  if (!row) return null;
+  const price = Number(row[priceColumn] ?? 0);
+  if (price <= 0) return null;
+  const shiftDays = Math.round((new Date(cutoffDate).getTime() - new Date(row.date).getTime()) / 86400000);
+  return { price, date: row.date, shiftDays };
+}
+
+export async function getMarketMoversForDates(
+  sb: SupabaseClient,
+  opts: {
+    startDate: string;
+    endDate: string;
+    grade: 'raw' | 'psa10';
+    topN?: number;
+    nearestWithinDays?: number;
+    minPriceUsd?: number;
+    minAbsChangeUsd?: number;
+    minSales90d?: number;
+    minConfidence?: 'high' | 'low';
+    pctChangeCap?: number;
+    includeSealed?: boolean;
+  },
+): Promise<DatedMoversResult> {
+  const grade = opts.grade;
+  const startDate = opts.startDate;
+  const endDate = opts.endDate;
+  const topN = opts.topN ?? 10;
+  const nearestWithinDays = opts.nearestWithinDays ?? 7;
+  const minPriceUsd = opts.minPriceUsd ?? (grade === 'raw' ? 50 : 150);
+  const minAbsChangeUsd = opts.minAbsChangeUsd ?? (grade === 'raw' ? 20 : 50);
+  const minSales90d = opts.minSales90d ?? 5;
+  const minConfidence = opts.minConfidence ?? 'high';
+  const pctChangeCap = opts.pctChangeCap ?? 150;
+  const includeSealed = opts.includeSealed ?? false;
+  const minPriceCents = Math.round(minPriceUsd * 100);
+  const minAbsChangeCents = Math.round(minAbsChangeUsd * 100);
+
+  const priceColumn = grade === 'raw' ? 'raw_usd' : 'psa10_usd';
+
+  // 1. Fetch exact-date observations for both boundaries.
+  const [startMap, endMap] = await Promise.all([
+    fetchDailyPricesForDate(sb, startDate, priceColumn),
+    fetchDailyPricesForDate(sb, endDate, priceColumn),
+  ]);
+
+  // 2. Identify cards with both start and end observations (exact
+  //    first; shifted-nearest-prior as fallback).
+  const allSlugs = new Set<string>([...startMap.keys(), ...endMap.keys()]);
+  interface Resolved { startCents: number; endCents: number; startDateUsed: string; endDateUsed: string; startShift: number; endShift: number }
+  const resolved = new Map<string, Resolved>();
+  const bres = { exact_start: 0, exact_end: 0, shifted_start: 0, shifted_end: 0 };
+  const exc = {
+    noStartObservation: 0, noEndObservation: 0,
+    droppedBelowPriceFloor: 0, droppedBelowAbsChange: 0,
+    droppedBelowLiquidity: 0, droppedAbovePctCap: 0,
+    droppedMissingCard: 0, droppedSealed: 0,
+  };
+
+  for (const slug of allSlugs) {
+    const sExact = startMap.get(slug);
+    const eExact = endMap.get(slug);
+    let startC: number | null = sExact ?? null;
+    let endC: number | null = eExact ?? null;
+    let startDateUsed = startDate; let endDateUsed = endDate;
+    let startShift = 0; let endShift = 0;
+
+    if (startC == null) {
+      const near = await fetchNearestPriorBefore(sb, slug, startDate, nearestWithinDays, priceColumn);
+      if (near) { startC = near.price; startDateUsed = near.date; startShift = near.shiftDays; bres.shifted_start++; }
+      else { exc.noStartObservation++; continue; }
+    } else bres.exact_start++;
+
+    if (endC == null) {
+      const near = await fetchNearestPriorBefore(sb, slug, endDate, nearestWithinDays, priceColumn);
+      if (near) { endC = near.price; endDateUsed = near.date; endShift = near.shiftDays; bres.shifted_end++; }
+      else { exc.noEndObservation++; continue; }
+    } else bres.exact_end++;
+
+    resolved.set(slug, { startCents: startC, endCents: endC, startDateUsed, endDateUsed, startShift, endShift });
+  }
+
+  // 3. Fetch catalog + liquidity for the resolved candidate set.
+  //
+  // IMPORTANT: daily_prices.card_slug uses the "pc-" prefix (e.g. "pc-10031553").
+  // cards.card_slug is the BARE numeric slug (e.g. "10031553"); the prefixed
+  // form lives in cards.pc_slug. card_volume.card_slug matches cards.card_slug.
+  // We index everything downstream by pc_slug so the daily_prices join works.
+  const slugs = [...resolved.keys()];                            // pc-prefixed
+  const volumeGrade = volumeGradeFor(grade);
+  const liquidityMap = new Map<string, CardVolumeRow>();         // keyed by pc_slug
+  const cardsMap = new Map<string, CardsRow & { card_name: string; set_name: string; pc_slug: string }>(); // keyed by pc_slug
+  const CHUNK = 150;
+  for (let i = 0; i < slugs.length; i += CHUNK) {
+    const slice = slugs.slice(i, i + CHUNK);
+    const { data: c } = await sb
+      .from('cards')
+      .select('card_slug, pc_slug, card_name, set_name, card_number, card_url_slug, set_release_date, is_sealed')
+      .in('pc_slug', slice);
+    const cardRows = (c ?? []) as unknown as Array<CardsRow & { card_name: string; set_name: string; pc_slug: string }>;
+    for (const row of cardRows) cardsMap.set(row.pc_slug, row);
+    const bareSlugs = cardRows.map((r) => r.card_slug);
+    if (bareSlugs.length > 0) {
+      const { data: v } = await sb
+        .from('card_volume')
+        .select('card_slug, grade, sales_30d, sales_90d, confidence')
+        .in('card_slug', bareSlugs).eq('grade', volumeGrade);
+      const bareToPc = new Map(cardRows.map((r) => [r.card_slug, r.pc_slug]));
+      for (const row of ((v ?? []) as unknown as CardVolumeRow[])) {
+        const pc = bareToPc.get(row.card_slug);
+        if (pc) liquidityMap.set(pc, row);
+      }
+    }
+  }
+
+  // 4. Build mover list with quality filters.
+  const movers: DatedPriceMover[] = [];
+  for (const [slug, r] of resolved) {
+    const info = cardsMap.get(slug);
+    if (!info) { exc.droppedMissingCard++; continue; }
+    if (info.is_sealed && !includeSealed) { exc.droppedSealed++; continue; }
+
+    const absChangeCents = Math.abs(r.endCents - r.startCents);
+    if (r.endCents < minPriceCents && r.startCents < minPriceCents) { exc.droppedBelowPriceFloor++; continue; }
+    if (absChangeCents < minAbsChangeCents) { exc.droppedBelowAbsChange++; continue; }
+    const pct = r.startCents > 0 ? ((r.endCents - r.startCents) / r.startCents) * 100 : 0;
+    if (Math.abs(pct) > pctChangeCap) { exc.droppedAbovePctCap++; continue; }
+
+    const liq = liquidityMap.get(slug);
+    if (!liq) { exc.droppedBelowLiquidity++; continue; }
+    const sales90 = Number(liq.sales_90d ?? 0);
+    if (sales90 < minSales90d) { exc.droppedBelowLiquidity++; continue; }
+    if (minConfidence === 'high' && liq.confidence !== 'high') { exc.droppedBelowLiquidity++; continue; }
+
+    const notes: string[] = [];
+    if (r.startShift > 0) notes.push(`start price from ${r.startDateUsed} (${r.startShift}d before ${startDate})`);
+    if (r.endShift > 0) notes.push(`end price from ${r.endDateUsed} (${r.endShift}d before ${endDate})`);
+    if (liq.confidence === 'low') notes.push('low-confidence liquidity signal');
+
+    movers.push({
+      cardSlug: slug,
+      cardName: info.card_name,
+      setName: info.set_name,
+      cardNumber: info.card_number,
+      setReleaseDate: info.set_release_date,
+      pokepricesUrl: pokepricesUrl(info.set_name, info.card_url_slug, slug),
+      grade,
+      startPriceUsd: Number((r.startCents / 100).toFixed(2)),
+      endPriceUsd: Number((r.endCents / 100).toFixed(2)),
+      absChangeUsd: Number(((r.endCents - r.startCents) / 100).toFixed(2)),
+      pctChange: Number(pct.toFixed(2)),
+      robustPctChange: null,                  // not applicable for exact-date mode
+      salesLastWindow: sales90,
+      confidence: liq.confidence,
+      isRecovery: false,                      // flag unavailable for exact-date mode
+      startDate: r.startDateUsed,
+      endDate: r.endDateUsed,
+      windowLabel: `${startDate} → ${endDate}`,
+      startBoundaryShift: r.startShift,
+      endBoundaryShift: r.endShift,
+      dataNotes: notes,
+    });
+  }
+
+  movers.sort((a, b) => b.pctChange - a.pctChange);
+  const risers = movers.filter((m) => m.pctChange > 0).slice(0, topN);
+  const fallers = [...movers].sort((a, b) => a.pctChange - b.pctChange).filter((m) => m.pctChange < 0).slice(0, topN);
+
+  return {
+    grade, startDate, endDate,
+    windowLabel: `${startDate} → ${endDate}`,
+    risers, fallers,
+    filters: { minPriceUsd, minAbsChangeUsd, minSales90d, minConfidence, pctChangeCap, includeSealed, nearestWithinDays },
+    exclusions: { ...exc, survivors: risers.length + fallers.length },
+    provenance: {
+      tables_read: ['daily_prices', 'card_volume', 'cards'],
+      service_endpoint: 'supabase://pokeprices (shared with Collector Network OS)',
+      retrieved_at: new Date().toISOString(),
+      boundary_resolution: bres,
+    },
+  };
+}
+
 /** Convenience: fetch raw + PSA 10 movers for the same window and
  *  merge into a single evidence payload (useful for data-driven
  *  editorial where we want graded + ungraded alongside each other). */
