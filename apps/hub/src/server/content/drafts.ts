@@ -160,11 +160,23 @@ export async function generateArticleDraft(
 
   const { data: brief } = await sb
     .from('network_content_briefs')
-    .select('id, payload').eq('id', a.brief_id).maybeSingle();
+    .select('id, payload, idea_id').eq('id', a.brief_id).maybeSingle();
   if (!brief) throw new Error('brief not found');
-  const briefPayload = (brief as { payload: GeneratedBrief }).payload;
+  const briefRow = brief as { payload: GeneratedBrief; idea_id: string };
+  const briefPayload = briefRow.payload;
 
   const voice = await loadVoice(sb, a.site_id);
+
+  // Pull the originating idea's evidence so the AI can cite the
+  // full ground-truth dataset (not just the headline numbers that
+  // made it into the brief's required_facts). The draft prompt
+  // restricts citations to brief.required_facts + additional_facts,
+  // so passing pricing_data here is how we authorise its use.
+  const { data: ideaRow } = await sb
+    .from('network_content_ideas')
+    .select('evidence').eq('id', briefRow.idea_id).maybeSingle();
+  const ideaEvidence = (ideaRow as { evidence?: Record<string, unknown> } | null)?.evidence ?? {};
+  const additionalFacts = buildAdditionalFactsFromIdeaEvidence(ideaEvidence);
 
   // Internal links already attached. "accepted" entries carry
   // operator-approved anchors; else fall back to suggested.
@@ -186,6 +198,7 @@ export async function generateArticleDraft(
     voice,
     brief: briefPayload,
     internal_link_slate: linkSlate.map((l) => ({ ...l })),
+    additional_facts: additionalFacts,
   });
 
   await sb.from('network_articles').update({
@@ -235,6 +248,77 @@ export async function generateArticleDraft(
   });
 
   return { draft: draft as unknown as Record<string, unknown>, usage };
+}
+
+/**
+ * Convert an idea's structured evidence (currently: pricing_data
+ * from the PokePrices mover provider) into a flat list of
+ * additional_facts rows the draft generator is authorised to cite.
+ *
+ * Each row carries a precise, verifiable claim + a provenance
+ * source string. The AI is told to use ONLY brief.required_facts
+ * and additional_facts when stating specific facts — anything else
+ * must be flagged in research_gaps.
+ */
+function buildAdditionalFactsFromIdeaEvidence(
+  evidence: Record<string, unknown>,
+): Array<{ claim: string; source: string }> {
+  const facts: Array<{ claim: string; source: string }> = [];
+  const pd = evidence['pricing_data'] as Record<string, unknown> | undefined;
+  if (!pd) return facts;
+
+  const win = pd['window'] as { label?: string; start_date?: string; end_date?: string } | undefined;
+  const method = pd['methodology'] as string | undefined;
+  const provSource = (pd['provenance'] as { source?: string } | undefined)?.source;
+  const sourceBase = `PokePrices ${win?.label ?? 'window'} (${win?.start_date ?? '?'} → ${win?.end_date ?? '?'})`;
+
+  if (method) facts.push({ claim: `Methodology: ${method}`, source: provSource ?? sourceBase });
+
+  const sections: Array<[string, string]> = [
+    ['raw_risers', 'Raw riser'],
+    ['raw_fallers', 'Raw faller'],
+    ['psa10_risers', 'PSA 10 riser'],
+    ['psa10_fallers', 'PSA 10 faller'],
+  ];
+  for (const [key, label] of sections) {
+    const rows = (pd[key] as Array<Record<string, unknown>> | undefined) ?? [];
+    for (const r of rows) {
+      const name = String(r['card_name'] ?? '?');
+      const set = String(r['set_name'] ?? '?');
+      const start = Number(r['start_price_usd'] ?? 0);
+      const end = Number(r['end_price_usd'] ?? 0);
+      const abs = Number(r['abs_change_usd'] ?? 0);
+      const pct = Number(r['pct_change'] ?? 0);
+      const sales = Number(r['sales_90d'] ?? 0);
+      const conf = String(r['confidence'] ?? '?');
+      const sShift = Number(r['start_boundary_shift'] ?? 0);
+      const eShift = Number(r['end_boundary_shift'] ?? 0);
+      const url = String(r['pokeprices_url'] ?? '');
+      const shiftNote = sShift || eShift ? ` [boundary shift: start ${sShift}d, end ${eShift}d]` : '';
+      facts.push({
+        claim: `${label}: ${name} (${set}) · $${start.toFixed(2)} → $${end.toFixed(2)} · ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% · abs ${abs >= 0 ? '+' : ''}$${Math.abs(abs).toFixed(2)} · ${sales} sales/90d · ${conf} confidence${shiftNote}`,
+        source: `${sourceBase}; row canonical URL: ${url}`,
+      });
+    }
+  }
+
+  const bRaw = pd['boundary_resolution'] as { raw?: Record<string, number>; psa10?: Record<string, number> } | undefined;
+  if (bRaw?.raw || bRaw?.psa10) {
+    facts.push({
+      claim: `Boundary resolution counts — raw: ${JSON.stringify(bRaw.raw ?? {})} · psa10: ${JSON.stringify(bRaw.psa10 ?? {})}`,
+      source: sourceBase,
+    });
+  }
+
+  const exc = pd['exclusions'] as { raw?: Record<string, number>; psa10?: Record<string, number> } | undefined;
+  if (exc?.raw || exc?.psa10) {
+    facts.push({
+      claim: `Candidate exclusions by filter stage — raw: ${JSON.stringify(exc.raw ?? {})} · psa10: ${JSON.stringify(exc.psa10 ?? {})}`,
+      source: sourceBase,
+    });
+  }
+
+  return facts;
 }
 
 function slugify(s: string): string {
