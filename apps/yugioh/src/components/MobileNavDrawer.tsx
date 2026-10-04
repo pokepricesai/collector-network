@@ -1,13 +1,23 @@
 'use client';
 
-// Mobile navigation drawer for YGOPrices. Rendered inside the Header
-// on viewports <900px. Server passes in the resolved nav items so the
-// list stays identical to the desktop header. Houses the Search bar
-// and Currency toggle too — they do not fit alongside the brand on a
-// 320px viewport.
+// Mobile navigation drawer for YGOPrices. The trigger (<button>) is
+// rendered inline inside the Header. The overlay + <aside> panel are
+// rendered through a React portal into document.body so they escape
+// the Header's containing block.
+//
+// WHY THE PORTAL: the sticky Header has `backdrop-filter: blur(8px)`.
+// Per the CSS Containment / Filter Effects specs, any ancestor with
+// `backdrop-filter`, `filter`, `transform`, `perspective` or
+// `contain: paint` becomes the containing block for descendants with
+// `position: fixed`. Without the portal, "position: fixed" on the
+// drawer anchored to the Header box (not the viewport) and the panel
+// appeared clipped inside the top header strip on real mobile
+// browsers. The portal lifts the overlay + panel to document.body
+// where their containing block is the viewport again.
 
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { SearchBar } from './SearchBar';
 import { CurrencyToggle } from './CurrencyToggle';
@@ -27,17 +37,23 @@ interface Props {
 
 export function MobileNavDrawer({ items, currency, hasUser }: Props) {
   const [open, setOpen] = useState(false);
+  // Guard against hydration mismatches — the portal needs
+  // document.body which only exists on the client.
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Close whenever the user navigates — pathname changes.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  // Lock body scroll while open and close on Escape.
+  // Lock body scroll while open and close on Escape. Also auto-focus
+  // the first interactive element in the panel for keyboard users.
   useEffect(() => {
     if (!open) return;
     const prevOverflow = document.body.style.overflow;
@@ -49,7 +65,6 @@ export function MobileNavDrawer({ items, currency, hasUser }: Props) {
       }
     };
     document.addEventListener('keydown', onKey);
-    // Focus the first focusable element inside the panel for a11y.
     const first = panelRef.current?.querySelector<HTMLElement>(
       'a, button, [tabindex]:not([tabindex="-1"]), input',
     );
@@ -60,38 +75,13 @@ export function MobileNavDrawer({ items, currency, hasUser }: Props) {
     };
   }, [open]);
 
-  return (
+  const drawerUi = (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={styles.trigger}
-        aria-controls={panelId}
-        aria-expanded={open}
-        aria-label={open ? 'Close menu' : 'Open menu'}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className={styles.hamIcon} aria-hidden>
-          <span />
-          <span />
-          <span />
-        </span>
-      </button>
-      {/* Panel + overlay are conditionally rendered. If we kept the
-          panel mounted and only translated it off-screen, its fixed
-          layout box still contributed to document.scrollWidth across
-          every page by its own width (~294-340px). Unmounting is the
-          only reliable way to keep the drawer out of layout. The
-          slide-in uses a CSS @keyframes animation that fires on
-          mount. */}
-      {open && (
-        <div
-          className={styles.overlay}
-          role="presentation"
-          onClick={() => setOpen(false)}
-        />
-      )}
-      {open && (
+      <div
+        className={styles.overlay}
+        role="presentation"
+        onClick={() => setOpen(false)}
+      />
       <aside
         id={panelId}
         ref={panelRef}
@@ -148,7 +138,27 @@ export function MobileNavDrawer({ items, currency, hasUser }: Props) {
           <CurrencyToggle initial={currency} />
         </div>
       </aside>
-      )}
+    </>
+  );
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={styles.trigger}
+        aria-controls={panelId}
+        aria-expanded={open}
+        aria-label={open ? 'Close menu' : 'Open menu'}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className={styles.hamIcon} aria-hidden>
+          <span />
+          <span />
+          <span />
+        </span>
+      </button>
+      {open && mounted && createPortal(drawerUi, document.body)}
     </>
   );
 }

@@ -35,13 +35,17 @@
   border-radius: 2px;
 }
 
+/* overlay + panel are rendered through a portal into document.body
+   (see MobileNavDrawer.tsx) so neither the Header's backdrop-filter
+   nor any site wrapper can trap their `position: fixed` to a sub-tree
+   containing block. Both sit above the sticky header's z-index (10).
+   Overlay deliberately omits backdrop-filter — it is itself a filter
+   effect that creates a containing block, defeating the portal.      */
 .overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  z-index: 20;
+  z-index: 1000;
   animation: fadeIn 160ms ease;
 }
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
@@ -50,18 +54,25 @@
   position: fixed;
   top: 0;
   right: 0;
-  bottom: 0;
+  /* 100dvh tracks the dynamic viewport so the drawer still reaches
+     the bottom of the screen when the mobile URL bar collapses. 100vh
+     is the fallback for browsers without dvh. */
+  height: 100vh;
+  height: 100dvh;
   width: min(340px, 92vw);
   background: linear-gradient(180deg, #0a0d16 0%, #050710 100%);
   border-left: 1px solid var(--ygo-line-hairline);
-  z-index: 21;
+  z-index: 1001;
   display: flex;
   flex-direction: column;
   padding: var(--ygo-size-lg);
+  padding-top: max(var(--ygo-size-lg), env(safe-area-inset-top, 0px));
+  padding-bottom: max(var(--ygo-size-lg), env(safe-area-inset-bottom, 0px));
   gap: var(--ygo-size-lg);
   box-shadow: -24px 0 48px rgba(0, 0, 0, 0.55);
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   /* Slide-in animation runs on mount; no "closed" state exists because
      the panel is unmounted when closed (see MobileNavDrawer.tsx). */
   animation: slideIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
