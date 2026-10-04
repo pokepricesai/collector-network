@@ -32,8 +32,13 @@ export default async function BriefPage({ searchParams }: Params) {
     listOpenOpportunities(sb, 10),
     listSponsorships(sb).then((rows) => rows.filter((r) => (r.status === 'active' || r.status === 'renewing') && r.renewal_reminder_on && r.renewal_reminder_on <= todayIso)),
   ]);
+  // Report GBP contribution profit (revenue in native currency minus
+  // GBP-denominated direct costs). Non-GBP revenue is NOT added to the
+  // contribution line — it's reported separately below so no currency
+  // mixing happens.
   const gbpNet = revenueTotals.find((r) => r.currency === 'GBP')?.net_minor ?? 0;
   const contribution = gbpNet - costs.total_minor;
+  const nonGbpTotals = revenueTotals.filter((r) => r.currency !== 'GBP');
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/brief">
@@ -118,11 +123,14 @@ export default async function BriefPage({ searchParams }: Params) {
         )}
       </Panel>
 
-      <Panel title="Commercial pulse (28d, GBP)" eyebrow="Daily commercial brief">
+      <Panel title="Commercial pulse (28d)" eyebrow="Daily commercial brief">
         <div className="metric-grid metric-grid--compact">
-          <MetricCard label="Revenue" value={formatMoneyMinor(gbpNet, 'GBP')} state={gbpNet > 0 ? 'ok' : 'no-data'} />
-          <MetricCard label="Direct costs" value={formatMoneyMinor(costs.total_minor, 'GBP')} state="muted" helper={`AI ${formatMoneyMinor(costs.ai_minor, 'GBP')} · BQ ${formatMoneyMinor(costs.bq_minor, 'GBP')} · Ops ${formatMoneyMinor(costs.ops_minor, 'GBP')}`} />
-          <MetricCard label="Contribution" value={formatMoneyMinor(contribution, 'GBP')} state={contribution >= 0 ? 'ok' : 'not-connected'} />
+          <MetricCard label="Revenue (GBP)" value={formatMoneyMinor(gbpNet, 'GBP')} state={gbpNet > 0 ? 'ok' : 'no-data'} />
+          {nonGbpTotals.map((r) => (
+            <MetricCard key={r.currency} label={`Revenue (${r.currency})`} value={formatMoneyMinor(r.net_minor, r.currency)} state={r.net_minor > 0 ? 'ok' : 'no-data'} helper="never summed with GBP" />
+          ))}
+          <MetricCard label="Direct costs (GBP)" value={formatMoneyMinor(costs.total_minor, 'GBP')} state="muted" helper={`AI ${formatMoneyMinor(costs.ai_minor, 'GBP')} · BQ ${formatMoneyMinor(costs.bq_minor, 'GBP')} · Ops ${formatMoneyMinor(costs.ops_minor, 'GBP')}`} />
+          <MetricCard label="Contribution (GBP only)" value={formatMoneyMinor(contribution, 'GBP')} state={contribution >= 0 ? 'ok' : 'not-connected'} helper="GBP revenue − GBP costs" />
           <MetricCard label="Open opportunities" value={openOpps.length ? String(openOpps.length) : null} state={openOpps.length ? 'ok' : 'no-data'} helper={openOpps[0]?.title.slice(0, 60) ?? undefined} />
           <MetricCard label="Renewals due" value={renewingSoon.length ? String(renewingSoon.length) : null} state={renewingSoon.length ? 'ok' : 'no-data'} helper={renewingSoon[0]?.title ?? undefined} />
         </div>

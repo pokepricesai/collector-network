@@ -57,9 +57,19 @@ export default async function RevenuePage() {
     pokepricesClickTotals(sb, since28).catch(() => null),
   ]);
 
-  const gbp = <T extends { currency: string }>(list: T[]): T | undefined => list.find((r) => r.currency === 'GBP');
-  const gbpBooked = (list: Array<{ currency: string; booked_minor: number }>) => gbp(list)?.booked_minor ?? 0;
-  const gbpPending = (list: Array<{ currency: string; pending_minor: number }>) => gbp(list)?.pending_minor ?? 0;
+  // Union of all currencies that appear in any window. We iterate
+  // this to render one metric column per currency so GBP + USD + …
+  // never get combined into a single number.
+  const currencies = Array.from(new Set<string>([
+    ...todayTotals.map((r) => r.currency),
+    ...w7.map((r) => r.currency),
+    ...w28.map((r) => r.currency),
+    ...mtdTotals.map((r) => r.currency),
+  ])).sort();
+  if (currencies.length === 0) currencies.push('GBP');
+
+  const pick = <T extends { currency: string }>(list: T[], ccy: string): T | undefined =>
+    list.find((r) => r.currency === ccy);
 
   const sponsorGbp = sponsor.find((r) => r.currency === 'GBP');
   const pipelineGbp = pipeline.find((r) => r.currency === 'GBP');
@@ -67,6 +77,13 @@ export default async function RevenuePage() {
   const ppClickTotal28 = ppClicks?.total ?? 0;
 
   const todayTxt = formatDateOnly(new Date());
+
+  const windows = [
+    { id: 'today', label: 'Today',          totals: todayTotals, from: todayTxt },
+    { id: '7d',    label: 'Last 7 days',    totals: w7,          from: since7 },
+    { id: '28d',   label: 'Last 28 days',   totals: w28,         from: since28 },
+    { id: 'mtd',   label: 'Month to date',  totals: mtdTotals,   from: mtd },
+  ];
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/revenue">
@@ -88,32 +105,59 @@ export default async function RevenuePage() {
         }
       />
 
-      <Panel title="Headline (GBP)" eyebrow="Separated signals">
-        <div className="metric-grid metric-grid--compact">
-          <MetricCard label="REAL BOOKED (28d)" value={formatMoneyMinor(gbpBooked(w28), 'GBP')} state={gbpBooked(w28) ? 'ok' : 'no-data'} helper="confirmed revenue events" />
-          <MetricCard label="PENDING AFFILIATE (28d)" value={formatMoneyMinor(gbpPending(w28), 'GBP')} state={gbpPending(w28) ? 'ok' : 'no-data'} helper="imported, awaiting payout" />
-          <MetricCard label="SPONSOR MRR" value={sponsorGbp ? formatMoneyMinor(sponsorGbp.monthly_minor, 'GBP') : null} state={sponsorGbp ? 'ok' : 'no-data'} helper={sponsorGbp ? `${sponsorGbp.active_deals} active deal(s)` : undefined} />
-          <MetricCard label="PIPELINE VALUE" value={pipelineGbp ? formatMoneyMinor(pipelineGbp.value_minor, 'GBP') : null} state={pipelineGbp ? 'ok' : 'no-data'} helper={pipelineGbp ? `${pipelineGbp.deal_count} deal(s), all statuses` : 'not revenue'} />
-          <MetricCard label="CLICKS (28d, network)" value={formatInt(centralClickTotal28)} state={centralClickTotal28 ? 'ok' : 'no-data'} helper="not revenue" />
+      <Panel title="Headline — separated by currency" eyebrow="Never combined">
+        {currencies.map((ccy) => {
+          const w = pick(w28, ccy);
+          const booked = w?.booked_minor ?? 0;
+          const pending = w?.pending_minor ?? 0;
+          const refunds = w?.refunds_minor ?? 0;
+          return (
+            <div key={ccy} style={{ marginBottom: 18 }}>
+              <h3 className="admin-eyebrow" style={{ marginBottom: 8 }}>{ccy} · last 28 days</h3>
+              <div className="metric-grid metric-grid--compact">
+                <MetricCard label={`REAL BOOKED (${ccy}, 28d)`} value={formatMoneyMinor(booked, ccy)} state={booked ? 'ok' : 'no-data'} helper="confirmed revenue events" />
+                <MetricCard label={`PENDING AFFILIATE (${ccy}, 28d)`} value={formatMoneyMinor(pending, ccy)} state={pending ? 'ok' : 'no-data'} helper="imported, awaiting payout" />
+                <MetricCard label={`REFUNDS / REVERSALS (${ccy}, 28d)`} value={formatMoneyMinor(refunds, ccy)} state={refunds ? 'ok' : 'no-data'} helper="stored negative, kept separate" />
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ marginTop: 6 }}>
+          <h3 className="admin-eyebrow" style={{ marginBottom: 8 }}>Non-currency signals</h3>
+          <div className="metric-grid metric-grid--compact">
+            <MetricCard label="SPONSOR MRR (GBP)" value={sponsorGbp ? formatMoneyMinor(sponsorGbp.monthly_minor, 'GBP') : null} state={sponsorGbp ? 'ok' : 'no-data'} helper={sponsorGbp ? `${sponsorGbp.active_deals} active deal(s)` : undefined} />
+            <MetricCard label="PIPELINE VALUE (GBP)" value={pipelineGbp ? formatMoneyMinor(pipelineGbp.value_minor, 'GBP') : null} state={pipelineGbp ? 'ok' : 'no-data'} helper={pipelineGbp ? `${pipelineGbp.deal_count} deal(s), all statuses` : 'not revenue'} />
+            <MetricCard label="CLICKS (28d, network)" value={formatInt(centralClickTotal28)} state={centralClickTotal28 ? 'ok' : 'no-data'} helper="not revenue" />
+          </div>
         </div>
         <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
-          REAL BOOKED, PENDING AFFILIATE, SPONSOR MRR, PIPELINE VALUE and CLICKS are deliberately separate — nothing is inferred across them.
+          Each currency is a separate line — the system never sums across them. SPONSOR MRR + PIPELINE are shown in GBP because they come from deal records you enter directly.
+          No FX conversion is applied to any revenue event; <code>amount_minor</code> + <code>currency</code> on each row are the frozen original values.
         </p>
       </Panel>
 
-      <Panel title="Windows — booked GBP" eyebrow="Today / 7d / 28d / MTD">
+      <Panel title="Windows — booked by currency" eyebrow="Today / 7d / 28d / MTD">
         <Table
-          rows={[
-            { id: 'today', window: 'Today',       booked: gbpBooked(todayTotals), pending: gbpPending(todayTotals), events: gbp(todayTotals)?.event_count ?? 0, label: todayTxt },
-            { id: '7d',    window: 'Last 7 days', booked: gbpBooked(w7),          pending: gbpPending(w7),          events: gbp(w7)?.event_count ?? 0,          label: since7 },
-            { id: '28d',   window: 'Last 28 days',booked: gbpBooked(w28),         pending: gbpPending(w28),         events: gbp(w28)?.event_count ?? 0,         label: since28 },
-            { id: 'mtd',   window: 'Month to date',booked: gbpBooked(mtdTotals),  pending: gbpPending(mtdTotals),   events: gbp(mtdTotals)?.event_count ?? 0,   label: mtd },
-          ]}
+          rows={windows.flatMap((w) => currencies.map((ccy) => {
+            const t = pick(w.totals, ccy);
+            return {
+              id: `${w.id}-${ccy}`,
+              window: w.label,
+              label: w.from,
+              currency: ccy,
+              booked: t?.booked_minor ?? 0,
+              pending: t?.pending_minor ?? 0,
+              refunds: t?.refunds_minor ?? 0,
+              events: t?.event_count ?? 0,
+            };
+          }))}
           columns={[
             { key: 'window', header: 'Window', render: (r) => <strong>{r.window}</strong> },
             { key: 'from', header: 'From', render: (r) => <code style={{ fontSize: 11 }}>{r.label}</code> },
-            { key: 'booked', header: 'Real booked', className: 'num', render: (r) => formatMoneyMinor(r.booked, 'GBP') },
-            { key: 'pending', header: 'Pending', className: 'num', render: (r) => formatMoneyMinor(r.pending, 'GBP') },
+            { key: 'currency', header: 'Ccy', render: (r) => <code>{r.currency}</code> },
+            { key: 'booked', header: 'Real booked', className: 'num', render: (r) => formatMoneyMinor(r.booked, r.currency) },
+            { key: 'pending', header: 'Pending', className: 'num', render: (r) => formatMoneyMinor(r.pending, r.currency) },
+            { key: 'refunds', header: 'Refunds', className: 'num', render: (r) => formatMoneyMinor(r.refunds, r.currency) },
             { key: 'events', header: 'Events', className: 'num', render: (r) => formatInt(r.events) },
           ]}
         />
