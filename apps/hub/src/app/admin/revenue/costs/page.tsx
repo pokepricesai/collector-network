@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
+import { EmptyState, Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
+
+function EmptyStateInline() {
+  return <EmptyState title="No operating cost rows yet in the 28d window" description="AI + BigQuery autoflow when activity exists. Add Vercel/Supabase/domain lines manually." tone="muted" />;
+}
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { totalCostsSinceGbp, listRecentOpsCosts, recentAiCosts, recentBqCosts } from '@/server/revenue/costs';
@@ -72,7 +76,45 @@ export default async function CostsPage({ searchParams }: PageProps) {
         </p>
       </Panel>
 
-      <Panel title="Operating costs (manual)" eyebrow="Direct opex">
+      <Panel title="Cost breakdown by category (28d)" eyebrow="Where the money goes">
+        {(() => {
+          const buckets = new Map<string, number>();
+          buckets.set('AI', costs.ai_minor);
+          buckets.set('BigQuery', costs.bq_minor);
+          for (const r of opsRows.filter((o) => o.for_date >= since)) {
+            const key = ({
+              hosting: 'Vercel / hosting',
+              supabase: 'Supabase',
+              domain: 'Domains',
+              saas: 'SaaS',
+              tool: 'Tools',
+              other: 'Other',
+            } as Record<string, string>)[r.category] ?? r.category;
+            const amount = r.currency === 'GBP' ? r.amount_minor : Math.round(r.amount_minor * 0.80);
+            buckets.set(key, (buckets.get(key) ?? 0) + amount);
+          }
+          const rows = Array.from(buckets.entries())
+            .filter(([, v]) => v > 0)
+            .sort(([, a], [, b]) => b - a);
+          if (rows.length === 0) return <EmptyStateInline />;
+          const total = rows.reduce((s, [, v]) => s + v, 0);
+          return (
+            <Table
+              rows={rows.map(([name, minor], i) => ({ id: i, name, minor, pct: total > 0 ? minor / total : 0 }))}
+              columns={[
+                { key: 'name', header: 'Category', render: (r) => <strong>{r.name}</strong> },
+                { key: 'amount', header: 'Amount', className: 'num', render: (r) => formatMoneyMinor(r.minor, 'GBP') },
+                { key: 'pct', header: '% of total', className: 'num', render: (r) => `${(r.pct * 100).toFixed(0)}%` },
+              ]}
+            />
+          );
+        })()}
+        <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
+          Vercel + Supabase totals require manual-entry rows via <Link href="/admin/revenue/costs/new">+ Operating cost</Link>. We never fabricate billing figures from traffic or usage.
+        </p>
+      </Panel>
+
+      <Panel title="Operating costs (manual, newest 60)" eyebrow="Direct opex">
         <Table
           rows={opsRows}
           columns={[
@@ -83,7 +125,7 @@ export default async function CostsPage({ searchParams }: PageProps) {
             { key: 'desc', header: 'Description', render: (r) => <span style={{ fontSize: 12 }}>{r.description ?? ''}</span> },
             { key: 'amount', header: 'Amount', className: 'num', render: (r) => formatMoneyMinor(r.amount_minor, r.currency) },
           ]}
-          empty={<span className="col-dim">No operating costs entered yet.</span>}
+          empty={<span className="col-dim">No operating costs entered yet. Click &quot;+ Operating cost&quot; to add Vercel / Supabase / domain lines.</span>}
         />
       </Panel>
 

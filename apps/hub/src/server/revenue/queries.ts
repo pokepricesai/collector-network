@@ -215,6 +215,97 @@ export interface ConversionTotalsRow {
   currency: string;
 }
 
+export interface WindowTotals {
+  currency: string;
+  booked_minor: number;      // confirmed revenue events, excluding pending/reversal
+  pending_minor: number;     // conversion rows not yet reconciled to a revenue_event
+  refunds_minor: number;     // refunds + reversals
+  event_count: number;
+}
+
+export async function windowBookedTotals(
+  sb: SupabaseClient,
+  sinceDate: string,
+): Promise<WindowTotals[]> {
+  const { data, error } = await sb.from('network_revenue_events')
+    .select('amount_minor, currency, event_kind, source_detail')
+    .gte('occurred_on', sinceDate);
+  if (error) throw new Error(`[revenue] windowBookedTotals: ${error.message}`);
+  const rows = (data ?? []) as Array<{ amount_minor: number; currency: string; event_kind: string; source_detail: Record<string, unknown> | null }>;
+  const b = new Map<string, WindowTotals>();
+  for (const r of rows) {
+    const bucket = b.get(r.currency) ?? { currency: r.currency, booked_minor: 0, pending_minor: 0, refunds_minor: 0, event_count: 0 };
+    bucket.event_count += 1;
+    if (r.event_kind === 'refund' || r.event_kind === 'reversal') {
+      bucket.refunds_minor += r.amount_minor;
+    } else if ((r.source_detail?.status as string | undefined) === 'pending') {
+      bucket.pending_minor += r.amount_minor;
+    } else {
+      bucket.booked_minor += r.amount_minor;
+    }
+    b.set(r.currency, bucket);
+  }
+  return Array.from(b.values()).sort((a, b) => b.booked_minor - a.booked_minor);
+}
+
+export interface SponsorMrr {
+  currency: string;
+  monthly_minor: number;
+  active_deals: number;
+}
+
+export async function sponsorMrr(sb: SupabaseClient): Promise<SponsorMrr[]> {
+  const { data, error } = await sb.from('network_sponsorships')
+    .select('status, total_value_minor, term_months, billing_cadence, currency')
+    .in('status', ['active', 'renewing']);
+  if (error) throw new Error(`[revenue] sponsorMrr: ${error.message}`);
+  const rows = (data ?? []) as Array<{ status: string; total_value_minor: number; term_months: number | null; billing_cadence: string; currency: string }>;
+  const b = new Map<string, SponsorMrr>();
+  for (const r of rows) {
+    let monthly = 0;
+    if (r.billing_cadence === 'monthly' && r.term_months && r.term_months > 0) {
+      monthly = Math.round(r.total_value_minor / r.term_months);
+    } else if (r.billing_cadence === 'annually' && r.total_value_minor) {
+      monthly = Math.round(r.total_value_minor / 12);
+    } else if (r.billing_cadence === 'quarterly' && r.total_value_minor) {
+      monthly = Math.round(r.total_value_minor / 3);
+    } else if (r.term_months && r.term_months > 0) {
+      monthly = Math.round(r.total_value_minor / r.term_months);
+    }
+    const bucket = b.get(r.currency) ?? { currency: r.currency, monthly_minor: 0, active_deals: 0 };
+    bucket.monthly_minor += monthly;
+    bucket.active_deals += 1;
+    b.set(r.currency, bucket);
+  }
+  return Array.from(b.values());
+}
+
+export interface PipelineTotals {
+  currency: string;
+  value_minor: number;      // contracted + proposed deals (not booked)
+  deal_count: number;
+  by_status: Record<string, { value_minor: number; count: number }>;
+}
+
+export async function pipelineTotals(sb: SupabaseClient): Promise<PipelineTotals[]> {
+  const { data, error } = await sb.from('network_sponsorships')
+    .select('status, total_value_minor, currency');
+  if (error) throw new Error(`[revenue] pipelineTotals: ${error.message}`);
+  const rows = (data ?? []) as Array<{ status: string; total_value_minor: number; currency: string }>;
+  const b = new Map<string, PipelineTotals>();
+  for (const r of rows) {
+    const bucket = b.get(r.currency) ?? { currency: r.currency, value_minor: 0, deal_count: 0, by_status: {} };
+    bucket.deal_count += 1;
+    bucket.value_minor += r.total_value_minor;
+    const s = bucket.by_status[r.status] ?? { value_minor: 0, count: 0 };
+    s.value_minor += r.total_value_minor;
+    s.count += 1;
+    bucket.by_status[r.status] = s;
+    b.set(r.currency, bucket);
+  }
+  return Array.from(b.values()).sort((a, b) => b.value_minor - a.value_minor);
+}
+
 export async function conversionsBySourceSince(
   sb: SupabaseClient,
   sinceDate: string,

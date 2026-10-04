@@ -50,7 +50,24 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
     label: 'Portfolio',
     items: [
       { href: '/admin/health',  label: 'Health' },
-      { href: '/admin/revenue', label: 'Revenue' },
+    ],
+  },
+  {
+    label: 'Revenue',
+    items: [
+      { href: '/admin/revenue',               label: 'Revenue dashboard' },
+      { href: '/admin/revenue/entries',       label: 'Entries ledger' },
+      { href: '/admin/revenue/import',        label: 'Import affiliate CSV' },
+      { href: '/admin/revenue/costs',         label: 'Costs + contribution' },
+      { href: '/admin/revenue/opportunities', label: 'Opportunities' },
+    ],
+  },
+  {
+    label: 'Partners',
+    items: [
+      { href: '/admin/partners',               label: 'Partner CRM' },
+      { href: '/admin/partners/offers',        label: 'Offer catalogue' },
+      { href: '/admin/partners/sponsorships',  label: 'Sponsorships' },
     ],
   },
   {
