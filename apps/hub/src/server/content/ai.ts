@@ -12,8 +12,8 @@ import 'server-only';
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const BRIEF_MODEL = 'claude-opus-4-6';
-const DRAFT_MODEL = 'claude-opus-4-6';
+const BRIEF_MODEL = 'claude-opus-4-7';
+const DRAFT_MODEL = 'claude-opus-4-7';
 
 // Opus pricing (as of 2026-02): $15/MTok input, $75/MTok output,
 // cache read $1.50/MTok, cache write $18.75/MTok. We track this on
@@ -50,7 +50,7 @@ function estimateCost(usage: Anthropic.Usage): AiUsage {
     cache_read_tokens: cacheRead,
     cache_write_tokens: cacheWrite,
     est_cost_usd: Number(cost.toFixed(6)),
-    model: 'claude-opus-4-6',
+    model: 'claude-opus-4-7',
   };
 }
 

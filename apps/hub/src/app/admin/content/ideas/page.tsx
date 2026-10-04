@@ -8,6 +8,10 @@ import { IdeaRowActions, RegenerateIdeasButton } from './IdeaActions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+// Server actions on this page invoke the AI brief generator which
+// can take 30–60s. Raise the function budget to Fluid Compute's cap
+// so the generate-brief action never gets killed mid-request.
+export const maxDuration = 300;
 
 interface Params { searchParams: Promise<{ site?: string; status?: string }> }
 

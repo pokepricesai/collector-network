@@ -64,7 +64,11 @@ export async function generateBriefForIdeaAction(ideaId: string): Promise<{ ok: 
     return { ok: true, briefId: r.briefId };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
+    // Server-side log so Vercel runtime captures the full detail. The
+    // client-returned string is truncated.
+    console.error(`[brief.generate] idea=${ideaId}: ${msg}`);
+    if (err instanceof Error && err.stack) console.error(err.stack);
+    return { ok: false, error: msg.slice(0, 500) };
   }
 }
 
