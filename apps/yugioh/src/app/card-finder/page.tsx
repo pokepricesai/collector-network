@@ -128,7 +128,7 @@ export default async function CardFinderPage({ searchParams }: PageProps) {
 
           <div className={styles.results}>
             {result.ok ? (
-              <FinderResults filters={filters} result={result.value} structured={structured} />
+              <FinderResults filters={filters} result={result.value} structured={structured} currency={currency} />
             ) : (
               <div className={styles.empty}>
                 Card Finder is temporarily unavailable. Retry in a moment.
@@ -148,10 +148,12 @@ function FinderResults({
   filters,
   result,
   structured,
+  currency,
 }: {
   filters: FinderFilters;
   result: Awaited<ReturnType<typeof runYugiohCardFinder>>;
   structured: boolean;
+  currency: import('../../lib/currency').YgoCurrency;
 }) {
   const activeChips = buildActiveChips(filters);
   return (
@@ -227,6 +229,7 @@ function FinderResults({
               setLine={item.set?.code?.toUpperCase() ?? null}
               bestUsdRetail={item.bestUsdRetail?.price ?? null}
               bestEurRetail={item.bestEurRetail?.price ?? null}
+              preferredCurrency={currency}
             />
           ))}
         </div>

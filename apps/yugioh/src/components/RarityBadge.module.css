@@ -11,12 +11,27 @@
   text-transform: uppercase;
   line-height: 1;
   white-space: nowrap;
+  max-width: 100%;
   background: var(--rarity-bg, var(--ygo-rarity-common));
   color: var(--rarity-ink, var(--ygo-rarity-common-ink));
   border: 1px solid rgba(255, 255, 255, 0.06);
   position: relative;
   overflow: hidden;
   isolation: isolate;
+}
+
+/* Very narrow mobile: multi-word rarities ("Secret Rare", "Starlight
+   Rare") overflow a 60px cell at 320px viewport. Allow the label to
+   soft-wrap and shrink padding so the badge collapses to the smallest
+   usable size without inflating its grid cell. */
+@media (max-width: 400px) {
+  .badge {
+    white-space: normal;
+    padding: 2px 6px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+  }
 }
 
 .dot {

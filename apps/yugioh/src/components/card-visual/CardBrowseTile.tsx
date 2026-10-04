@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { CardImageFrame } from '../CardImageFrame';
 import { RarityBadge } from '../RarityBadge';
+import type { YgoCurrency } from '../../lib/currency';
 import styles from '../browse/Browse.module.css';
 
 export interface CardBrowseTileProps {
@@ -15,6 +16,14 @@ export interface CardBrowseTileProps {
   setLine?: string | null;
   bestUsdRetail?: number | null;
   bestEurRetail?: number | null;
+  /** The reader's currency preference (from the Header cookie read).
+   *  Determines which price is primary; the other is shown as alt. */
+  preferredCurrency?: YgoCurrency;
+}
+
+function formatPrice(value: number, currency: YgoCurrency): string {
+  const sym = currency === 'EUR' ? '€' : '$';
+  return `${sym}${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
 // Shared tile for image-led card grids (set / rarity / archetype
@@ -30,7 +39,31 @@ export function CardBrowseTile(props: CardBrowseTileProps) {
     setLine,
     bestUsdRetail,
     bestEurRetail,
+    preferredCurrency = 'USD',
   } = props;
+
+  // Pick a primary + secondary based on the reader's currency pref.
+  // If the preferred currency has no data we fall back to the other —
+  // we never silently hide a price just because it's not in the
+  // preferred currency. Only when BOTH are null do we show the
+  // "no price data" state.
+  const preferredValue = preferredCurrency === 'EUR' ? bestEurRetail : bestUsdRetail;
+  const otherCurrency: YgoCurrency = preferredCurrency === 'EUR' ? 'USD' : 'EUR';
+  const otherValue = otherCurrency === 'EUR' ? bestEurRetail : bestUsdRetail;
+
+  const primary = preferredValue != null
+    ? { currency: preferredCurrency, value: preferredValue }
+    : otherValue != null
+      ? { currency: otherCurrency, value: otherValue }
+      : null;
+
+  // Only show a secondary when primary used preferred (so we don't
+  // repeat ourselves after falling back).
+  const secondary =
+    primary && primary.currency === preferredCurrency && otherValue != null
+      ? { currency: otherCurrency, value: otherValue }
+      : null;
+
   return (
     <Link
       href={href}
@@ -54,18 +87,18 @@ export function CardBrowseTile(props: CardBrowseTileProps) {
           {setLine && <span className={styles.setCardSetLine}>{setLine}</span>}
         </div>
         <div className={styles.setCardPriceRow}>
-          {bestUsdRetail != null ? (
+          {primary ? (
             <span className={styles.setCardPrice}>
-              $
-              {bestUsdRetail.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              {formatPrice(primary.value, primary.currency)}
             </span>
           ) : (
-            <span className={styles.setCardPriceDim}>-</span>
+            <span className={styles.setCardPriceDim} title="No market price data on file for this printing yet">
+              No price data
+            </span>
           )}
-          {bestEurRetail != null && (
+          {secondary && (
             <span className={styles.setCardPriceAlt}>
-              €
-              {bestEurRetail.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              {formatPrice(secondary.value, secondary.currency)}
             </span>
           )}
         </div>

@@ -4,6 +4,7 @@ import { readYgoProfile } from '../lib/user-profile';
 import { AccountMenu } from './AccountMenu';
 import { SearchBar } from './SearchBar';
 import { CurrencyToggle } from './CurrencyToggle';
+import { MobileNavDrawer } from './MobileNavDrawer';
 import { getYgoCurrency } from '../lib/currency-server';
 import styles from './Header.module.css';
 
@@ -75,9 +76,11 @@ export async function Header({ compactSearch = true }: { compactSearch?: boolean
           ))}
         </nav>
         <div className={styles.accountSlot}>
-          <CurrencyToggle initial={currency} />
+          <div className={styles.desktopCurrency}>
+            <CurrencyToggle initial={currency} />
+          </div>
           {user && (
-            <Link href="/dashboard" className={styles.dashboardLink}>
+            <Link href={"/dashboard" as const} className={`${styles.dashboardLink} ${styles.desktopDashboard}`}>
               Dashboard
             </Link>
           )}
@@ -92,6 +95,7 @@ export async function Header({ compactSearch = true }: { compactSearch?: boolean
                 : null
             }
           />
+          <MobileNavDrawer items={NAV} currency={currency} hasUser={Boolean(user)} />
         </div>
       </div>
     </header>

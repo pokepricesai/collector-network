@@ -18,6 +18,7 @@ import {
 } from '../../../server/browse';
 import Faq from '../../../components/Faq';
 import { archetypeFaq } from '../../../lib/faq-content';
+import { getYgoCurrency } from '../../../lib/currency-server';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
@@ -52,7 +53,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ArchetypePage({ params }: Props) {
   const { slug } = await params;
-  const data = await getYugiohArchetypeBySlug(slug);
+  const [data, currency] = await Promise.all([
+    getYugiohArchetypeBySlug(slug),
+    getYgoCurrency(),
+  ]);
   if (!data) notFound();
 
   const jsonLd = buildJsonLd(data, siteUrl());
@@ -247,6 +251,7 @@ export default async function ArchetypePage({ params }: Props) {
                 setLine={entry.set?.code?.toUpperCase() ?? null}
                 bestUsdRetail={entry.bestUsdRetail?.price ?? null}
                 bestEurRetail={entry.bestEurRetail?.price ?? null}
+                preferredCurrency={currency}
               />
             ))}
           </div>

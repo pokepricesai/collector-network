@@ -26,6 +26,18 @@
   gap: var(--ygo-size-xs);
 }
 
+/* Desktop-only wrappers around the currency toggle + dashboard link so
+   they can be visually hidden on mobile without unmounting the shared
+   AccountMenu that sits beside them. */
+.desktopCurrency {
+  display: inline-flex;
+  align-items: center;
+}
+.desktopDashboard {
+  display: inline-flex;
+  align-items: center;
+}
+
 .dashboardLink {
   display: inline-flex;
   align-items: center;
@@ -125,17 +137,26 @@
 }
 
 @media (max-width: 899px) {
+  /* Mobile row: brand on the left, menu trigger + account menu on the
+     right. Search and currency live inside the drawer so the top row
+     has no risk of controls colliding. */
   .row {
     grid-template-columns: auto 1fr auto;
-    grid-template-areas: 'brand search account';
+    grid-template-areas: 'brand spacer account';
     gap: var(--ygo-size-sm);
     padding: var(--ygo-size-sm) var(--ygo-size-base);
   }
   .brand { grid-area: brand; }
-  .searchWrap { grid-area: search; max-width: none; min-width: 0; }
-  .accountSlot { grid-area: account; }
-  /* Mobile: keep the header compact — 40px tall (~71px wide at 16:9)
-     still reads as a proper brand mark without ballooning the header. */
+  /* Drop the compact header search on mobile — the mobile drawer
+     carries a full-width search instead. */
+  .searchWrap { display: none; }
+  .accountSlot { grid-area: account; gap: var(--ygo-size-xs); }
+  /* Currency selector lives inside the drawer on mobile; the dashboard
+     link does too (it appears in the drawer nav when the user is
+     signed in). This prevents the horizontal collision between the
+     search bar and the USD/EUR toggle that users were reporting. */
+  .desktopCurrency { display: none; }
+  .desktopDashboard { display: none; }
   .brandLogo { height: 40px; max-width: 130px; }
   .nav { display: none; }
 }

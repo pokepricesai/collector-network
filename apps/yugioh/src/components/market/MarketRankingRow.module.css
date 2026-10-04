@@ -146,3 +146,16 @@
   .tableScroll { display: none; }
   .desktopTable { display: none !important; }
 }
+
+/* Very narrow mobile (iPhone SE 1st gen, 320px) — shrink the fixed
+   rank + thumb columns so the 1fr middle column keeps room for the
+   name and the auto price column keeps its $x,xxx.xx format. Without
+   this the item min-content exceeds the container and the whole card
+   page document scrolls horizontally. */
+@media (max-width: 400px) {
+  .item {
+    grid-template-columns: 22px 44px 1fr auto;
+    gap: var(--ygo-size-xs);
+    padding: var(--ygo-size-sm) var(--ygo-size-sm);
+  }
+}
