@@ -8,7 +8,7 @@ import { formatInt, formatMoneyMinor } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 interface Params { searchParams: Promise<{ step?: string }> }
 

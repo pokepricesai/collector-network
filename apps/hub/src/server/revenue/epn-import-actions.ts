@@ -98,13 +98,13 @@ export async function commitEpnImportAction(): Promise<void> {
   const preview = await loadPreview(admin.adminRowId);
   if (!preview) throw new Error('no preview to commit');
 
-  let insertedRevenue = 0;
-  let insertedConversions = 0;
-  let skipped = 0;
+  // Only rows with resolved site + source attribute; others would
+  // land without a FK and are intentionally skipped. The preview UI
+  // already surfaces unmapped campaigns before this point.
+  const mapped = preview.accepted.filter((r) => r.mapped_source_id && r.mapped_site_id);
+  const skipped = preview.accepted.length - mapped.length;
 
-  for (const row of preview.accepted) {
-    if (!row.mapped_source_id) { skipped += 1; continue; }
-
+  const revenueRows = mapped.map((row) => {
     const sourceDetail: Record<string, unknown> = {
       status: row.status,
       campaign_id: row.campaign_id,
@@ -113,13 +113,8 @@ export async function commitEpnImportAction(): Promise<void> {
       row_index: row.row_index,
       file_name: preview.file_name,
     };
-
-    // Pending-status rows go into revenue_events marked pending via
-    // source_detail.status; reversed rows go in as 'reversal' event
-    // kind so SUMs stay honest; confirmed rows are plain 'revenue'.
     const eventKind: 'revenue' | 'reversal' = row.status === 'reversed' ? 'reversal' : 'revenue';
-
-    const { error: eErr } = await sb.from('network_revenue_events').insert({
+    return {
       source_id: row.mapped_source_id,
       site_id: row.mapped_site_id,
       event_kind: eventKind,
@@ -131,29 +126,52 @@ export async function commitEpnImportAction(): Promise<void> {
       external_ref: row.transaction_id,
       idempotency_key: row.idempotency_key,
       entered_by: admin.adminRowId,
-    });
-    if (eErr) {
-      if (eErr.code !== '23505') throw new Error(`[epn] revenue insert: ${eErr.message}`);
-      skipped += 1;
-    } else {
-      insertedRevenue += 1;
-    }
+    };
+  });
 
-    // Mirror into network_affiliate_conversions so the reconciled
-    // conversions view works. click_id stays null — we never infer.
-    const convKey = `epn:conv:${row.transaction_id}`;
-    const { error: cErr } = await sb.from('network_affiliate_conversions').insert({
-      source_id: row.mapped_source_id,
-      site_id: row.mapped_site_id,
-      provider_order_id: row.transaction_id,
-      occurred_on: row.occurred_on,
-      amount_minor: Math.abs(row.earnings_minor),
-      currency: row.currency,
-      provider_payload: sourceDetail,
-      idempotency_key: convKey,
-    });
-    if (!cErr) insertedConversions += 1;
-    else if (cErr.code !== '23505') throw new Error(`[epn] conversion insert: ${cErr.message}`);
+  const conversionRows = mapped.map((row) => ({
+    source_id: row.mapped_source_id,
+    site_id: row.mapped_site_id,
+    provider_order_id: row.transaction_id,
+    occurred_on: row.occurred_on,
+    amount_minor: Math.abs(row.earnings_minor),
+    currency: row.currency,
+    provider_payload: {
+      status: row.status,
+      campaign_id: row.campaign_id,
+      custom_id: row.custom_id,
+      item_title: row.item_title,
+      file_name: preview.file_name,
+    },
+    idempotency_key: `epn:conv:${row.transaction_id}`,
+  }));
+
+  // Chunked upsert with ignoreDuplicates so already-imported rows
+  // collide silently on (source_id, idempotency_key) and we don't
+  // pay a round-trip per row. Chunk size 500 keeps POST body under
+  // PostgREST's default limits and well under Vercel's response caps.
+  const CHUNK = 500;
+  let insertedRevenue = 0;
+  let insertedConversions = 0;
+
+  for (let i = 0; i < revenueRows.length; i += CHUNK) {
+    const chunk = revenueRows.slice(i, i + CHUNK);
+    const { data, error } = await sb
+      .from('network_revenue_events')
+      .upsert(chunk, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: true })
+      .select('id');
+    if (error) throw new Error(`[epn] revenue upsert: ${error.message}`);
+    insertedRevenue += (data ?? []).length;
+  }
+
+  for (let i = 0; i < conversionRows.length; i += CHUNK) {
+    const chunk = conversionRows.slice(i, i + CHUNK);
+    const { data, error } = await sb
+      .from('network_affiliate_conversions')
+      .upsert(chunk, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: true })
+      .select('id');
+    if (error) throw new Error(`[epn] conv upsert: ${error.message}`);
+    insertedConversions += (data ?? []).length;
   }
 
   await sb.from('network_audit_log').insert({
@@ -166,6 +184,7 @@ export async function commitEpnImportAction(): Promise<void> {
       total_rows: preview.total_rows,
       accepted_rows: preview.accepted.length,
       rejected_rows: preview.rejected.length,
+      mapped_rows: mapped.length,
       revenue_inserted: insertedRevenue,
       conversions_inserted: insertedConversions,
       skipped,
