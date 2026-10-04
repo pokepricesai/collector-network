@@ -77,6 +77,13 @@ export function MobileNavDrawer({ items, currency, hasUser }: Props) {
           <span />
         </span>
       </button>
+      {/* Panel + overlay are conditionally rendered. If we kept the
+          panel mounted and only translated it off-screen, its fixed
+          layout box still contributed to document.scrollWidth across
+          every page by its own width (~294-340px). Unmounting is the
+          only reliable way to keep the drawer out of layout. The
+          slide-in uses a CSS @keyframes animation that fires on
+          mount. */}
       {open && (
         <div
           className={styles.overlay}
@@ -84,14 +91,14 @@ export function MobileNavDrawer({ items, currency, hasUser }: Props) {
           onClick={() => setOpen(false)}
         />
       )}
+      {open && (
       <aside
         id={panelId}
         ref={panelRef}
-        className={`${styles.panel} ${open ? styles.panelOpen : ''}`}
+        className={styles.panel}
         role="dialog"
         aria-modal="true"
         aria-label="Menu"
-        aria-hidden={!open}
       >
         <div className={styles.panelHeader}>
           <span className={styles.panelTitle}>Menu</span>
@@ -141,6 +148,7 @@ export function MobileNavDrawer({ items, currency, hasUser }: Props) {
           <CurrencyToggle initial={currency} />
         </div>
       </aside>
+      )}
     </>
   );
 }
