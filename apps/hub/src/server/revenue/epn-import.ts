@@ -1,4 +1,6 @@
-import 'server-only';
+// eBay Partner Network CSV import. (Pure parser — no I/O. The
+// `server-only` directive is intentionally omitted here so the
+// parser can be unit-tested directly via a smoke script.)
 
 // eBay Partner Network CSV import.
 //
