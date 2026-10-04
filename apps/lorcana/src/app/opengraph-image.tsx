@@ -25,7 +25,7 @@ export default async function OGImage() {
           fontFamily: 'sans-serif',
         }}
       >
-        {/* Six-ink wheel — Amber, Amethyst, Emerald, Ruby, Sapphire, Steel */}
+        {/* Six-ink wheel. Amber, Amethyst, Emerald, Ruby, Sapphire, Steel */}
         <div
           style={{
             position: 'absolute',
@@ -95,7 +95,7 @@ export default async function OGImage() {
               display: 'flex',
             }}
           >
-            Live Disney Lorcana prices — Enchanted, Iconic, Epic and Promo cards priced individually.
+            Live Disney Lorcana prices. Enchanted, Iconic, Epic and Promo cards priced individually.
           </div>
         </div>
       </div>

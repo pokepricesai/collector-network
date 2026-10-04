@@ -28,7 +28,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
       <>
         Prices come from a daily live retail feed (Cardmarket EU) mapped
         onto our shared TCG schema. We display the current price per
-        exact printing — never an averaged number — and never convert
+        exact printing, never an averaged number, and never convert
         currencies silently. Each row shows the source, currency and
         finish.
       </>
@@ -65,7 +65,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     q: 'What are Enchanted cards?',
     a: (
       <>
-        Enchanted is a Disney Lorcana chase rarity — alt-art overprints
+        Enchanted is a Disney Lorcana chase rarity, alt-art overprints
         pulled at roughly 1:432 modern packs, replacing a Common slot.
         Always foil. See the{' '}
         <Link href="/market/enchanted">live Enchanted market</Link> and{' '}
@@ -73,7 +73,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
       </>
     ),
     plainAnswer:
-      'Enchanted is a Disney Lorcana chase rarity — alt-art overprints pulled at roughly 1:432 modern packs, replacing a Common slot. Always foil. Every Enchanted card is priced individually on LorcanaPrices.',
+      'Enchanted is a Disney Lorcana chase rarity, alt-art overprints pulled at roughly 1:432 modern packs, replacing a Common slot. Always foil. Every Enchanted card is priced individually on LorcanaPrices.',
   },
   {
     q: 'What are Iconic cards?',
@@ -94,7 +94,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
       <>
         Foil is a finish, not a rarity. Almost every Lorcana card exists
         in both foil and nonfoil printings. Foil typically sells at a
-        premium — often 2-5x for top rarities. LorcanaPrices prices
+        premium, often 2-5x for top rarities. LorcanaPrices prices
         every printing independently across its finish + treatment.
       </>
     ),
@@ -121,7 +121,7 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     a: (
       <>
         We don&apos;t sell cards. Card pages carry a &quot;Find on eBay&quot;
-        button — an affiliate link that opens a targeted eBay search
+        button, an affiliate link that opens a targeted eBay search
         for the exact printing. LorcanaPrices may earn a commission on
         qualifying purchases at no cost to you.
       </>
@@ -133,8 +133,8 @@ export const HOMEPAGE_FAQ: FaqEntry[] = [
     q: 'Is a LorcanaPrices account free?',
     a: (
       <>
-        Yes. Every feature on the site — including the full collection
-        tracker with graded, foil and treatment support — is free. No
+        Yes. Every feature on the site, including the full collection
+        tracker with graded, foil and treatment support, is free. No
         credit card. No login required to browse.
       </>
     ),
@@ -226,7 +226,7 @@ export const MARKET_FAQ: FaqEntry[] = [
     a: (
       <>
         Today&apos;s live Lorcana feed is Cardmarket EU (EUR). We rank
-        within a single currency — never with a hardcoded FX rate. When
+        within a single currency, never with a hardcoded FX rate. When
         additional currencies arrive we will surface them explicitly.
       </>
     ),
@@ -263,12 +263,12 @@ export const MARKET_FAQ: FaqEntry[] = [
     a: (
       <>
         <Link href="/market/iconic">/market/iconic</Link> covers the
-        Iconic tier introduced in Chapter 7 — the newest premium
+        Iconic tier introduced in Chapter 7, the newest premium
         overprint on marquee Disney characters.
       </>
     ),
     plainAnswer:
-      "/market/iconic covers the Iconic tier introduced in Chapter 7 — the newest premium overprint on marquee Disney characters.",
+      "/market/iconic covers the Iconic tier introduced in Chapter 7, the newest premium overprint on marquee Disney characters.",
   },
 ];
 
@@ -280,7 +280,7 @@ export const MARKET_ENCHANTED_FAQ: FaqEntry[] = [
         Enchanted is a Disney Lorcana chase rarity introduced in Set 1.
         Every Enchanted printing is a full alt-art overprint, always
         foil, and replaces the Common slot in the pack. Modern pull rate
-        sits at roughly 1 in 432 boosters — the rarest tier before{' '}
+        sits at roughly 1 in 432 boosters, the rarest tier before{' '}
         <Link href="/market/iconic">Iconic</Link> arrived in Set 9.
       </>
     ),
@@ -305,7 +305,7 @@ export const MARKET_ENCHANTED_FAQ: FaqEntry[] = [
     a: (
       <>
         Yes. Every price on this page is a live retail observation from
-        the daily production feed — never averaged, never silently
+        the daily production feed, never averaged, never silently
         converted between currencies. Click into any card for its full
         price history and printing breakdown.
       </>
@@ -324,7 +324,7 @@ export const MARKET_ENCHANTED_FAQ: FaqEntry[] = [
       </>
     ),
     plainAnswer:
-      'No. Ravensburger has not reprinted an Enchanted printing — each is unique to its original set. Chapter 8 added Special variant treatments but Enchanted remains one-set-only.',
+      'No. Ravensburger has not reprinted an Enchanted printing, each is unique to its original set. Chapter 8 added Special variant treatments but Enchanted remains one-set-only.',
   },
   {
     q: 'How do I find Enchanted cards for a specific ink?',
@@ -332,13 +332,13 @@ export const MARKET_ENCHANTED_FAQ: FaqEntry[] = [
       <>
         Use the ink presets on{' '}
         <Link href="/card-finder?rarity=Enchanted">/card-finder</Link>, or
-        go via an ink page — e.g.{' '}
+        go via an ink page, e.g.{' '}
         <Link href="/inks/amethyst">/inks/amethyst</Link> lists the
         Amethyst Enchanted panel alongside the top Amethyst market.
       </>
     ),
     plainAnswer:
-      'Use the ink filter on /card-finder?rarity=Enchanted, or open any /inks/<ink> page — each shows an Enchanted panel for that ink alongside the top of the ink market.',
+      'Use the ink filter on /card-finder?rarity=Enchanted, or open any /inks/<ink> page, each shows an Enchanted panel for that ink alongside the top of the ink market.',
   },
 ];
 
@@ -351,13 +351,13 @@ export const MARKET_ICONIC_FAQ: FaqEntry[] = [
         (<em>Fabled</em>) and continued through <em>Whispers in the
         Well</em>, <em>Winterspell</em>, <em>Wilds Unknown</em> and{' '}
         <em>Attack of the Vine!</em>. Roughly 2 Iconic printings are
-        released per set — heavy-foil premium alt-art on marquee Disney
+        released per set, heavy-foil premium alt-art on marquee Disney
         characters, sitting above Legendary and above Enchanted at the
         top of the market.
       </>
     ),
     plainAnswer:
-      'Iconic is the rarest Lorcana overprint tier, introduced in Set 9 (Fabled). Roughly 2 Iconic printings per set — heavy-foil premium alt-art on marquee Disney characters, sitting above Legendary and above Enchanted.',
+      'Iconic is the rarest Lorcana overprint tier, introduced in Set 9 (Fabled). Roughly 2 Iconic printings per set, heavy-foil premium alt-art on marquee Disney characters, sitting above Legendary and above Enchanted.',
   },
   {
     q: 'How rare are Iconic cards compared to Enchanted?',
@@ -366,7 +366,7 @@ export const MARKET_ICONIC_FAQ: FaqEntry[] = [
         Rarer. Enchanted sits at roughly 1 in 432 packs; Iconic is
         materially harder to pull, though Ravensburger has not published
         an exact rate. In practice Iconic printings command the highest
-        prices in the modern catalogue — track the live floor here.
+        prices in the modern catalogue, track the live floor here.
       </>
     ),
     plainAnswer:
@@ -377,7 +377,7 @@ export const MARKET_ICONIC_FAQ: FaqEntry[] = [
     a: (
       <>
         By cheapest current live retail price across all Iconic
-        printings of each card — surfacing the floor of the top of the
+        printings of each card, surfacing the floor of the top of the
         market. Click any card for its full price history.
       </>
     ),
@@ -391,11 +391,11 @@ export const MARKET_ICONIC_FAQ: FaqEntry[] = [
         Set 9 (<em>Fabled</em>), Set 10 (<em>Whispers in the Well</em>),
         Set 11 (<em>Winterspell</em>), Set 12 (<em>Wilds Unknown</em>)
         and Set 13 (<em>Attack of the Vine!</em>). Sets 1–8 do not
-        contain Iconic printings — those cards top out at Enchanted.
+        contain Iconic printings, those cards top out at Enchanted.
       </>
     ),
     plainAnswer:
-      'Set 9 (Fabled) onwards — currently Sets 9, 10, 11, 12 and 13. Sets 1–8 have no Iconic printings and top out at Enchanted.',
+      'Set 9 (Fabled) onwards, currently Sets 9, 10, 11, 12 and 13. Sets 1–8 have no Iconic printings and top out at Enchanted.',
   },
   {
     q: 'Are Iconic prices in USD?',
@@ -431,12 +431,12 @@ export function inkFaq(label: string, slug: string): FaqEntry[] {
       a: (
         <>
           Beyond value: {label} plays into specific gameplay archetypes
-          — the ink itself is a mechanical identity, not just a colour.
+         , the ink itself is a mechanical identity, not just a colour.
           Browse the top of the {label} market above to see which
           characters carry the most collector demand.
         </>
       ),
-      plainAnswer: `${label} plays into specific gameplay archetypes — the ink is a mechanical identity, not just a colour. Browse the top of the ${label} market to see collector demand.`,
+      plainAnswer: `${label} plays into specific gameplay archetypes, the ink is a mechanical identity, not just a colour. Browse the top of the ${label} market to see collector demand.`,
     },
     {
       q: `Are ${label} Enchanted cards more valuable than other ${label} rarities?`,
@@ -457,7 +457,7 @@ export function inkFaq(label: string, slug: string): FaqEntry[] {
       a: (
         <>
           Chapter 8 introduced dual-ink cards, and{' '}
-          {label} is one of the pool — dual-ink printings that include{' '}
+          {label} is one of the pool, dual-ink printings that include{' '}
           {label} appear on this page and in the{' '}
           {label} Card Finder filter.
         </>
@@ -489,7 +489,7 @@ export const INKS_FAQ: FaqEntry[] = [
     q: 'What does inkable mean?',
     a: (
       <>
-        Inkable cards can be discarded to add ink to your inkwell —
+        Inkable cards can be discarded to add ink to your inkwell ,
         Lorcana&apos;s resource system. Uninkable cards (usually the
         chase minority in a set) cannot, which makes them scarcer and
         often more valuable.
@@ -502,7 +502,7 @@ export const INKS_FAQ: FaqEntry[] = [
     q: 'Can a card be more than one ink?',
     a: (
       <>
-        Yes — dual-ink cards were introduced in Chapter 8. They count as
+        Yes, dual-ink cards were introduced in Chapter 8. They count as
         both inks for deckbuilding and appear in both ink filters on{' '}
         <Link href="/card-finder">Card Finder</Link>.
       </>
@@ -515,8 +515,8 @@ export const INKS_FAQ: FaqEntry[] = [
     a: (
       <>
         No ink has a universal value premium. Value tracks specific
-        chase cards — Enchanted / Iconic / Epic printings of marquee
-        characters — regardless of ink. Browse the{' '}
+        chase cards. Enchanted / Iconic / Epic printings of marquee
+        characters, regardless of ink. Browse the{' '}
         <Link href="/market">market</Link> to see the top of the
         catalogue live.
       </>

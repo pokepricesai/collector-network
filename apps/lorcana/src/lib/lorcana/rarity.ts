@@ -77,7 +77,7 @@ export const RARITY_LADDER: readonly LcRarityCode[] = [
   'P',
 ] as const;
 
-/** Sort helper — cards with higher rarity rank sort first. Unknown last. */
+/** Sort helper, cards with higher rarity rank sort first. Unknown last. */
 export function rarityRank(code: LcRarityCode): number {
   const idx = RARITY_LADDER.indexOf(code);
   return idx === -1 ? RARITY_LADDER.length : idx;

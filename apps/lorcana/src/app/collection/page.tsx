@@ -31,16 +31,16 @@ export default async function CollectionPage() {
         <PageHeader />
         <div style={panelStyle}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-2)', marginBottom: 6 }}>
-            Collection storage — migration pending
+            Collection storage, migration pending
           </div>
           <p style={{ margin: '0 0 14px', fontSize: 14, lineHeight: 1.65, color: 'var(--text-muted)' }}>
             Collection storage for LorcanaPrices needs a small database
             migration before this page can hold your cards. The migration
-            script is written and ready — see
+            script is written and ready, see
             {' '}<code style={{ background: 'var(--surface-inset)', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>
               docs/lorcana/schema-request-collection.md
             </code>{' '}
-            in the repository — and matches the approach already used for
+            in the repository, and matches the approach already used for
             YGO and One Piece collections. It creates a table called
             {' '}<code style={{ background: 'var(--surface-inset)', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>
               lorcana_collection_items
@@ -50,7 +50,7 @@ export default async function CollectionPage() {
           </p>
           <p style={{ margin: '0 0 14px', fontSize: 14, lineHeight: 1.65, color: 'var(--text-muted)' }}>
             Once the migration runs, this page will start working
-            automatically. Your account is unaffected in the meantime —
+            automatically. Your account is unaffected in the meantime ,
             you can still browse the whole catalogue, watch the market
             and read guides.
           </p>
@@ -70,7 +70,7 @@ export default async function CollectionPage() {
         <PageHeader />
         <div style={{ ...panelStyle, borderColor: 'rgba(177,42,47,0.35)' }}>
           <p style={{ margin: 0, color: 'var(--text)' }}>
-            Sorry — we couldn&apos;t load your collection right now. Reload the page in a moment.
+            Sorry, we couldn&apos;t load your collection right now. Reload the page in a moment.
           </p>
         </div>
       </main>
@@ -103,7 +103,7 @@ export default async function CollectionPage() {
           label="Realised P/L"
           value={
             summary.unrealised == null
-              ? '—'
+              ? '-'
               : `${summary.unrealised >= 0 ? '+' : ''}${CURRENCY_SYMBOL[currency]}${summary.unrealised.toFixed(0)}`
           }
           hint={summary.unrealised == null ? 'Acquisition values incomplete' : `vs ${currency} acquisition`}

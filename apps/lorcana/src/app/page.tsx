@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title:
-    'LorcanaPrices — every printing, every Enchanted for Disney Lorcana',
+    'LorcanaPrices: every printing, every Enchanted for Disney Lorcana',
   description:
     'Live Disney Lorcana card prices, printings and chase treatments. Enchanted, Iconic, Epic, Legendary and Promo cards priced individually across foil and nonfoil. Full set catalogue and market movers.',
   alternates: { canonical: `${SITE_URL}/` },
@@ -47,7 +47,7 @@ export default async function HomePage() {
       <div className="lc-container" style={{ maxWidth: 900 }}>
         <Faq
           title="Frequently asked questions"
-          intro="Everything a Lorcana collector usually wants to know before signing up. Skip straight to the pages you need — every answer links out."
+          intro="Everything a Lorcana collector usually wants to know before signing up. Skip straight to the pages you need, every answer links out."
           entries={HOMEPAGE_FAQ}
         />
       </div>

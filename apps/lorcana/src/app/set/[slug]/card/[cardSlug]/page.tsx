@@ -91,7 +91,7 @@ export async function generateMetadata({
   const bundle = await getCardBundleByCardId(resolved.cardId);
   if (!bundle) return { title: 'Card not found' };
   return {
-    title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '—'} — priced treatments`,
+    title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '-'}, priced treatments`,
     description: `${bundle.name} from ${slug.toUpperCase()}. Every treatment (base, foil, Enchanted, Iconic, Epic, Legendary, Promo) with live prices.`,
     alternates: {
       canonical: canonicalFor(
@@ -242,7 +242,7 @@ export default async function PrintingPage({
           <div style={{ display: 'grid', gap: 14 }}>
             <div>
               <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
-                {canonicalSetLabel} · #{resolved.matched.collector_number ?? '—'} · {anchorCardView.rarity.label}
+                {canonicalSetLabel} · #{resolved.matched.collector_number ?? '-'} · {anchorCardView.rarity.label}
               </div>
               <h1
                 style={{
@@ -371,13 +371,13 @@ export default async function PrintingPage({
           <section style={{ marginTop: 40, display: 'grid', gap: 16 }}>
             <header>
               <div className="label-mono" style={{ color: 'var(--accent-2)' }}>
-                In this set — other collectibles
+                In this set, other collectibles
               </div>
               <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>
                 Other {bundle.name} versions in {canonicalSetLabel}
               </h2>
               <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                Same name, different collector number or rarity — a distinct collectible with its own artwork.
+                Same name, different collector number or rarity, a distinct collectible with its own artwork.
               </p>
             </header>
             <ul
@@ -417,7 +417,7 @@ export default async function PrintingPage({
                     >
                       <span style={{ display: 'grid', gap: 2 }}>
                         <span style={{ fontWeight: 700, fontSize: 14 }}>
-                          #{cardView.card.collector_number ?? '—'} · {cardView.rarity.label}
+                          #{cardView.card.collector_number ?? '-'} · {cardView.rarity.label}
                         </span>
                         <span
                           className="label-mono"
@@ -490,7 +490,7 @@ export default async function PrintingPage({
                           className="label-mono"
                           style={{ color: 'var(--text-muted)' }}
                         >
-                          {setCode.toUpperCase()} · #{printingView.printing.collector_number ?? '—'} · {cardView.rarity.label}
+                          {setCode.toUpperCase()} · #{printingView.printing.collector_number ?? '-'} · {cardView.rarity.label}
                         </span>
                       </span>
                       <span
@@ -507,7 +507,7 @@ export default async function PrintingPage({
         )}
 
         <CardFaq
-          title={`FAQ — ${bundle.name}${resolved.matched.collector_number ? ` #${resolved.matched.collector_number}` : ''}`}
+          title={`FAQ , ${bundle.name}${resolved.matched.collector_number ? ` #${resolved.matched.collector_number}` : ''}`}
           entries={exactFaqEntries}
         />
         <EbayAffiliateDisclosure />
@@ -639,7 +639,7 @@ function Breadcrumbs({
       </Link>
       <span aria-hidden>›</span>
       <Link href={setPath} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-        {setCode} — {setName}
+        {setCode} , {setName}
       </Link>
       <span aria-hidden>›</span>
       <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>

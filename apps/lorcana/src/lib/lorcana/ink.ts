@@ -44,7 +44,7 @@ export const LC_INK_DESCRIPTOR: Record<LcInk, string> = {
   steel: 'resilience, courage, force',
 };
 
-/** Chip class token — Tailwind classes live in globals.css. */
+/** Chip class token. Tailwind classes live in globals.css. */
 export function inkChipClass(ink: LcInk): string {
   return `chip chip-ink chip-ink--${ink}`;
 }

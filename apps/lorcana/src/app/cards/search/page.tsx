@@ -94,7 +94,7 @@ export default async function SearchPage({ searchParams }: Props) {
               textAlign: 'center',
             }}
           >
-            No cards matched — try a shorter query or check spelling.
+            No cards matched. Try a shorter query or check spelling.
           </div>
         ) : (
           <div
@@ -151,7 +151,7 @@ export default async function SearchPage({ searchParams }: Props) {
                     {card.name}
                   </div>
                   <div className="label-mono">
-                    {(card.collector_number ?? '—')} · {rarity.label}
+                    {(card.collector_number ?? '-')} · {rarity.label}
                   </div>
                   {gd.inks.length > 0 && (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

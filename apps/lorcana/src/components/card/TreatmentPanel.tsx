@@ -22,10 +22,10 @@ export default function TreatmentPanel({
   currency?: LorcanaCurrency;
 }) {
   const { treatment, pricing, printing, set } = printingView;
-  const setLabel = set?.code?.toUpperCase() ?? '—';
+  const setLabel = set?.code?.toUpperCase() ?? '-';
   const fingerprint = [
     setLabel,
-    printing.collector_number ?? '—',
+    printing.collector_number ?? '-',
     treatment.short,
   ];
 

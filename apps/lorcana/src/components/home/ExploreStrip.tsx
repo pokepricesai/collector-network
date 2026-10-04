@@ -44,7 +44,7 @@ export default function ExploreStrip() {
             padding: 0,
             margin: 0,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))',
             gap: 10,
           }}
         >

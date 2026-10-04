@@ -18,7 +18,7 @@ export const LORCANA_ARTICLES: ArticleMeta[] = [
     slug: 'most-valuable-disney-lorcana-cards',
     title: 'The Most Valuable Disney Lorcana Cards',
     description:
-      'A live look at the highest-priced Disney Lorcana cards on the secondary market — Enchanted, Iconic and Epic overprints, plus which promo prints command the biggest premiums.',
+      'A live look at the highest-priced Disney Lorcana cards on the secondary market. Enchanted, Iconic and Epic overprints, plus which promo prints command the biggest premiums.',
     metaTitle:
       'The Most Valuable Disney Lorcana Cards · LorcanaPrices',
     metaDescription:
@@ -32,7 +32,7 @@ export const LORCANA_ARTICLES: ArticleMeta[] = [
     title:
       'Disney Lorcana Rarities Explained: Enchanted, Iconic, Epic, Legendary and More',
     description:
-      'What every Lorcana rarity actually means — from base Common to the 1:432 Enchanted overprint. How rarity, treatment and finish combine to make a printing.',
+      'What every Lorcana rarity actually means, from base Common to the 1:432 Enchanted overprint. How rarity, treatment and finish combine to make a printing.',
     metaTitle:
       'Disney Lorcana Rarities Explained · LorcanaPrices',
     metaDescription:

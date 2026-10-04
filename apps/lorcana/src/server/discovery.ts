@@ -188,7 +188,7 @@ export async function getPricedTiles(opts: DiscoveryQueryOpts): Promise<Discover
   //    Outlier rule: discard only if BOTH (price > 5x avg_30d) AND
   //    (avg_30d is a meaningful floor — >= 5 units in this currency).
   //    Legitimate scarce promos with thin trend history stay.
-  const OUTLIER_FLOOR = 5;      // 5 EUR / USD — nothing below this is worth policing
+  const OUTLIER_FLOOR = 5;      // 5 EUR / USD, nothing below this is worth policing
   const OUTLIER_MULTIPLE = 5;   // 5x above trend
   const norm: { printingId: string; price: number; finish: string | null; source: string | null; region: string | null; currency: string }[] = [];
   for (const r of priceRows) {

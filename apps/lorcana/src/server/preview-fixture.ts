@@ -130,7 +130,7 @@ const CARDS = [
     language: 'en',
     rarity: 'Super rare',
     artist: 'Nicholas Kole',
-    rules_text: 'FREEZE — Exert chosen opposing character.',
+    rules_text: 'FREEZE. Exert chosen opposing character.',
     images: null,
     gamedata: {
       ink: 'Amethyst', inkCost: 4, inkable: true, lore: 2,
@@ -196,7 +196,7 @@ const CARDS = [
     language: 'en',
     rarity: 'Rare',
     artist: 'Isabella Ceravolo',
-    rules_text: 'GET TO WORK — When you play this character you may draw a card.',
+    rules_text: 'GET TO WORK. When you play this character you may draw a card.',
     images: null,
     gamedata: {
       ink: 'Amber', inkCost: 5, inkable: true, lore: 2,
@@ -218,7 +218,7 @@ const CARDS = [
     language: 'en',
     rarity: 'Legendary',
     artist: 'Nicholas Kole',
-    rules_text: 'Reckless — This character can\'t quest and must challenge if able.',
+    rules_text: 'Reckless. This character can\'t quest and must challenge if able.',
     images: null,
     gamedata: {
       ink: 'Ruby', inkCost: 9, inkable: true, lore: 2,

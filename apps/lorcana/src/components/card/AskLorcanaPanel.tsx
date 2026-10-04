@@ -70,7 +70,7 @@ export default function AskLorcanaPanel(props: AskLorcanaPanelProps) {
         Get grounded answers about {props.cardName}
       </h2>
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.55 }}>
-        Answers use this card&apos;s live database facts — price,
+        Answers use this card&apos;s live database facts, price,
         printings, rarity, ink, stats. LorcanaPrices AI does not
         invent card details.
       </p>

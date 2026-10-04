@@ -12,7 +12,7 @@ export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Lorcana market — most valuable cards, Enchanted chase, Iconic overprints',
+  title: 'Lorcana market: most valuable cards, Enchanted chase, Iconic overprints',
   description:
     'Live Disney Lorcana market at a glance. Most valuable cards, Enchanted overprints and Iconic-tier chase, priced individually by cheapest current retail.',
   alternates: { canonical: `${SITE_URL}/market` },

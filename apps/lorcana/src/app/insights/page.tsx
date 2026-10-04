@@ -5,7 +5,7 @@ import { LORCANA_ARTICLES } from '@/lib/insights';
 
 export const metadata: Metadata = {
   title:
-    'Lorcana market insights — rarity guides, chase-card analysis and collecting basics',
+    'Lorcana market insights, rarity guides, chase-card analysis and collecting basics',
   description:
     'Editorial guides for Disney Lorcana collectors. Rarity explainers, chase-card tracking, collecting basics and the live top-price ranking.',
   alternates: { canonical: canonicalFor('/insights') },

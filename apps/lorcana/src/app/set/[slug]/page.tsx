@@ -91,7 +91,7 @@ export async function generateMetadata({
   if (!bundle) return { title: 'Set not found' };
   const setLabel = bundle.set.name;
   return {
-    title: `${setLabel} — Lorcana set value, chase cards and every printing`,
+    title: `${setLabel}. Lorcana set value, chase cards and every printing`,
     description: `Complete Disney Lorcana ${setLabel} (${bundle.set.code.toUpperCase()}) set: card list, rarity mix, Enchanted / Iconic / Epic count, foil vs nonfoil value split and live retail on every printing.`,
     alternates: {
       canonical: canonicalFor(`/set/${encodeURIComponent(bundle.set.code.toLowerCase())}`),
@@ -245,9 +245,14 @@ export default async function SetPage({
   // by SetTaxonomyLinks for the crawlable "Explore this set" block.
   const taxonomy = summariseSetTaxonomy(cards);
 
+  // Build a per-card price lookup from EVERY priced hero tile returned
+  // by getSetMarketForLorcana, not just mostValuable + cheapest. The
+  // old code priced only the top 5 + bottom 5 cards (≤ 10 tiles) and
+  // every other card in the set fell through to `null` — so the live
+  // checklist displayed "no price" for 195+ cards per 215-tile set
+  // even though tcg_market_prices_current has quotes for ~100% of them.
   const priceLookup = new Map<string, number>();
-  for (const t of market.mostValuable) priceLookup.set(t.cardId, t.priceUsd);
-  for (const t of market.cheapest) priceLookup.set(t.cardId, t.priceUsd);
+  for (const t of market.allPriced) priceLookup.set(t.cardId, t.priceUsd);
 
   const entries: SetGridEntry[] = uniqueNames.map((name) => {
     const family = byName.get(name)!;
@@ -283,7 +288,7 @@ export default async function SetPage({
   const collectionLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: `${set.name} — Disney Lorcana`,
+    name: `${set.name}. Disney Lorcana`,
     url: canonical,
     hasPart: uniqueNames.slice(0, 100).map((name) => ({
       '@type': 'CreativeWork',
@@ -396,7 +401,7 @@ export default async function SetPage({
           />
 
           <Faq
-            title={`FAQ — ${set.name}`}
+            title={`FAQ , ${set.name}`}
             entries={buildSetFaq({
               set,
               cards: [...cards],

@@ -11,9 +11,9 @@ import { canonicalFor } from '../../lib/seo';
 export const revalidate = 86_400;
 
 export const metadata: Metadata = {
-  title: 'Lorcana AI — ask questions about any Lorcana card',
+  title: 'Lorcana AI: ask questions about any Lorcana card',
   description:
-    'Ask the Lorcana AI about any card in the catalogue. Grounded in the same data that powers the rest of LorcanaPrices — sets, rarities, prices, effects, characters. Open any card and use the AI panel to ask a question.',
+    'Ask the Lorcana AI about any card in the catalogue. Grounded in the same data that powers the rest of LorcanaPrices, sets, rarities, prices, effects, characters. Open any card and use the AI panel to ask a question.',
   alternates: { canonical: canonicalFor('/ai') },
 };
 
@@ -46,7 +46,7 @@ export default function AiDiscoveryPage() {
         <h1 style={{ fontSize: 32, margin: 0 }}>Lorcana AI</h1>
         <p style={{ color: 'var(--text-muted)', maxWidth: 720, marginTop: 8 }}>
           Ask questions about any Lorcana card. The AI is grounded in the same
-          card database that powers the rest of the site — printings, rarities,
+          card database that powers the rest of the site, printings, rarities,
           effects, live pricing, character families. It answers about the exact
           card whose page you&rsquo;re on, so context is always precise.
         </p>

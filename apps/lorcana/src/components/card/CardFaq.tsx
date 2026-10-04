@@ -21,7 +21,7 @@ interface CardFaqProps {
   entries: readonly CardFaqEntry[];
   /** Optional short intro paragraph above the questions. */
   intro?: string;
-  /** Section id — defaults to `faq`. */
+  /** Section id, defaults to `faq`. */
   id?: string;
 }
 

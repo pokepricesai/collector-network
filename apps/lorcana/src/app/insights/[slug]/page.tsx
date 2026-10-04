@@ -143,7 +143,7 @@ async function MostValuableBody(currency: LorcanaCurrency): Promise<React.ReactE
         the current highest retail observation across the card&apos;s printings,
         deduplicated to one entry per card so a single card&apos;s foil version
         does not push the nonfoil off the board. Toggle currency in the header
-        to swap the ranking market — never FX-converted.
+        to swap the ranking market, never FX-converted.
       </p>
       {top.length > 0 ? (
         <ol style={{ paddingLeft: 20, margin: '10px 0 24px' }}>
@@ -156,7 +156,7 @@ async function MostValuableBody(currency: LorcanaCurrency): Promise<React.ReactE
               <Link href={href} style={{ fontWeight: 700 }}>
                 {tile.name}
               </Link>{' '}
-              — {formatCurrencyPrice(tile.priceUsd, tile.priceCurrency || currency)}
+              , {formatCurrencyPrice(tile.priceUsd, tile.priceCurrency || currency)}
               {tile.rarity && ` · ${tile.rarity}`}
               {tile.finish && ` · ${tile.finish}`}
               {tile.setName && ` · ${tile.setName}`}
@@ -165,18 +165,18 @@ async function MostValuableBody(currency: LorcanaCurrency): Promise<React.ReactE
           })}
         </ol>
       ) : (
-        <p><em>No priced rows yet — check back after the next data refresh.</em></p>
+        <p><em>No priced rows yet, check back after the next data refresh.</em></p>
       )}
       <h2 style={{ marginTop: 28 }}>Why the top of this list is Enchanted-heavy</h2>
       <p>
         Enchanted overprints are pulled at roughly 1:432 in modern packs and
         replace a Common slot, so there is no way to open the set and reliably
-        find one. Some Enchanted variants have iconic Disney characters —
-        Elsa, Ariel, Mickey — with alternate art that is unique to that slot.
+        find one. Some Enchanted variants have iconic Disney characters ,
+        Elsa, Ariel, Mickey, with alternate art that is unique to that slot.
         That&apos;s why the top of any Lorcana value list is dominated by
         Enchanted cards from the earlier chapters.
       </p>
-      <h2 style={{ marginTop: 28 }}>Iconic and Epic — the newer premium tier</h2>
+      <h2 style={{ marginTop: 28 }}>Iconic and Epic, the newer premium tier</h2>
       <p>
         Chapter 7 (<em>Archazia&apos;s Island</em>) introduced the Iconic tier;
         Chapter 8 (<em>Fabled</em>) added Epic. Both are premium overprints
@@ -206,7 +206,7 @@ function RaritiesExplainedBody() {
       <p>
         Lorcana&apos;s rarity model has grown chapter by chapter. To read a
         card&apos;s price it helps to know where its rarity sits in that hierarchy,
-        and — critically — how rarity differs from <em>treatment</em> and{' '}
+        and, critically, how rarity differs from <em>treatment</em> and{' '}
         <em>finish</em>. All three combine to define a printing, and it&apos;s
         the printing, not the card, that has a price.
       </p>
@@ -216,37 +216,37 @@ function RaritiesExplainedBody() {
         printed on the bottom-left of the card frame:
       </p>
       <ul style={{ paddingLeft: 20 }}>
-        <li><strong>Common (C)</strong> — the largest slot in every pack.</li>
-        <li><strong>Uncommon (UC)</strong> — three per pack.</li>
-        <li><strong>Rare (R)</strong> — one per pack.</li>
-        <li><strong>Super Rare (SR)</strong> — one per pack or occasionally shared with Rare.</li>
-        <li><strong>Legendary (L)</strong> — the ceiling for a base rarity. Roughly 1:12 packs.</li>
+        <li><strong>Common (C)</strong>, the largest slot in every pack.</li>
+        <li><strong>Uncommon (UC)</strong>, three per pack.</li>
+        <li><strong>Rare (R)</strong>, one per pack.</li>
+        <li><strong>Super Rare (SR)</strong>, one per pack or occasionally shared with Rare.</li>
+        <li><strong>Legendary (L)</strong>, the ceiling for a base rarity. Roughly 1:12 packs.</li>
       </ul>
-      <h2 style={{ marginTop: 24 }}>Chase overprints — the collector tier</h2>
+      <h2 style={{ marginTop: 24 }}>Chase overprints, the collector tier</h2>
       <p>
         On top of the base tiers, Ravensburger has added dedicated chase
-        treatments. These replace a Common slot in the pack — you never pull
+        treatments. These replace a Common slot in the pack, you never pull
         both a Common and an Enchanted from the same pack.
       </p>
       <ul style={{ paddingLeft: 20 }}>
         <li>
-          <strong>Enchanted</strong> — every main set from Chapter 1 onward
+          <strong>Enchanted</strong>, every main set from Chapter 1 onward
           includes a small set of Enchanted overprints (roughly 1:432 packs).
           Unique alt art. Always foil. See the{' '}
           <Link href="/market/enchanted">live Enchanted market</Link>.
         </li>
         <li>
-          <strong>Iconic</strong> — introduced in Chapter 7
+          <strong>Iconic</strong>, introduced in Chapter 7
           (<em>Archazia&apos;s Island</em>). Heavy foil treatment on marquee
           characters. Live tracking on the{' '}
           <Link href="/market/iconic">Iconic market</Link>.
         </li>
         <li>
-          <strong>Epic</strong> — introduced in Chapter 8 (<em>Fabled</em>).
+          <strong>Epic</strong>, introduced in Chapter 8 (<em>Fabled</em>).
           A third premium tier above Legendary.
         </li>
         <li>
-          <strong>Promo</strong> — event, league, D23 and preview prints.
+          <strong>Promo</strong>, event, league, D23 and preview prints.
           These live in dedicated promo sets (<code>p1</code>, <code>p2</code>,
           <code>d23</code>). Rare and often not tournament-legal.
         </li>
@@ -315,9 +315,9 @@ function CollectingGuideBody() {
         those main sets, three families of supplementary sets exist:
       </p>
       <ul style={{ paddingLeft: 20 }}>
-        <li><strong>Promo sets</strong> (<code>p1</code>, <code>p2</code>, …) — event and league prints, often with alt art. Not always tournament legal.</li>
-        <li><strong>D23 Collection</strong> (<code>d23</code>) — the exclusive D23 print run.</li>
-        <li><strong>Format Coconut</strong> (<code>coconut</code>) and other one-off products (<code>pd1</code>, <code>cp</code>, <code>cc1</code>) — small dedicated releases.</li>
+        <li><strong>Promo sets</strong> (<code>p1</code>, <code>p2</code>, …), event and league prints, often with alt art. Not always tournament legal.</li>
+        <li><strong>D23 Collection</strong> (<code>d23</code>), the exclusive D23 print run.</li>
+        <li><strong>Format Coconut</strong> (<code>coconut</code>) and other one-off products (<code>pd1</code>, <code>cp</code>, <code>cc1</code>), small dedicated releases.</li>
       </ul>
       <p>
         You can walk the full catalogue on the{' '}
@@ -350,7 +350,7 @@ function CollectingGuideBody() {
       <ul style={{ paddingLeft: 20 }}>
         <li>Enchanted overprints appear at roughly 1:432 packs. A booster box does not guarantee an Enchanted pull.</li>
         <li>Iconic (Chapter 7+) and Epic (Chapter 8+) sit at similar chase-rate ballparks in their respective sets.</li>
-        <li>Regular Legendary is the base ceiling — expect ~1:12 packs.</li>
+        <li>Regular Legendary is the base ceiling, expect ~1:12 packs.</li>
       </ul>
       <p>
         Sealed pack cost has risen over the life of the game, so the

@@ -89,7 +89,7 @@ export async function CollectionPromptStrip({ cardName, returnPath }: Collection
         color: 'var(--text-strong)',
       }}
     >
-      <span style={{ fontWeight: 700 }}>Add {cardName} to your collection —</span>
+      <span style={{ fontWeight: 700 }}>Add {cardName} to your collection ,</span>
       <span style={{ color: 'var(--text-muted)' }}>
         pick a treatment below (Common, Foil, Enchanted, …) to save the exact printing.
       </span>

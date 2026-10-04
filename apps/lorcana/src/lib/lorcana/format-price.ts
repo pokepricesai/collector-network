@@ -13,7 +13,7 @@ const KNOWN: Record<string, { locale: string; opts: Intl.NumberFormatOptions }> 
 };
 
 export function formatPrice(price: number | null | undefined, currency: string): string {
-  if (price == null || Number.isNaN(price)) return '—';
+  if (price == null || Number.isNaN(price)) return '-';
   const upper = (currency ?? '').toUpperCase() || 'USD';
   const spec = KNOWN[upper];
   try {

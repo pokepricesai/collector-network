@@ -96,7 +96,7 @@
   --step-5:  clamp(27px,   4vw   + 18px, 40px);
   --step-6:  clamp(30px,   5vw   + 20px, 56px);
 
-  /* ── Six Lorcana inks — palette + accessible ink shade ───── */
+  /* ── Six Lorcana inks, palette + accessible ink shade ───── */
   --ink-amber:        #E1A11B;
   --ink-amber-ink:    #4C3306;
   --ink-amethyst:     #6A43BE;
@@ -721,6 +721,23 @@ button.nav-link, button.btn, button.chip {
   .lc-hero-logo { height: 54px !important; }
 }
 
+/* Hero grid: one stacked column on mobile so the "Most valuable right
+   now" aside gets the full width (otherwise its 110px-wide inner card
+   image swallows the whole aside at 375px and the card name wraps one
+   letter per line). Two columns on tablet+ matches the original
+   desktop proposition + top-value side-by-side layout. */
+.lc-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+}
+@media (min-width: 768px) {
+  .lc-hero-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 40px;
+  }
+}
+
 /* Six-ink wheel (very low opacity, behind hero) */
 .lc-ink-wheel {
   position: absolute;
@@ -811,7 +828,7 @@ button.nav-link, button.btn, button.chip {
   }
 }
 
-/* Chase panel — dark surface for Enchanted spotlight etc. */
+/* Chase panel, dark surface for Enchanted spotlight etc. */
 .lc-chase-panel {
   position: relative;
   color: #F0E1B7;
@@ -827,7 +844,7 @@ button.nav-link, button.btn, button.chip {
 .lc-chase-panel h2, .lc-chase-panel h3 { color: #F5E7B8; }
 .lc-chase-panel .label-mono { color: var(--gold-300); }
 
-/* Enchanted glow — used on Enchanted-flagged card tiles */
+/* Enchanted glow, used on Enchanted-flagged card tiles */
 .lc-enchanted-glow {
   position: relative;
 }

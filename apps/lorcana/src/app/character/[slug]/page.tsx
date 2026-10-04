@@ -47,16 +47,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
   const canonical = canonicalFor(`/character/${data.slug}`);
   return {
-    title: `${data.name} — every Lorcana card, printing and price`,
+    title: `${data.name}: every Lorcana card, printing and price`,
     description: `Every Disney Lorcana card featuring ${data.name}. All versions, sets, rarities and inks with live retail and graded pricing. ${data.totalCards} card${data.totalCards === 1 ? '' : 's'} indexed.`,
     alternates: { canonical },
   };
 }
 
 interface CharacterCardPricing {
-  /** Printings grouped by tcg_card_id — used by the tile Add control. */
+  /** Printings grouped by tcg_card_id, used by the tile Add control. */
   printingsByCard: Map<string, CharacterTilePrinting[]>;
-  /** Cheapest native-source price per tcg_card_id — shown on the tile. */
+  /** Cheapest native-source price per tcg_card_id, shown on the tile. */
   priceByCard: Map<string, number>;
   /** The single highest-priced version across the whole character —
    *  feeds the "About X" content block. */

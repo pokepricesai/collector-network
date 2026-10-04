@@ -20,7 +20,7 @@ export default function SiteStructuredData() {
           height: 512,
         },
         description:
-          'LorcanaPrices. Live Disney Lorcana card prices, printings, chase treatments and set catalogue. Independent price aggregator — not affiliated with Disney or Ravensburger.',
+          'LorcanaPrices. Live Disney Lorcana card prices, printings, chase treatments and set catalogue. Independent price aggregator, not affiliated with Disney or Ravensburger.',
       },
       {
         '@type': 'WebSite',

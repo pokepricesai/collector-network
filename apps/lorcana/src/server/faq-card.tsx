@@ -56,7 +56,7 @@ export function buildCardFaq({
           The cheapest priced printing of {name} is currently{' '}
           <strong>{priceStr}</strong> on the LorcanaPrices live retail
           feed (Cardmarket EU).{bandStr} Every printing is priced
-          individually — see the treatment panels on this page for the
+          individually, see the treatment panels on this page for the
           full spread.
         </>
       ),
@@ -144,12 +144,12 @@ export function buildCardFaq({
     a: (
       <>
         Use the &quot;Find {name} on eBay&quot; button at the top of the
-        page — it opens a live eBay search targeted to the exact card,
+        page, it opens a live eBay search targeted to the exact card,
         set and collector number. LorcanaPrices doesn&apos;t sell cards
         directly.
       </>
     ),
-    plainAnswer: `Use the "Find on eBay" button at the top of the page — it opens a live eBay search for the exact card, set and collector number. LorcanaPrices does not sell cards directly.`,
+    plainAnswer: `Use the "Find on eBay" button at the top of the page, it opens a live eBay search for the exact card, set and collector number. LorcanaPrices does not sell cards directly.`,
   });
 
   entries.push({

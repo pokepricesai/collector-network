@@ -182,7 +182,7 @@ export default function BrowseControls<
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
         Showing {visible.length} of {props.tiles.length}
-        {visible.length === 0 && props.emptyLabel ? ` — ${props.emptyLabel}` : ''}
+        {visible.length === 0 && props.emptyLabel ? ` , ${props.emptyLabel}` : ''}
       </div>
       {props.children(visible, { total: props.tiles.length, shown: visible.length })}
     </div>

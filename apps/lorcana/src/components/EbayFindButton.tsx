@@ -31,7 +31,7 @@ export interface EbayFindButtonProps {
   rarity?: string | null;
   /** 'foil' | 'nonfoil' | null. */
   finish?: string | null;
-  /** @deprecated — prefer the explicit `rarity` + `finish` pair. */
+  /** @deprecated, prefer the explicit `rarity` + `finish` pair. */
   finishOrTreatment?: string | null;
   /** Server-resolved regional marketplace (see
    *  resolveLorcanaMarketplace in lib/lorcana/ebay.ts). */

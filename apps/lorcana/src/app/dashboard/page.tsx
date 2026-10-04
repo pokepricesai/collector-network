@@ -92,7 +92,7 @@ export default async function DashboardPage() {
         />
         <StatTile
           label="Collection value"
-          value={collectionOk ? formatPrice(totalValue, currency, { digits: 0 }) : '—'}
+          value={collectionOk ? formatPrice(totalValue, currency, { digits: 0 }) : '-'}
           hint={
             collection == null
               ? 'Temporarily unavailable'
@@ -105,12 +105,12 @@ export default async function DashboardPage() {
         />
         <StatTile
           label="Sets started"
-          value={sets == null ? '—' : sets.setsStarted.toLocaleString()}
+          value={sets == null ? '-' : sets.setsStarted.toLocaleString()}
           hint={sets == null ? 'Temporarily unavailable' : `${sets.setsCompleted} completed`}
         />
         <StatTile
           label="Watchlist"
-          value={watchlistOk ? watchlistOk.count.toLocaleString() : '—'}
+          value={watchlistOk ? watchlistOk.count.toLocaleString() : '-'}
           hint={watchlist == null ? 'Temporarily unavailable' : watchlistOk == null ? 'Storage pending' : 'Cards you don’t yet own'}
         />
       </section>

@@ -9,7 +9,7 @@ export const revalidate = 3600;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Disney Lorcana — every set catalogued',
+  title: 'Disney Lorcana: every set catalogued',
   description:
     'Complete Disney Lorcana set directory. Every main set, starter deck, promo pack and event product with card counts, treatment tallies and release dates.',
   alternates: { canonical: `${SITE_URL}/browse` },
@@ -78,7 +78,7 @@ export default async function BrowsePage() {
                   )}
                 </>
               ) : (
-                <>Sets are on their way — every main product, starter deck and promo pack.</>
+                <>Sets are on their way, every main product, starter deck and promo pack.</>
               )}
             </p>
           </div>

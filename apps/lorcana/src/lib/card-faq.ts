@@ -188,7 +188,7 @@ export function buildExactCollectibleFaq(input: ExactFaqInput): CardFaqEntry[] {
   if (finish === 'foil') {
     entries.push({
       q: `Is this ${cardName} foil or nonfoil?`,
-      a: `This exact ${cardName}${titleTail} printing is foil — Lorcana's cold-foil treatment on the full card face.`,
+      a: `This exact ${cardName}${titleTail} printing is foil. Lorcana's cold-foil treatment on the full card face.`,
     });
   }
 
@@ -205,7 +205,7 @@ export function buildExactCollectibleFaq(input: ExactFaqInput): CardFaqEntry[] {
     const subtitle = anchorCard.gamedata.version ? ` (${anchorCard.gamedata.version})` : '';
     entries.push({
       q: `What version of ${cardName} is this?`,
-      a: `This is the ${chaseLabel} version of ${cardName}${subtitle} — a collector-chase overprint distinct from the base-rarity printing.`,
+      a: `This is the ${chaseLabel} version of ${cardName}${subtitle}, a collector-chase overprint distinct from the base-rarity printing.`,
     });
   }
 
@@ -213,7 +213,7 @@ export function buildExactCollectibleFaq(input: ExactFaqInput): CardFaqEntry[] {
   if (gradedRowCount > 0) {
     entries.push({
       q: `Are there graded prices for ${cardName}?`,
-      a: `Yes. LorcanaPrices tracks ${gradedRowCount} graded observation${gradedRowCount === 1 ? '' : 's'} attributed to ${cardName} (card-level attribution — not pinned to this exact printing). See the graded panel above for grader, grade and current prices.`,
+      a: `Yes. LorcanaPrices tracks ${gradedRowCount} graded observation${gradedRowCount === 1 ? '' : 's'} attributed to ${cardName} (card-level attribution, not pinned to this exact printing). See the graded panel above for grader, grade and current prices.`,
     });
   }
 
@@ -241,7 +241,7 @@ export function buildExactCollectibleFaq(input: ExactFaqInput): CardFaqEntry[] {
   // 9. Where to buy.
   entries.push({
     q: `Where can I buy ${cardName}?`,
-    a: `${cardName} is sold on TCGPlayer (USD), Cardmarket (EUR) and eBay. The "Find on eBay" button on this page opens a targeted search for this exact collectible. TCGPlayer, Cardmarket and eBay links on LorcanaPrices are affiliate links — we may earn a commission at no cost to you.`,
+    a: `${cardName} is sold on TCGPlayer (USD), Cardmarket (EUR) and eBay. The "Find on eBay" button on this page opens a targeted search for this exact collectible. TCGPlayer, Cardmarket and eBay links on LorcanaPrices are affiliate links, we may earn a commission at no cost to you.`,
   });
 
   // 10. Character identity (characters only).
@@ -264,7 +264,7 @@ export function buildExactCollectibleFaq(input: ExactFaqInput): CardFaqEntry[] {
     if (charSlug) {
       entries.push({
         q: `What other Lorcana cards feature ${characterBaseName(cardName)}?`,
-        a: `Every Lorcana card featuring ${base} is listed on the ${link(`/character/${charSlug}`, `${base} character page`)} — grouped by card version with live prices for each.`,
+        a: `Every Lorcana card featuring ${base} is listed on the ${link(`/character/${charSlug}`, `${base} character page`)}, grouped by card version with live prices for each.`,
       });
     }
   }
@@ -308,7 +308,7 @@ export function buildLogicalCardFaq(input: LogicalFaqInput): CardFaqEntry[] {
     q: `How many versions of ${cardName} exist in Lorcana?`,
     a: versionCount === 1
       ? `${cardName} has 1 version tracked in Lorcana so far.`
-      : `${cardName} has ${versionCount} distinct versions tracked across the Lorcana catalogue — different sets, rarities or treatments, each priced individually.`,
+      : `${cardName} has ${versionCount} distinct versions tracked across the Lorcana catalogue, different sets, rarities or treatments, each priced individually.`,
   });
 
   // 2. Which sets contain this card.
@@ -399,7 +399,7 @@ export function buildLogicalCardFaq(input: LogicalFaqInput): CardFaqEntry[] {
   if (gradedRowCount > 0) {
     entries.push({
       q: `Are there graded ${cardName} prices?`,
-      a: `Yes. LorcanaPrices tracks ${gradedRowCount} card-family graded observation${gradedRowCount === 1 ? '' : 's'} for ${cardName}. These are card-attributed quotes — a graded ${cardName} without pinning to a specific exact printing. Open an exact version below to see printing-specific graded panels where available.`,
+      a: `Yes. LorcanaPrices tracks ${gradedRowCount} card-family graded observation${gradedRowCount === 1 ? '' : 's'} for ${cardName}. These are card-attributed quotes, a graded ${cardName} without pinning to a specific exact printing. Open an exact version below to see printing-specific graded panels where available.`,
     });
   }
 
@@ -439,7 +439,7 @@ export function buildLogicalCardFaq(input: LogicalFaqInput): CardFaqEntry[] {
   // 9. Where to buy.
   entries.push({
     q: `Where can I buy ${cardName}?`,
-    a: `${cardName} is sold on TCGPlayer (USD), Cardmarket (EUR) and eBay. Each exact version below carries a "Find on eBay" link that opens a targeted search for that specific printing. TCGPlayer, Cardmarket and eBay links on LorcanaPrices are affiliate links — we may earn a commission at no cost to you.`,
+    a: `${cardName} is sold on TCGPlayer (USD), Cardmarket (EUR) and eBay. Each exact version below carries a "Find on eBay" link that opens a targeted search for that specific printing. TCGPlayer, Cardmarket and eBay links on LorcanaPrices are affiliate links, we may earn a commission at no cost to you.`,
   });
 
   return entries;

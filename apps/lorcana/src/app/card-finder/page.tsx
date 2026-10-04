@@ -14,7 +14,7 @@ export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Lorcana card finder — filter by ink, rarity, type and inkability',
+  title: 'Lorcana card finder: filter by ink, rarity, type and inkability',
   description:
     'Find any Disney Lorcana card by ink, rarity, card type, inkability and name. Results ranked by cheapest current USD retail across every printing.',
   alternates: { canonical: canonicalFor('/card-finder') },
@@ -67,7 +67,7 @@ export default async function CardFinderPage({ searchParams }: Props) {
           </h1>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, maxWidth: 640, lineHeight: 1.55 }}>
             The full catalogue is here. Combine ink, rarity, card type
-            and inkability to narrow it — or just search by name. Results
+            and inkability to narrow it, or just search by name. Results
             ranked by highest current {CURRENCY_SOURCE_NAME[currency]} retail
             ({currency}) by default. Toggle currency in the header to swap
             the ranking market.
@@ -141,8 +141,8 @@ export default async function CardFinderPage({ searchParams }: Props) {
           </Field>
           <Field label="Sort by">
             <select name="sort" defaultValue={filters.sort ?? 'price-desc'} className="lc-input">
-              <option value="price-desc">Price — high to low</option>
-              <option value="price-asc">Price — low to high</option>
+              <option value="price-desc">Price: high to low</option>
+              <option value="price-asc">Price: low to high</option>
               <option value="name-asc">Name (A–Z)</option>
             </select>
           </Field>

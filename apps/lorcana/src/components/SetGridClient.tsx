@@ -180,21 +180,28 @@ export function SetGridClient({ entries }: Props) {
             </div>
             <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.25 }}>{e.name}</div>
             <div className="label-mono" style={{ color: 'var(--text-muted)' }}>
-              {e.collectorNumber ?? '—'} · {e.rarityLabel}
+              {e.collectorNumber ?? '-'} · {e.rarityLabel}
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {e.treatmentCount > 1 && (
                 <span
                   className="chip chip-gold"
                   style={{ width: 'fit-content' }}
-                  title="Multiple treatments — foil, nonfoil, Enchanted, Iconic, Epic, Legendary, Promo"
+                  title="Multiple treatments, foil, nonfoil, Enchanted, Iconic, Epic, Legendary, Promo"
                 >
                   +{e.treatmentCount - 1} treatments
                 </span>
               )}
-              {e.priceUsd != null && (
+              {e.priceUsd != null ? (
                 <span style={{ marginLeft: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 700 }}>
                   {formatPrice(e.priceUsd, e.priceCurrency ?? 'USD')}
+                </span>
+              ) : (
+                <span
+                  style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-subtle)', fontStyle: 'italic' }}
+                  title="No market quote on file for this printing yet"
+                >
+                  No price data
                 </span>
               )}
             </div>

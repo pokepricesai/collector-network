@@ -46,13 +46,8 @@ export default function Hero({
   return (
     <section className="lc-hero" style={{ paddingTop: 44, paddingBottom: 36 }}>
       <div
-        className="lc-container"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 1fr)',
-          gap: 40,
-          alignItems: 'start',
-        }}
+        className="lc-container lc-hero-grid"
+        style={{ alignItems: 'start' }}
       >
         {/* ── LEFT: proposition + search + CTAs ─────────────── */}
         <div style={{ display: 'grid', gap: 18, minWidth: 0 }}>

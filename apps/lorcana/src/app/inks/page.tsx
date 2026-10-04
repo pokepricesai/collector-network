@@ -6,9 +6,9 @@ import Faq from '@/components/Faq';
 import { INKS_FAQ } from '@/lib/faq-content';
 
 export const metadata: Metadata = {
-  title: 'Lorcana ink colours — Amber, Amethyst, Emerald, Ruby, Sapphire, Steel',
+  title: 'Lorcana ink colours. Amber, Amethyst, Emerald, Ruby, Sapphire, Steel',
   description:
-    'Browse Disney Lorcana cards by ink. Six inks — Amber, Amethyst, Emerald, Ruby, Sapphire and Steel — anchor deckbuilding and collector discovery.',
+    'Browse Disney Lorcana cards by ink. Six inks. Amber, Amethyst, Emerald, Ruby, Sapphire and Steel, anchor deckbuilding and collector discovery.',
   alternates: { canonical: canonicalFor('/inks') },
 };
 

@@ -43,7 +43,7 @@ export default async function WatchlistPage() {
             background: 'var(--surface)',
           }}
         >
-          Watchlist is temporarily unavailable — retry in a moment.
+          Watchlist is temporarily unavailable, retry in a moment.
         </div>
       ) : result.value.items.length === 0 ? (
         <div

@@ -30,7 +30,7 @@ import type { LcRarityCode } from './rarity';
 export type LcFinish = 'nonfoil' | 'foil';
 
 export interface LcTreatmentInfo {
-  /** Machine code — stable, url-safe. */
+  /** Machine code, stable, url-safe. */
   code: string;
   /** Human label shown in headings and chips. */
   label: string;
@@ -73,17 +73,17 @@ const CHASE_LABEL: Partial<Record<LcRarityCode, { label: string; short: string; 
   EP: {
     label: 'Epic',
     short: 'EPIC',
-    description: 'Epic-rarity chase treatment — extended-art or textured foil.',
+    description: 'Epic-rarity chase treatment, extended-art or textured foil.',
   },
   L: {
     label: 'Legendary',
     short: 'LEG',
-    description: 'Legendary — the deck-defining tier below Iconic / Enchanted.',
+    description: 'Legendary, the deck-defining tier below Iconic / Enchanted.',
   },
   P: {
     label: 'Promo',
     short: 'PROMO',
-    description: 'Promotional printing — event, launch, D23 or partner exclusive.',
+    description: 'Promotional printing, event, launch, D23 or partner exclusive.',
   },
 };
 

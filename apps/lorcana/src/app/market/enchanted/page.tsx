@@ -11,7 +11,7 @@ export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Enchanted Lorcana cards — full priced list, all sets',
+  title: 'Enchanted Lorcana cards: full priced list across every set',
   description:
     "Every Disney Lorcana Enchanted overprint ranked by cheapest current USD retail. Set 1 through Attack of the Vine!.",
   alternates: { canonical: canonicalFor('/market/enchanted') },

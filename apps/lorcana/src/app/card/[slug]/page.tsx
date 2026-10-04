@@ -61,8 +61,8 @@ export async function generateMetadata({
   const rarityLabel = heroCard?.rarity.label ?? '';
   const setLabel = heroCard?.set?.name ?? '';
   return {
-    title: `${resolvedName} — Lorcana card prices, treatments and printings`,
-    description: `${resolvedName}${setLabel ? ` from ${setLabel}` : ''}${rarityLabel ? ` (${rarityLabel})` : ''}. Every printing across every set — foil, nonfoil and Enchanted overprint — priced individually with live retail on Cardmarket and TCGplayer.`,
+    title: `${resolvedName}. Lorcana card prices, treatments and printings`,
+    description: `${resolvedName}${setLabel ? ` from ${setLabel}` : ''}${rarityLabel ? ` (${rarityLabel})` : ''}. Every printing across every set, foil, nonfoil and Enchanted overprint, priced individually with live retail on Cardmarket and TCGplayer.`,
     alternates: { canonical: canonicalFor(`/card/${slugifyCardName(resolvedName)}`) },
   };
 }
@@ -215,7 +215,7 @@ export default async function LogicalCardPage({
     url: canonical,
     image: heroImage ?? undefined,
     category: 'Trading card game / Disney Lorcana',
-    description: `${bundle.name} — a Disney Lorcana card${heroCard.set ? ` from ${heroCard.set.name}` : ''}${heroCard.rarity.label ? ` at ${heroCard.rarity.label} rarity` : ''}. Every printing and treatment priced individually.`,
+    description: `${bundle.name}, a Disney Lorcana card${heroCard.set ? ` from ${heroCard.set.name}` : ''}${heroCard.rarity.label ? ` at ${heroCard.rarity.label} rarity` : ''}. Every printing and treatment priced individually.`,
   } as const;
 
   return (
@@ -447,7 +447,7 @@ export default async function LogicalCardPage({
         ]}
       />
 
-      <CardFaq title={`FAQ — ${bundle.name}`} entries={cardFaqEntries} />
+      <CardFaq title={`FAQ , ${bundle.name}`} entries={cardFaqEntries} />
 
       <CardInternalLinks
         cardName={bundle.name}

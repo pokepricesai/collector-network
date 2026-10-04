@@ -21,19 +21,19 @@ export async function generateMetadata({
   if (!isLcInk(slug)) return { title: 'Ink not found' };
   const label = LC_INK_LABEL[slug];
   return {
-    title: `${label} Lorcana cards — top-value, Enchanted and every printing`,
+    title: `${label} Lorcana cards: top-value, Enchanted and every printing`,
     description: `Every ${label} Disney Lorcana card ordered by cheapest current USD retail. Includes ${label} Enchanted, Iconic, Epic, Legendary and base rarities.`,
     alternates: { canonical: canonicalFor(`/inks/${slug}`) },
   };
 }
 
 const INK_STORIES: Record<LcInk, string> = {
-  amber: 'Amber is the ink of healing, community and support — the axis Herald of Harmony, Belle and cleric-leaning strategies live on. Amber decks stall out board pressure with Song plays and Bodyguard characters.',
-  amethyst: 'Amethyst is Lorcana\'s mystical ink — sorcerers, ethereal spellwork and lore engines. Elsa, Merlin and the Enchanted-heavy Snow Queen / Spirit of Winter treatments are Amethyst signatures.',
-  emerald: 'Emerald is the trickster ink — deception, card manipulation and tempo swings. Peter Pan, Genie and Robin Hood characters drive Emerald\'s value both at the table and on the collector market.',
-  ruby: 'Ruby is passion, aggression and glory. Mickey Mouse — Brave Little Tailor anchors Ruby\'s marquee tier, backed by Simba, Hercules and other combat-forward heroes.',
-  sapphire: 'Sapphire is wisdom, invention and artifice — the item-driven, engine-heavy ink. Merlin, Minnie Mouse and Ariel\'s Grotto Location pieces define Sapphire\'s tempo.',
-  steel: 'Steel is resilience, courage and raw force — the ink of Beast, Simba and the big-body defenders. Steel Legendaries anchor most every Set 1–8 chase list.',
+  amber: 'Amber is the ink of healing, community and support, the axis Herald of Harmony, Belle and cleric-leaning strategies live on. Amber decks stall out board pressure with Song plays and Bodyguard characters.',
+  amethyst: 'Amethyst is Lorcana\'s mystical ink, sorcerers, ethereal spellwork and lore engines. Elsa, Merlin and the Enchanted-heavy Snow Queen / Spirit of Winter treatments are Amethyst signatures.',
+  emerald: 'Emerald is the trickster ink, deception, card manipulation and tempo swings. Peter Pan, Genie and Robin Hood characters drive Emerald\'s value both at the table and on the collector market.',
+  ruby: 'Ruby is passion, aggression and glory. Mickey Mouse. Brave Little Tailor anchors Ruby\'s marquee tier, backed by Simba, Hercules and other combat-forward heroes.',
+  sapphire: 'Sapphire is wisdom, invention and artifice, the item-driven, engine-heavy ink. Merlin, Minnie Mouse and Ariel\'s Grotto Location pieces define Sapphire\'s tempo.',
+  steel: 'Steel is resilience, courage and raw force, the ink of Beast, Simba and the big-body defenders. Steel Legendaries anchor most every Set 1–8 chase list.',
 };
 
 export default async function InkDetail({

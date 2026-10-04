@@ -65,7 +65,7 @@ export function buildSetFaq({
       q: `Does ${setName} contain Enchanted cards?`,
       a: (
         <>
-          Yes — <strong>{enchanted}</strong> Enchanted card
+          Yes , <strong>{enchanted}</strong> Enchanted card
           {enchanted === 1 ? '' : 's'} in {setName}. See the full
           Enchanted market for network-wide ranking on the{' '}
           <a href="/market/enchanted">Enchanted page</a>.
@@ -78,7 +78,7 @@ export function buildSetFaq({
       q: `Does ${setName} contain Enchanted cards?`,
       a: (
         <>
-          No — the current catalogue for {setName} has no Enchanted
+          No, the current catalogue for {setName} has no Enchanted
           overprints. That&apos;s common for promo, D23 and specialty
           set families.
         </>
@@ -106,7 +106,7 @@ export function buildSetFaq({
     a: (
       <>
         Most cards in {setName} exist in both foil and nonfoil
-        printings — with the exception of Enchanted (always foil) and
+        printings, with the exception of Enchanted (always foil) and
         the odd single-finish promo. LorcanaPrices prices every
         finish independently.
       </>
@@ -120,7 +120,7 @@ export function buildSetFaq({
       <>
         Sealed availability isn&apos;t tracked in our catalogue. Use the
         &quot;Find sealed {setName} on eBay&quot; button at the top of
-        this page — it opens a live eBay search for sealed inventory.
+        this page, it opens a live eBay search for sealed inventory.
       </>
     ),
     plainAnswer: `Sealed availability is not tracked in the catalogue. Use the "Find sealed on eBay" button at the top of the set page to open a live eBay search.`,

@@ -49,6 +49,12 @@ export interface LcSetMarket {
   coverage: number;
   mostValuable: LcSetTile[];
   cheapest: LcSetTile[];
+  /** All priced hero cards, one entry per unique name. The page uses
+   *  this to build a per-card price lookup for its checklist grid —
+   *  without it, only the ~10 cards in mostValuable + cheapest would
+   *  render with a price even when every card in the set has a quote
+   *  in tcg_market_prices_current. */
+  allPriced: LcSetTile[];
   historyWindowNote: string;
 }
 
@@ -81,8 +87,9 @@ export async function getSetMarketForLorcana(
       coverage: 0,
       mostValuable: [],
       cheapest: [],
+      allPriced: [],
       historyWindowNote:
-        'History building — 7-day risers/fallers unlock once daily retail crosses the coverage bar.',
+        'History building , 7-day risers/fallers unlock once daily retail crosses the coverage bar.',
     };
   }
 
@@ -198,6 +205,7 @@ export async function getSetMarketForLorcana(
     coverage,
     mostValuable: byPriceDesc.slice(0, topN),
     cheapest: byPriceAsc.slice(0, topN),
+    allPriced: tiles,
     historyWindowNote:
       'Risers/fallers hidden while daily retail history is under the 7-day honest coverage bar.',
   };

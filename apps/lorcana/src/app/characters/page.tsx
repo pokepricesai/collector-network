@@ -20,7 +20,7 @@ export const revalidate = 21_600;
 export const metadata: Metadata = {
   title: 'Lorcana characters directory',
   description:
-    'Every Disney Lorcana character represented in the catalogue — Elsa, Mickey Mouse, Belle, Maleficent and beyond. Each character page collects every version and printing with live pricing.',
+    'Every Disney Lorcana character represented in the catalogue. Elsa, Mickey Mouse, Belle, Maleficent and beyond. Each character page collects every version and printing with live pricing.',
   alternates: { canonical: canonicalFor('/characters') },
 };
 

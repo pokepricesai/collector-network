@@ -11,9 +11,9 @@ export const revalidate = 900;
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Iconic Lorcana cards — every Iconic-tier overprint',
+  title: 'Iconic Lorcana cards: every Iconic-tier overprint',
   description:
-    "The Iconic rarity tier introduced in Set 9 (Fabled) — the rarest Lorcana overprints, priced individually.",
+    "The Iconic rarity tier introduced in Set 9 (Fabled), the rarest Lorcana overprints, priced individually.",
   alternates: { canonical: canonicalFor('/market/iconic') },
 };
 
@@ -36,7 +36,7 @@ export default async function IconicListPage() {
             Iconic is the rarest tier introduced with{' '}
             <em>Fabled</em> (Set 9) and continued through{' '}
             <em>Whispers in the Well</em>, <em>Winterspell</em>,{' '}
-            <em>Wilds Unknown</em> and <em>Attack of the Vine!</em> —
+            <em>Wilds Unknown</em> and <em>Attack of the Vine!</em> ,
             2 per set. Ranked by highest current {CURRENCY_SOURCE_NAME[currency]}
             {' '}retail ({currency}).
           </p>
