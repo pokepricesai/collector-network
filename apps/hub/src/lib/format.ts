@@ -48,3 +48,29 @@ export function formatDateOnly(d: Date | string | null): string {
   if (!d) return '—';
   return (d instanceof Date ? d : new Date(d)).toISOString().slice(0, 10);
 }
+
+const MONEY_FORMATTERS = new Map<string, Intl.NumberFormat>();
+function moneyFormatter(currency: string): Intl.NumberFormat {
+  const key = currency.toUpperCase();
+  let fmt = MONEY_FORMATTERS.get(key);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat('en-GB', { style: 'currency', currency: key, maximumFractionDigits: 2 });
+    MONEY_FORMATTERS.set(key, fmt);
+  }
+  return fmt;
+}
+
+export function formatMoneyMinor(minor: number | null | undefined, currency = 'GBP'): string {
+  if (minor == null) return '—';
+  return moneyFormatter(currency).format(minor / 100);
+}
+
+export function formatMoneyMinorCompact(minor: number | null | undefined, currency = 'GBP'): string {
+  if (minor == null) return '—';
+  const v = minor / 100;
+  const abs = Math.abs(v);
+  const sym = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : `${currency} `;
+  if (abs >= 1_000_000) return `${v < 0 ? '-' : ''}${sym}${(abs / 1_000_000).toFixed(1)}m`;
+  if (abs >= 1_000) return `${v < 0 ? '-' : ''}${sym}${(abs / 1_000).toFixed(1)}k`;
+  return moneyFormatter(currency).format(v);
+}

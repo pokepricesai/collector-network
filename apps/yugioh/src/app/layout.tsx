@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/next';
 import { GoogleAnalytics } from '@collector-network/analytics';
+import { AffiliateTracking } from '@collector-network/affiliate-tracking/client';
 import { ygoFontClassName } from '../design/fonts';
 import '../design/tokens.css';
 
@@ -61,6 +62,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* GA4 via shared @collector-network/analytics. Safe no-op
             when NEXT_PUBLIC_GA_ID is unset. */}
         <GoogleAnalytics />
+        {/* Phase 5: capture-phase click beacons for <a data-affiliate="1">
+            links. Fire-and-forget; never blocks navigation. */}
+        <AffiliateTracking />
       </body>
     </html>
   );

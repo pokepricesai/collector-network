@@ -1,0 +1,27 @@
+{
+  "name": "@collector-network/affiliate-tracking",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./client": "./src/client.tsx"
+  },
+  "scripts": {
+    "lint": "echo \"(affiliate-tracking) lint placeholder\" && exit 0",
+    "typecheck": "tsc --noEmit",
+    "build": "echo \"(affiliate-tracking) build placeholder\" && exit 0"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.3"
+  }
+}

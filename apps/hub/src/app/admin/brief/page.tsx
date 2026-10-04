@@ -4,7 +4,11 @@ import { MetricCard, Panel, SectionHeader, StatusBadge, Table } from '@/componen
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { buildBrief } from '@/server/brief/engine';
-import { formatDelta, formatInt } from '@/lib/format';
+import { formatDelta, formatInt, formatMoneyMinor } from '@/lib/format';
+import { totalsSince } from '@/server/revenue/queries';
+import { totalCostsSinceGbp } from '@/server/revenue/costs';
+import { listOpenOpportunities } from '@/server/revenue/opportunities';
+import { listSponsorships } from '@/server/partners/queries';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -19,6 +23,17 @@ export default async function BriefPage({ searchParams }: Params) {
   const today = new Date();
   const brief = await buildBrief(sb, today);
   const topActions = showAll ? brief.actions : brief.actions.slice(0, 5);
+
+  const since28 = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const todayIso = today.toISOString().slice(0, 10);
+  const [revenueTotals, costs, openOpps, renewingSoon] = await Promise.all([
+    totalsSince(sb, since28),
+    totalCostsSinceGbp(sb, since28),
+    listOpenOpportunities(sb, 10),
+    listSponsorships(sb).then((rows) => rows.filter((r) => (r.status === 'active' || r.status === 'renewing') && r.renewal_reminder_on && r.renewal_reminder_on <= todayIso)),
+  ]);
+  const gbpNet = revenueTotals.find((r) => r.currency === 'GBP')?.net_minor ?? 0;
+  const contribution = gbpNet - costs.total_minor;
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/brief">
@@ -99,6 +114,23 @@ export default async function BriefPage({ searchParams }: Params) {
                 {n.link && <Link className="status-badge status-not_connected" href={n.link}>Open →</Link>}
               </div>
             ))}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Commercial pulse (28d, GBP)" eyebrow="Daily commercial brief">
+        <div className="metric-grid metric-grid--compact">
+          <MetricCard label="Revenue" value={formatMoneyMinor(gbpNet, 'GBP')} state={gbpNet > 0 ? 'ok' : 'no-data'} />
+          <MetricCard label="Direct costs" value={formatMoneyMinor(costs.total_minor, 'GBP')} state="muted" helper={`AI ${formatMoneyMinor(costs.ai_minor, 'GBP')} · BQ ${formatMoneyMinor(costs.bq_minor, 'GBP')} · Ops ${formatMoneyMinor(costs.ops_minor, 'GBP')}`} />
+          <MetricCard label="Contribution" value={formatMoneyMinor(contribution, 'GBP')} state={contribution >= 0 ? 'ok' : 'not-connected'} />
+          <MetricCard label="Open opportunities" value={openOpps.length ? String(openOpps.length) : null} state={openOpps.length ? 'ok' : 'no-data'} helper={openOpps[0]?.title.slice(0, 60) ?? undefined} />
+          <MetricCard label="Renewals due" value={renewingSoon.length ? String(renewingSoon.length) : null} state={renewingSoon.length ? 'ok' : 'no-data'} helper={renewingSoon[0]?.title ?? undefined} />
+        </div>
+        {(openOpps.length > 0 || renewingSoon.length > 0) && (
+          <div style={{ marginTop: 12 }}>
+            <p className="col-dim" style={{ fontSize: 12, margin: 0 }}>
+              Act on commercial items at <Link href="/admin/revenue/opportunities">/admin/revenue/opportunities</Link> or the partner CRM at <Link href="/admin/partners">/admin/partners</Link>.
+            </p>
           </div>
         )}
       </Panel>

@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@collector-network/affiliate": "workspace:*",
+    "@collector-network/affiliate-tracking": "workspace:*",
     "@collector-network/analytics": "workspace:*",
     "@collector-network/auth": "workspace:^",
     "@collector-network/database": "workspace:*",

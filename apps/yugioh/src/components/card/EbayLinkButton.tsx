@@ -42,6 +42,9 @@ export function EbayLinkButton(props: EbayLinkButtonProps) {
       rel="sponsored nofollow noopener noreferrer"
       className={styles.ebayBtn}
       data-affiliate={link.affiliate ? '1' : '0'}
+      data-placement={props.source}
+      data-component="EbayLinkButton"
+      data-intent={props.gradedLabel ? 'graded' : (props.rarity ? 'rarity' : 'raw')}
     >
       <span className={styles.ebayText}>{props.label ?? link.label}</span>
       <span className={styles.ebayArrow} aria-hidden>↗</span>
