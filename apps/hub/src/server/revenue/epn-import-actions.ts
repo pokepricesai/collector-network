@@ -189,3 +189,76 @@ export async function readPreviewForUi(): Promise<EpnPreview | null> {
   const { admin } = await requireAdmin('/admin/revenue/import');
   return loadPreview(admin.adminRowId);
 }
+
+export interface CampaignMapRow {
+  campaign_id: string;
+  site_slug: string;
+  source_slug: string;
+  currency: string;
+  resolved: boolean;        // true if site + source both found in DB
+  issue?: string;
+}
+
+export interface CampaignMapAudit {
+  raw_present: boolean;
+  raw_length: number;
+  parsed_rows: CampaignMapRow[];
+  invalid_rows: Array<{ raw_part: string; reason: string }>;
+}
+
+/**
+ * Public read of the parsed EPN_CAMPAIGN_MAP for display on
+ * /admin/revenue/import. Campaign IDs are already public (they
+ * ride on every outbound eBay link); nothing else is exposed.
+ * Validates each row against network_sites + network_revenue_sources
+ * so the admin can see which rows will actually attribute.
+ */
+export async function readCampaignMapAudit(): Promise<CampaignMapAudit> {
+  const { sb } = await requireAdmin('/admin/revenue/import');
+  const raw = (process.env['EPN_CAMPAIGN_MAP'] ?? '').trim();
+  const audit: CampaignMapAudit = {
+    raw_present: raw.length > 0,
+    raw_length: raw.length,
+    parsed_rows: [],
+    invalid_rows: [],
+  };
+  if (!raw) return audit;
+
+  const [{ data: sitesData }, { data: sourcesData }] = await Promise.all([
+    sb.from('network_sites').select('slug'),
+    sb.from('network_revenue_sources').select('slug'),
+  ]);
+  const siteSet = new Set(((sitesData ?? []) as Array<{ slug: string }>).map((s) => s.slug));
+  const sourceSet = new Set(((sourcesData ?? []) as Array<{ slug: string }>).map((s) => s.slug));
+
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const bits = trimmed.split(':').map((s) => s.trim());
+    if (bits.length < 3) {
+      audit.invalid_rows.push({ raw_part: trimmed, reason: `expected 3-4 colon-separated fields, got ${bits.length}` });
+      continue;
+    }
+    const [cid, siteSlug, sourceSlug, ccyRaw] = bits;
+    if (!cid || !siteSlug || !sourceSlug) {
+      audit.invalid_rows.push({ raw_part: trimmed, reason: 'empty field' });
+      continue;
+    }
+    const currency = (ccyRaw || 'GBP').toUpperCase();
+    const siteKnown = siteSet.has(siteSlug);
+    const sourceKnown = sourceSet.has(sourceSlug);
+    const row: CampaignMapRow = {
+      campaign_id: cid,
+      site_slug: siteSlug,
+      source_slug: sourceSlug,
+      currency,
+      resolved: siteKnown && sourceKnown,
+    };
+    if (!siteKnown && !sourceKnown) row.issue = 'unknown site slug and source slug';
+    else if (!siteKnown) row.issue = `unknown site slug: ${siteSlug}`;
+    else if (!sourceKnown) row.issue = `unknown source slug: ${sourceSlug}`;
+    audit.parsed_rows.push(row);
+  }
+
+  return audit;
+}

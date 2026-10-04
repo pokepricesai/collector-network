@@ -3,7 +3,7 @@ import { AdminShell } from '@/components/admin/AdminShell';
 import { Panel, SectionHeader, StatusBadge, Table, EmptyState } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
-import { previewEpnImportAction, commitEpnImportAction, cancelEpnPreviewAction, readPreviewForUi } from '@/server/revenue/epn-import-actions';
+import { previewEpnImportAction, commitEpnImportAction, cancelEpnPreviewAction, readPreviewForUi, readCampaignMapAudit } from '@/server/revenue/epn-import-actions';
 import { formatInt, formatMoneyMinor } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -16,9 +16,12 @@ export default async function RevenueImportPage({ searchParams }: Params) {
   const { admin, sb } = await requireAdmin('/admin/revenue/import');
   const sites = await listNetworkSites(sb);
   const sp = await searchParams;
-  const preview = sp.step === 'preview' ? await readPreviewForUi() : null;
+  const [preview, campaignAudit] = await Promise.all([
+    sp.step === 'preview' ? readPreviewForUi() : Promise.resolve(null),
+    readCampaignMapAudit(),
+  ]);
   const inp: React.CSSProperties = { padding: '6px 8px', border: '1px solid #D4D4D4', borderRadius: 4, fontSize: 13, fontFamily: 'inherit' };
-  const campaignMapRaw = process.env.EPN_CAMPAIGN_MAP ?? '';
+  const resolvedCount = campaignAudit.parsed_rows.filter((r) => r.resolved).length;
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/revenue/import">
@@ -32,12 +35,64 @@ export default async function RevenueImportPage({ searchParams }: Params) {
       <Panel title="Integrations" eyebrow="Status">
         <ul style={{ fontSize: 13, lineHeight: 1.8, margin: 0, paddingLeft: 20 }}>
           <li><strong>eBay Partner Network</strong> — CSV import live (see below).{' '}
-            {campaignMapRaw ? <StatusBadge state="success" label="campaign map configured" /> : <StatusBadge state="warning" label="EPN_CAMPAIGN_MAP env not set" />}
+            {!campaignAudit.raw_present ? (
+              <StatusBadge state="warning" label="EPN_CAMPAIGN_MAP env not set" />
+            ) : resolvedCount > 0 && campaignAudit.invalid_rows.length === 0 && campaignAudit.parsed_rows.every((r) => r.resolved) ? (
+              <StatusBadge state="success" label={`campaign map configured · ${resolvedCount} campaign(s)`} />
+            ) : (
+              <StatusBadge state="warning" label={`campaign map has issues · ${resolvedCount} resolved / ${campaignAudit.parsed_rows.length + campaignAudit.invalid_rows.length} entries`} />
+            )}
           </li>
           <li><strong>Impact.com (TCGplayer)</strong> — <StatusBadge state="info" label="awaiting first report import" /> · parser not yet shipped; add once Luke provides a real CSV sample.</li>
           <li><strong>Whatnot</strong> — <StatusBadge state="not_connected" label="not connected" /> · no credentials / report format available.</li>
         </ul>
       </Panel>
+
+      {campaignAudit.raw_present && (
+        <Panel title={`Parsed EPN_CAMPAIGN_MAP (${campaignAudit.parsed_rows.length} entries)`} eyebrow="What the hub reads">
+          {campaignAudit.parsed_rows.length === 0 ? (
+            <span className="col-dim" style={{ fontSize: 12 }}>Env var present ({campaignAudit.raw_length} chars) but produced zero rows. See invalid-rows list below.</span>
+          ) : (
+            <table className="admin-table" style={{ fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th>Campaign ID</th>
+                  <th>Site slug</th>
+                  <th>Source slug</th>
+                  <th>Currency</th>
+                  <th>Resolved?</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaignAudit.parsed_rows.map((r) => (
+                  <tr key={`${r.campaign_id}-${r.site_slug}-${r.source_slug}`}>
+                    <td><code>{r.campaign_id}</code></td>
+                    <td>{r.site_slug}</td>
+                    <td><code style={{ fontSize: 11 }}>{r.source_slug}</code></td>
+                    <td><code>{r.currency}</code></td>
+                    <td>
+                      {r.resolved
+                        ? <StatusBadge state="success" label="resolved" />
+                        : <StatusBadge state="warning" label={r.issue ?? 'unresolved'} />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {campaignAudit.invalid_rows.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <strong style={{ fontSize: 12 }}>Invalid entries:</strong>
+              <ul style={{ fontSize: 12, margin: '6px 0 0', paddingLeft: 20 }}>
+                {campaignAudit.invalid_rows.map((r, i) => <li key={i}><code>{r.raw_part}</code> — {r.reason}</li>)}
+              </ul>
+            </div>
+          )}
+          <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
+            Campaign IDs are public (they ride on every outbound eBay link). Only entries where <em>Resolved</em> = yes will attribute an import to a site.
+          </p>
+        </Panel>
+      )}
 
       {!preview && (
         <Panel title="Step 1: Upload" eyebrow="EPN CSV">
