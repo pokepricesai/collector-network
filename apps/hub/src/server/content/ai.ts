@@ -203,7 +203,10 @@ export async function generateBrief(args: {
 
   const res = await client.messages.create({
     model: BRIEF_MODEL,
-    max_tokens: 4000,
+    // 8000 output tokens accommodates briefs with large evidence
+    // (e.g. 40 mover candidates). Prior 4000 cap caused truncation
+    // mid-array for data-driven briefs.
+    max_tokens: 8000,
     system: systemBlocks,
     messages: [{
       role: 'user',
@@ -214,7 +217,19 @@ export async function generateBrief(args: {
   const rawText = res.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map((b) => b.text).join('\n').trim();
-  const brief = parseBriefJson(rawText);
+  if (res.stop_reason === 'max_tokens') {
+    const err = new Error(`[brief] AI output hit max_tokens (${res.usage.output_tokens} tokens). Increase max_tokens or shrink the evidence payload. First 200 chars: ${rawText.slice(0, 200)}`);
+    console.error(err.message);
+    throw err;
+  }
+  let brief: GeneratedBrief;
+  try {
+    brief = parseBriefJson(rawText);
+  } catch (parseErr) {
+    const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    console.error(`[brief] parse failure: ${msg}. Raw output length=${rawText.length}. First 400 chars: ${rawText.slice(0, 400)}... Last 400: ${rawText.slice(-400)}`);
+    throw new Error(`AI returned non-JSON: ${msg}. Output length ${rawText.length} chars. stop_reason=${res.stop_reason}. First 200 chars: ${rawText.slice(0, 200)}`);
+  }
   return { brief, usage: estimateCost(res.usage), rawText };
 }
 
@@ -298,7 +313,10 @@ export async function generateDraft(args: DraftInput): Promise<{ draft: Generate
 
   const res = await client.messages.create({
     model: DRAFT_MODEL,
-    max_tokens: 8000,
+    // 16000 output tokens accommodates full articles plus the
+    // sources + used_internal_links arrays and the research_gaps
+    // list. The brief hit truncation at 4000; we go wider here.
+    max_tokens: 16000,
     system: systemBlocks,
     messages: [{
       role: 'user',
@@ -309,7 +327,19 @@ export async function generateDraft(args: DraftInput): Promise<{ draft: Generate
   const rawText = res.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map((b) => b.text).join('\n').trim();
-  const draft = parseDraftJson(rawText);
+  if (res.stop_reason === 'max_tokens') {
+    const err = new Error(`[draft] AI output hit max_tokens (${res.usage.output_tokens} tokens). Increase max_tokens or shrink the brief payload. First 200 chars: ${rawText.slice(0, 200)}`);
+    console.error(err.message);
+    throw err;
+  }
+  let draft: GeneratedDraft;
+  try {
+    draft = parseDraftJson(rawText);
+  } catch (parseErr) {
+    const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    console.error(`[draft] parse failure: ${msg}. Raw output length=${rawText.length}. First 400 chars: ${rawText.slice(0, 400)}... Last 400: ${rawText.slice(-400)}`);
+    throw new Error(`AI returned non-JSON: ${msg}. Output length ${rawText.length} chars. stop_reason=${res.stop_reason}. First 200 chars: ${rawText.slice(0, 200)}`);
+  }
   return { draft, usage: estimateCost(res.usage), rawText };
 }
 
