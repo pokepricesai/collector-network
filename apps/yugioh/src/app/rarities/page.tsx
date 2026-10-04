@@ -13,6 +13,11 @@ import { RARITIES_FAQ } from '../../lib/faq-content';
 import styles from '../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
+// Pre-rendering at build time hit the Supabase statement_timeout on
+// the aggregate getRarityCounts query, failing the whole Vercel
+// build. Mark the page dynamic so it renders on-demand with the
+// existing 1h ISR cache — same user-facing behaviour, no build gate.
+export const dynamic = 'force-dynamic';
 
 const SITE_URL = siteUrl();
 
