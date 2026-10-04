@@ -31,7 +31,11 @@ export default async function ArticleDetail({ params }: Params) {
     body: string; body_format: string; meta_title: string | null; meta_description: string | null;
     summary: string | null; publication_target: string; publication_url: string | null;
     published_at: string | null;
-    qc_report: { issues?: Array<{ code: string; severity: string; message: string }>; ran_at?: string } | null;
+    qc_report: {
+      issues?: Array<{ code: string; severity: string; message: string }>; ran_at?: string;
+      deterministic?: { issues: Array<{ code: string; severity: string; message: string }>; ran_at: string | null };
+      editorial?: { issues: Array<{ code: string; severity: 'blocker' | 'warning' | 'suggestion'; category: string; message: string; location?: string; suggested_fix?: string }>; summary: string; ran_at: string; model: string; cost_usd: number; checked_against: string[] };
+    } | null;
     network_sites: { slug: string; name: string; canonical_url: string };
   };
   void perf;

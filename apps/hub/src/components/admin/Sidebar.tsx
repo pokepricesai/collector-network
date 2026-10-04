@@ -37,10 +37,19 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
     ],
   },
   {
+    label: 'Distribution',
+    items: [
+      { href: '/admin/social',          label: 'Social · Today' },
+      { href: '/admin/social/ideas',    label: 'Social · Ideas' },
+      { href: '/admin/social/posts',    label: 'Social · Posts' },
+      { href: '/admin/social/calendar', label: 'Social · Calendar' },
+      { href: '/admin/newsletter',      label: 'Newsletter' },
+    ],
+  },
+  {
     label: 'Portfolio',
     items: [
       { href: '/admin/health',  label: 'Health' },
-      { href: '/admin/social',  label: 'Social' },
       { href: '/admin/revenue', label: 'Revenue' },
     ],
   },

@@ -3,10 +3,13 @@ import { AdminShell } from '@/components/admin/AdminShell';
 import { MetricCard, Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
-import { formatInt, formatRelative } from '@/lib/format';
+import { formatInt, formatPct, formatRelative } from '@/lib/format';
+import { computeArticlePerformance } from '@/server/content/performance';
+import { RefreshIdeasButton } from './RefreshIdeasButton';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const maxDuration = 300;
 
 interface ArticleRow {
   id: string; site_id: string; title: string; slug: string; status: string;
@@ -115,6 +118,10 @@ export default async function ContentDashboard() {
         )}
       </Panel>
 
+      <Panel title="Article performance" eyebrow="GSC 28d vs prior 28d · ending at latest observed date per site" actions={<RefreshIdeasButton />}>
+        <ArticlePerformanceGrid />
+      </Panel>
+
       <Panel title="AI cost (last 7d)" eyebrow="Generation">
         <div className="metric-grid metric-grid--compact">
           <MetricCard label="Est cost (USD)" value={`$${costTotal.toFixed(4)}`} state={costTotal > 0 ? 'ok' : 'muted'} />
@@ -124,5 +131,35 @@ export default async function ContentDashboard() {
         </div>
       </Panel>
     </AdminShell>
+  );
+}
+
+async function ArticlePerformanceGrid() {
+  const perf = await (async () => { const { createServiceRoleSupabase } = await import('@/server/admin/service-role'); return computeArticlePerformance(createServiceRoleSupabase()); })();
+  function row(r: { article_id: string; site_slug: string; title: string; current_28d_clicks: number; current_28d_impressions: number; ctr_28d: number | null; position_28d: number | null; pct_change_clicks: number | null }) {
+    return (
+      <li key={r.article_id} style={{ padding: '6px 0', borderBottom: '1px solid #F0F0F0', fontSize: 12 }}>
+        <Link href={`/admin/content/articles/${r.article_id}`} style={{ fontWeight: 600 }}>{r.title.slice(0, 80)}</Link>
+        <div className="col-dim">{r.site_slug} · {formatInt(r.current_28d_clicks)} clicks · {formatInt(r.current_28d_impressions)} impr{r.ctr_28d != null ? ` · CTR ${formatPct(r.ctr_28d)}` : ''}{r.position_28d != null ? ` · pos ${r.position_28d.toFixed(1)}` : ''}{r.pct_change_clicks != null ? ` · Δ ${(r.pct_change_clicks * 100).toFixed(0)}%` : ''}</div>
+      </li>
+    );
+  }
+  function panel(title: string, items: typeof perf.top_performing, emptyNote: string) {
+    return (
+      <div style={{ border: '1px solid #E6E6E6', borderRadius: 6, padding: 10 }}>
+        <h4 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 6px' }}>{title} ({items.length})</h4>
+        {items.length === 0 ? <span className="col-dim" style={{ fontSize: 12 }}>{emptyNote}</span>
+          : <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>{items.map(row)}</ul>}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+      {panel('Top performing (28d clicks)', perf.top_performing, 'No published articles with GSC data yet.')}
+      {panel('Gaining (≥30% clicks vs prior)', perf.gaining, 'No gainers in this window.')}
+      {panel('Declining (≥30% drop)', perf.declining, 'No declines in this window.')}
+      {panel('Zero impressions (>14d since publish)', perf.zero_impression, 'Nothing with zero impressions.')}
+      {panel('Refresh candidates', perf.refresh_candidates, 'No articles in striking distance or low-CTR territory.')}
+    </div>
   );
 }

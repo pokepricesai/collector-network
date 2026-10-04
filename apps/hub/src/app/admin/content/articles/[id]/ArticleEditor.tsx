@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { generateDraftAction, publishArticleAction, runQcAction, setArticleStatusAction, toggleArticleLinkAction, updateArticleAction } from '../actions';
+import { runEditorialQcAction } from '@/app/admin/social/actions';
 
 interface Article {
   id: string;
@@ -12,7 +13,19 @@ interface Article {
   meta_description: string | null;
   body: string;
   status: string;
-  qc_report: { issues?: Array<{ code: string; severity: string; message: string }>; ran_at?: string } | null;
+  qc_report: {
+    issues?: Array<{ code: string; severity: string; message: string }>;
+    ran_at?: string;
+    deterministic?: { issues: Array<{ code: string; severity: string; message: string }>; ran_at: string | null };
+    editorial?: {
+      issues: Array<{ code: string; severity: 'blocker' | 'warning' | 'suggestion'; category: string; message: string; location?: string; suggested_fix?: string }>;
+      summary: string;
+      ran_at: string;
+      model: string;
+      cost_usd: number;
+      checked_against: string[];
+    };
+  } | null;
 }
 interface LinkRow { id: string; target_url: string; anchor_text: string | null; reason: string | null; state: string }
 
@@ -48,7 +61,13 @@ export function ArticleEditor(props: { article: Article; links: LinkRow[] }) {
             onClick={() => start(async () => wrap(async () => {
               const r = await runQcAction(props.article.id);
               return `QC: ${r.issues.length} issue${r.issues.length === 1 ? '' : 's'}`;
-            }))}>Run QC</button>
+            }))}>Run deterministic QC</button>
+          <button type="button" className="status-badge status-opportunity" style={buttonLg}
+            onClick={() => start(async () => wrap(async () => {
+              const r = await runEditorialQcAction(props.article.id);
+              if (!r.ok) return `Error: ${r.error}`;
+              return `Editorial QC: ${r.issue_count} issues (${r.blockers} blocker, ${r.warnings} warning) · ~$${(r.cost ?? 0).toFixed(4)}`;
+            }))}>Run editorial AI QC</button>
         </div>
       </form>
 
@@ -96,17 +115,48 @@ export function ArticleEditor(props: { article: Article; links: LinkRow[] }) {
           )}
         </PanelLite>
 
-        <PanelLite title={`QC${props.article.qc_report?.issues?.length ? ` (${props.article.qc_report.issues.length})` : ''}`}>
-          {(!props.article.qc_report?.issues || props.article.qc_report.issues.length === 0) ? (
-            <span className="col-dim" style={{ fontSize: 12 }}>No issues flagged. Click "Run QC" to re-check.</span>
+        <PanelLite title={`Deterministic QC${(props.article.qc_report?.deterministic?.issues?.length ?? props.article.qc_report?.issues?.length) ? ` (${props.article.qc_report?.deterministic?.issues?.length ?? props.article.qc_report?.issues?.length})` : ''}`}>
+          {(() => {
+            const issues = props.article.qc_report?.deterministic?.issues ?? props.article.qc_report?.issues ?? [];
+            const ranAt = props.article.qc_report?.deterministic?.ran_at ?? props.article.qc_report?.ran_at ?? null;
+            if (issues.length === 0) return <span className="col-dim" style={{ fontSize: 12 }}>No issues flagged{ranAt ? ` (ran ${new Date(ranAt).toISOString().slice(0, 16).replace('T', ' ')})` : ''}. Click "Run deterministic QC" to re-check.</span>;
+            return (
+              <>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                  {issues.map((i, idx) => (
+                    <li key={idx} style={{ color: i.severity === 'error' ? '#8A1C27' : i.severity === 'warning' ? '#8A6A1C' : '#555' }}>
+                      <strong>{i.code}</strong> — {i.message}
+                    </li>
+                  ))}
+                </ul>
+                {ranAt && <div className="col-dim" style={{ fontSize: 10, marginTop: 4 }}>ran {new Date(ranAt).toISOString().slice(0, 16).replace('T', ' ')}</div>}
+              </>
+            );
+          })()}
+        </PanelLite>
+
+        <PanelLite title={`Editorial AI QC${props.article.qc_report?.editorial?.issues?.length ? ` (${props.article.qc_report.editorial.issues.length})` : ''}`}>
+          {!props.article.qc_report?.editorial ? (
+            <span className="col-dim" style={{ fontSize: 12 }}>Not run yet. Click "Run editorial AI QC" above — semantic review (table completeness, unsupported claims, ordering, investment-advice tone, etc.).</span>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-              {props.article.qc_report.issues.map((i, idx) => (
-                <li key={idx} style={{ color: i.severity === 'error' ? '#8A1C27' : i.severity === 'warning' ? '#8A6A1C' : '#555' }}>
-                  <strong>{i.code}</strong> — {i.message}
-                </li>
-              ))}
-            </ul>
+            <>
+              <div style={{ fontSize: 12, marginBottom: 6 }}><em>{props.article.qc_report.editorial.summary}</em></div>
+              {props.article.qc_report.editorial.issues.length === 0 ? (
+                <span className="col-dim" style={{ fontSize: 12 }}>Zero semantic issues.</span>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                  {props.article.qc_report.editorial.issues.map((i, idx) => (
+                    <li key={idx} style={{ color: i.severity === 'blocker' ? '#8A1C27' : i.severity === 'warning' ? '#8A6A1C' : '#555', marginBottom: 4 }}>
+                      <strong>[{i.severity.toUpperCase()}] {i.category}</strong>
+                      {i.location && <span className="col-dim"> @ {i.location}</span>}
+                      <div>{i.message}</div>
+                      {i.suggested_fix && <div className="col-dim">Fix: {i.suggested_fix}</div>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="col-dim" style={{ fontSize: 10, marginTop: 6 }}>ran {new Date(props.article.qc_report.editorial.ran_at).toISOString().slice(0, 16).replace('T', ' ')} · {props.article.qc_report.editorial.model} · ${props.article.qc_report.editorial.cost_usd.toFixed(4)}</div>
+            </>
           )}
         </PanelLite>
 
