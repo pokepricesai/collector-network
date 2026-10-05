@@ -219,6 +219,20 @@ export function ArticleEditor(props: {
             >
               {saveState === 'saving' ? 'Saving…' : 'Save'}
             </button>
+            <button
+              type="button"
+              title="Open a site-aware preview in a new tab. Previews the LAST SAVED version."
+              onClick={() => {
+                // If dirty, hint via query param so the preview page
+                // can warn Luke. The route reads saved state only — no
+                // mutation, no publication row created.
+                const qs = isDirty ? '?dirty=1' : '';
+                window.open(`/admin/content/articles/${props.article.id}/preview${qs}`, '_blank', 'noopener,noreferrer');
+              }}
+              style={{ ...buttonLg, background: '#0A5BB7', color: '#fff' }}
+            >
+              Preview ↗
+            </button>
           </div>
         </div>
 
