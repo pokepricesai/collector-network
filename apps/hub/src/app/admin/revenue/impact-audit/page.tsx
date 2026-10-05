@@ -3,6 +3,7 @@ import { Notice, Panel, SectionHeader, StatusBadge, Table } from '@/components/a
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { runImpactAudit, type EndpointAudit } from '@/server/impact/audit';
+import { runCrosswalk } from '@/server/impact/crosswalk';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,12 +14,24 @@ export const maxDuration = 60;
 export default async function ImpactAuditPage() {
   const { admin, sb } = await requireAdmin('/admin/revenue/impact-audit');
   const sites = await listNetworkSites(sb);
-  const audit = await runImpactAudit();
+  const [audit, crosswalk] = await Promise.all([
+    runImpactAudit(),
+    runCrosswalk(sb),
+  ]);
 
   const verdictTone =
     audit.canReplaceCsv.verdict === 'yes' ? 'success' :
     audit.canReplaceCsv.verdict === 'partial' ? 'warning' :
     audit.canReplaceCsv.verdict === 'no' ? 'danger' : 'info';
+
+  const crosswalkTone =
+    crosswalk.csv_vs_api_verdict === 'yes' ? 'success' :
+    crosswalk.csv_vs_api_verdict === 'partial' ? 'warning' :
+    crosswalk.csv_vs_api_verdict === 'no' ? 'danger' : 'info';
+  const dupTone =
+    crosswalk.duplication_risk === 'low' ? 'success' :
+    crosswalk.duplication_risk === 'medium' ? 'warning' :
+    crosswalk.duplication_risk === 'high' ? 'danger' : 'info';
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/revenue/impact-audit">
@@ -57,12 +70,114 @@ export default async function ImpactAuditPage() {
         </ul>
       </Panel>
 
-      <Panel title="Can this replace our EPN CSV workflow?" eyebrow="Verdict">
+      <Panel title="Can this replace our EPN CSV workflow? (shape test)" eyebrow="Verdict based on live field presence">
         <Notice tone={verdictTone}>
           <strong style={{ textTransform: 'uppercase' }}>{audit.canReplaceCsv.verdict}</strong>
         </Notice>
         <ul style={{ fontSize: 13, lineHeight: 1.7, margin: '10px 0 0', paddingLeft: 20 }}>
           {audit.canReplaceCsv.reasons.map((r, i) => <li key={i}>{r}</li>)}
+        </ul>
+      </Panel>
+
+      <Panel title="API ↔ CSV crosswalk (identity + duplication)" eyebrow="Does the API map to our existing EPN ledger?">
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Notice tone={crosswalkTone}>
+            <strong style={{ textTransform: 'uppercase' }}>Verdict: {crosswalk.csv_vs_api_verdict}</strong>
+          </Notice>
+          <Notice tone={dupTone}>
+            <strong>Duplication risk: {crosswalk.duplication_risk.toUpperCase()}</strong>
+            {' '}· canonical identity: <code>{crosswalk.canonical_identity}</code>
+          </Notice>
+          <div style={{ fontSize: 13, lineHeight: 1.6 }}><strong>Canonical evidence:</strong> {crosswalk.canonical_evidence}</div>
+          <ul style={{ fontSize: 13, lineHeight: 1.6, margin: 0, paddingLeft: 20 }}>
+            {crosswalk.csv_vs_api_reasons.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+          {crosswalk.skipped_reason && (
+            <Notice tone="warning"><strong>Not run:</strong> {crosswalk.skipped_reason}</Notice>
+          )}
+          {crosswalk.warnings.length > 0 && (
+            <ul style={{ fontSize: 12.5, lineHeight: 1.6, margin: 0, paddingLeft: 20, color: 'var(--admin-text-muted)' }}>
+              {crosswalk.warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginTop: 10 }}>
+            <KV label="Window" value={`${crosswalk.actions_window_days}d`} />
+            <KV
+              label="Actions total in window"
+              value={crosswalk.actions_total_in_window != null
+                ? crosswalk.actions_total_in_window.toLocaleString()
+                : '(envelope absent)'}
+            />
+            <KV label="Actions examined" value={crosswalk.actions_examined.toLocaleString()} />
+            <KV
+              label="Pages fetched"
+              value={`${crosswalk.actions_pages_fetched} × ${crosswalk.actions_page_size.toLocaleString()}`}
+            />
+            <KV
+              label="Safety cap"
+              value={crosswalk.safety_cap_hit
+                ? `HIT at ${crosswalk.safety_cap.toLocaleString()}`
+                : `${crosswalk.safety_cap.toLocaleString()} (not hit)`}
+              warn={crosswalk.safety_cap_hit}
+            />
+            <KV label="CSV rows in same window" value={crosswalk.csv_rows_in_same_window.toLocaleString()} />
+            <KV
+              label="Overall match rate"
+              value={crosswalk.actions_examined > 0
+                ? `${(crosswalk.overall_match_rate * 100).toFixed(1)}%`
+                : '—'}
+            />
+            <KV label="Matched by Id ↔ external_ref" value={crosswalk.match_counts.by_external_ref_eq_id.toLocaleString()} />
+            <KV label="Matched by Oid" value={crosswalk.match_counts.by_external_ref_eq_oid.toLocaleString()} />
+            <KV label="Matched by OrderId" value={crosswalk.match_counts.by_external_ref_eq_order_id.toLocaleString()} />
+            <KV label="Matched by date+amount" value={crosswalk.match_counts.by_date_amount_currency.toLocaleString()} />
+            <KV label="Ambiguous composite" value={crosswalk.match_counts.ambiguous_date_amount.toLocaleString()} warn={crosswalk.match_counts.ambiguous_date_amount > 0} />
+            <KV label="Unmatched" value={crosswalk.match_counts.unmatched.toLocaleString()} warn={crosswalk.match_counts.unmatched > 0} />
+          </div>
+
+          {crosswalk.example_matches.length > 0 && (
+            <>
+              <h3 className="admin-eyebrow" style={{ marginTop: 10, marginBottom: 6 }}>Sample match pairs (first 10, redacted)</h3>
+              <Table
+                columns={[
+                  { key: 'id',  header: 'Action.Id',  render: (r) => <code style={{ fontSize: 11 }}>{r.action.action_id ?? '—'}</code> },
+                  { key: 'oid', header: 'Oid',        render: (r) => <code style={{ fontSize: 11 }}>{r.action.oid ?? '—'}</code> },
+                  { key: 'ord', header: 'OrderId',    render: (r) => <code style={{ fontSize: 11 }}>{r.action.order_id ?? '—'}</code> },
+                  { key: 'st',  header: 'State',      render: (r) => <code>{r.action.state ?? '—'}</code> },
+                  { key: 'dt',  header: 'Date',       render: (r) => r.action.action_date ?? '—' },
+                  { key: 'cur', header: 'Ccy',        render: (r) => r.action.currency ?? '—' },
+                  { key: 'pay', header: 'Payout (minor)', className: 'col-num', render: (r) => r.action.payout_minor ?? '—' },
+                  { key: 'mb',  header: 'Match by',   render: (r) => r.match_by ? <StatusBadge state="success" label={r.match_by} /> : r.ambiguous ? <StatusBadge state="warning" label="ambiguous" /> : <span className="col-dim">—</span> },
+                  { key: 'mref',header: 'CSV external_ref', render: (r) => r.matched_external_ref ? <code style={{ fontSize: 11 }}>{r.matched_external_ref}</code> : <span className="col-dim">—</span> },
+                  { key: 'mst', header: 'CSV status', render: (r) => r.matched_ledger_status ?? <span className="col-dim">—</span> },
+                ]}
+                rows={crosswalk.example_matches.map((m, i) => ({ ...m, id: `m-${i}` }))}
+                empty="No sample pairs."
+              />
+            </>
+          )}
+        </div>
+      </Panel>
+
+      <Panel title="Reversal + payout semantics (live sample)" eyebrow="Ledger rule to apply when ingesting">
+        <div style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 10 }}>
+          <strong>Verdict: </strong><code>{crosswalk.reversal_semantics.verdict}</code>
+        </div>
+        <p style={{ fontSize: 13, lineHeight: 1.6, margin: '0 0 10px' }}>{crosswalk.reversal_semantics.evidence}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+          <KV label="REVERSED w/ positive payout" value={String(crosswalk.reversal_semantics.reversed_payout_signs.positive)} />
+          <KV label="REVERSED w/ zero payout" value={String(crosswalk.reversal_semantics.reversed_payout_signs.zero)} />
+          <KV label="REVERSED w/ negative payout" value={String(crosswalk.reversal_semantics.reversed_payout_signs.negative)} />
+        </div>
+        <h3 className="admin-eyebrow" style={{ marginTop: 10, marginBottom: 6 }}>All states sampled</h3>
+        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>
+          {Object.entries(crosswalk.reversal_semantics.states_sampled).map(([s, n]) => (
+            <li key={s}><code>{s}</code> — {n}</li>
+          ))}
+          {Object.keys(crosswalk.reversal_semantics.states_sampled).length === 0 && (
+            <li className="col-dim">(no states observed)</li>
+          )}
         </ul>
       </Panel>
 
@@ -205,6 +320,24 @@ export default async function ImpactAuditPage() {
         </ul>
       </Panel>
     </AdminShell>
+  );
+}
+
+function KV({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+  return (
+    <div style={{
+      border: '1px solid var(--admin-border)',
+      borderRadius: 'var(--radius-md)',
+      padding: '8px 10px',
+      background: warn ? 'var(--warning-soft)' : 'var(--admin-surface)',
+    }}>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--admin-text-subtle)', fontWeight: 700, marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: warn ? 'var(--warning)' : 'var(--admin-text)' }}>
+        {value}
+      </div>
+    </div>
   );
 }
 
