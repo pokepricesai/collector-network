@@ -4,21 +4,36 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { generateArticleDraft, runArticleQc } from '@/server/content/drafts';
 import { publishArticle } from '@/server/content/publish';
+import { sanitiseEditorHtml } from '@/server/content/sanitise';
 
 export async function updateArticleAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
   const { admin, sb } = await requireAdmin('/admin/content/articles');
   const id = fd.get('id') as string;
+  const changeNote = (fd.get('changeNote') as string) || null;
+
   const update: Record<string, unknown> = {
     title: (fd.get('title') as string).slice(0, 300),
     slug: (fd.get('slug') as string).slice(0, 120),
     meta_title: ((fd.get('metaTitle') as string) || null)?.slice(0, 200) ?? null,
     meta_description: ((fd.get('metaDescription') as string) || null)?.slice(0, 400) ?? null,
     summary: ((fd.get('summary') as string) || null)?.slice(0, 400) ?? null,
-    body: (fd.get('body') as string) || '',
+    standfirst: ((fd.get('standfirst') as string) || null)?.slice(0, 400) ?? null,
   };
-  const changeNote = (fd.get('changeNote') as string) || null;
 
-  // Snapshot before overwrite
+  // Rich-text editor output flows through the server-side sanitiser
+  // before persistence — the editor is NOT trusted to produce clean
+  // HTML. The legacy markdown `body` column is left untouched so
+  // AI-generated drafts remain available as a source of truth; the
+  // public reader will prefer body_rich.html when present.
+  const bodyHtmlRaw = fd.get('bodyRich');
+  if (typeof bodyHtmlRaw === 'string') {
+    const sanitised = sanitiseEditorHtml(bodyHtmlRaw);
+    update['body_rich'] = sanitised as unknown as Record<string, unknown>;
+    update['body_format'] = 'html';
+  }
+
+  // Snapshot BEFORE overwrite — version history never silently
+  // destroys prior content.
   await sb.rpc('network_snapshot_article', {
     p_article_id: id,
     p_actor_type: 'human',
