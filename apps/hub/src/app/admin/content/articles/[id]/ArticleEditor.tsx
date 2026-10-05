@@ -10,7 +10,7 @@ import {
   updateArticleAction,
 } from '../actions';
 import { runEditorialQcAction } from '@/app/admin/social/actions';
-import { RichEditor } from './RichEditor';
+import { RichEditor, type RichEditorHandle } from './RichEditor';
 import { MediaPicker, type ArticleMediaItem } from './MediaPicker';
 
 interface Article {
@@ -75,6 +75,11 @@ export function ArticleEditor(props: {
     standfirst: props.article.standfirst ?? '',
     bodyHtml: props.initialHtml,
   });
+
+  // Imperative handle on the editor — the media picker inserts at the
+  // editor's saved selection via this ref, rather than by rebuilding
+  // the HTML string.
+  const editorRef = useRef<RichEditorHandle>(null);
 
   const [saveState, setSaveState] = useState<SaveState>('clean');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -162,13 +167,19 @@ export function ArticleEditor(props: {
     return () => window.removeEventListener('keydown', h);
   }, [save, saveState]);
 
+  // Pure imperative — forward to the editor ref so the figure is
+  // inserted at the saved selection via a TipTap transaction instead
+  // of appending to the serialised HTML string (which was the root
+  // cause of the end-append bug). The editor's onUpdate still fires,
+  // which propagates the new HTML back into bodyHtml, keeping the
+  // dirty-state detector working.
   const insertImage = (opts: { url: string; alt: string | null; caption: string | null; mediaId: string }) => {
-    const altAttr = (opts.alt ?? '').replace(/"/g, '&quot;');
-    const img = `<img src="${opts.url}" alt="${altAttr}" data-media-id="${opts.mediaId}" />`;
-    const inner = opts.caption
-      ? `<figure data-media-id="${opts.mediaId}">${img}<figcaption>${escapeHtml(opts.caption)}</figcaption></figure>`
-      : img;
-    setBodyHtml((prev) => `${prev || ''}\n${inner}\n`);
+    editorRef.current?.insertFigure({
+      mediaId: opts.mediaId,
+      src: opts.url,
+      alt: opts.alt,
+      caption: opts.caption,
+    });
   };
 
   const saveLabel = {
@@ -232,16 +243,22 @@ export function ArticleEditor(props: {
           <textarea value={summary} onChange={(e) => setSummary(e.currentTarget.value)} rows={2} style={{ ...input, resize: 'vertical' }} maxLength={400} />
         </Field>
 
-        <Field label="Body">
+        {/* Deliberately NOT wrapped in <Field label="Body"> — a <label>
+            around a contenteditable div causes some browsers to redirect
+            clicks to the first labelable descendant, which can interfere
+            with TipTap's own selection/focus handling. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#555' }}>Body</span>
           <RichEditor
-            initialHtml={bodyHtml}
+            ref={editorRef}
+            initialHtml={props.initialHtml}
             onChange={setBodyHtml}
             onRequestInsertImage={() => {
               document.getElementById('article-media-picker')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }}
             placeholder="Start writing…"
           />
-        </Field>
+        </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="status-badge status-opportunity" style={buttonLg}
@@ -398,10 +415,6 @@ export function ArticleEditor(props: {
       </aside>
     </div>
   );
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function saveStateBg(s: SaveState): string {

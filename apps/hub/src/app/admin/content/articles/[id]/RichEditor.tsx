@@ -1,28 +1,30 @@
 'use client';
 
 // TipTap-based rich-text editor for Collector Network OS articles.
-// The parent owns:
-//   * initial HTML (from body_rich.html, or markdownToEditorHtml on
-//     a legacy row)
-//   * the save flow (receives an onChange callback)
-//   * the media picker (passes it into the "Insert image" slot)
 //
-// The editor itself just exposes:
-//   * a toolbar (paragraph / H2 / H3 / bold / italic / link / list /
-//     quote / insert image)
-//   * contenteditable surface
-//   * onChange firing with the current HTML after every edit
+// Owner responsibilities:
+//   * Pass initialHtml ONCE on mount — the editor is the source of
+//     truth after that. Do not re-sync.
+//   * Receive onChange(html) on every document update.
+//   * Hold a ref to this component to insert media at the saved
+//     selection without the editor needing focus.
 //
-// Server-side sanitisation runs on save (not here) — so even if the
-// editor emits something unexpected, the final persisted html is
-// clean.
+// This component owns:
+//   * Toolbar (paragraph / H2 / H3 / bold / italic / link / list /
+//     quote / insert image).
+//   * Selection tracking so that an insert-media call from outside
+//     the editor (e.g. from the media picker, which steals focus
+//     before clicking Insert) lands at the user's last cursor
+//     position, not at the end of the document.
+//   * A custom MediaFigure node extension for figure/img/figcaption
+//     with a data-media-id attribute (round-trips through save).
 
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
-import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
-import { useCallback, useEffect } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
+import { MediaFigure } from './MediaFigure';
 
 export interface RichEditorProps {
   initialHtml: string;
@@ -31,15 +33,33 @@ export interface RichEditorProps {
   placeholder?: string;
 }
 
-export function RichEditor({ initialHtml, onChange, onRequestInsertImage, placeholder }: RichEditorProps) {
+export interface RichEditorHandle {
+  /** Insert a <figure data-media-id> at the last-known selection.
+   *  The caller does not need the editor to be focused — selection
+   *  is restored from the saved blur position. */
+  insertFigure: (attrs: {
+    mediaId: string;
+    src: string;
+    alt?: string | null;
+    caption?: string | null;
+  }) => void;
+}
+
+export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEditor(
+  { initialHtml, onChange, onRequestInsertImage, placeholder },
+  ref,
+) {
+  // Saved selection — written on every blur so an Insert click from
+  // the sidebar picker (which steals focus from the editor) still
+  // knows where the cursor was. Null until the editor is focused
+  // for the first time; in that case we insert at the document end
+  // on the first media insert.
+  const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        // We don't support headings above H3 or below H3. Articles
-        // get their title from the page template; H1 inside the body
-        // creates duplicate top-levels.
         heading: { levels: [2, 3] },
-        // Hide syntax we don't support in the sanitiser.
         codeBlock: false,
         code: false,
         strike: false,
@@ -51,12 +71,8 @@ export function RichEditor({ initialHtml, onChange, onRequestInsertImage, placeh
         protocols: ['http', 'https'],
         HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
       }),
-      Image.configure({
-        inline: false,
-        allowBase64: false,
-        HTMLAttributes: { loading: 'lazy' },
-      }),
       Placeholder.configure({ placeholder: placeholder ?? 'Write…' }),
+      MediaFigure,
     ],
     content: initialHtml || '',
     editorProps: {
@@ -68,64 +84,132 @@ export function RichEditor({ initialHtml, onChange, onRequestInsertImage, placeh
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
     },
+    onBlur: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      savedSelectionRef.current = { from, to };
+    },
+    onSelectionUpdate: ({ editor }) => {
+      // Keep the saved selection fresh while focused too — if the
+      // editor was focused and the user clicked a toolbar button
+      // (which does not blur), we still want the current cursor.
+      if (editor.isFocused) {
+        const { from, to } = editor.state.selection;
+        savedSelectionRef.current = { from, to };
+      }
+    },
+    // Important for SSR + hydration stability. Without this the
+    // editor can be constructed twice during React's strict-mode
+    // double invocation, which has been observed to flash scroll on
+    // mount.
     immediatelyRender: false,
   });
 
-  // If the parent swaps `initialHtml` (e.g. "Reset to markdown
-  // source"), reflect that in the editor without clobbering focus
-  // during a normal typing session.
-  useEffect(() => {
-    if (!editor) return;
-    if (editor.getHTML() === initialHtml) return;
-    editor.commands.setContent(initialHtml || '', false);
-  }, [editor, initialHtml]);
+  // Expose an imperative insert API. We intentionally do NOT re-sync
+  // via a setContent effect on `initialHtml` changes — doing so would
+  // destroy the editor's selection and scroll state on every parent
+  // state change, which was the root cause of the previous "page
+  // jumps to top" symptom.
+  useImperativeHandle(
+    ref,
+    (): RichEditorHandle => ({
+      insertFigure(attrs) {
+        if (!editor) return;
+        const docSize = editor.state.doc.content.size;
+        const saved = savedSelectionRef.current;
+        // Clamp the saved position to the current doc size (defensive
+        // against stale selections after an edit).
+        const pos = saved
+          ? Math.min(Math.max(0, saved.from), docSize)
+          : docSize;
 
-  if (!editor) return <div style={{ padding: 12, color: '#777', fontSize: 12 }}>Loading editor…</div>;
-
-  return (
-    <div style={{ border: '1px solid #D4D4D4', borderRadius: 6, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
-      <Toolbar editor={editor} onRequestInsertImage={onRequestInsertImage} />
-      <div style={{ padding: '12px 14px', flex: 1 }}>
-        <EditorContent editor={editor} />
-      </div>
-      <RichEditorStyles />
-    </div>
+        editor
+          .chain()
+          // Place the cursor at the saved position. {scrollIntoView:
+          // false} is critical — otherwise focus() would scroll the
+          // selection into view and could shift the viewport.
+          .focus(pos, { scrollIntoView: false })
+          .insertContentAt(pos, { type: 'mediaFigure', attrs })
+          .run();
+      },
+    }),
+    [editor],
   );
-}
 
-function Toolbar({ editor, onRequestInsertImage }: { editor: Editor; onRequestInsertImage: () => void }) {
   const setLink = useCallback(() => {
+    if (!editor) return;
     const prev = editor.getAttributes('link')['href'] as string | undefined;
     const url = window.prompt('Link URL (https://…). Clear to remove.', prev ?? '');
     if (url === null) return;
     if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      editor.chain().focus(undefined, { scrollIntoView: false }).extendMarkRange('link').unsetLink().run();
       return;
     }
     if (!/^https?:\/\//i.test(url)) {
       window.alert('Links must start with http:// or https://.');
       return;
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    editor
+      .chain()
+      .focus(undefined, { scrollIntoView: false })
+      .extendMarkRange('link')
+      .setLink({ href: url })
+      .run();
   }, [editor]);
 
+  if (!editor) {
+    return <div style={{ padding: 12, color: '#777', fontSize: 12 }}>Loading editor…</div>;
+  }
+
   return (
-    <div style={{
-      display: 'flex', gap: 4, flexWrap: 'wrap', padding: '6px 8px',
-      borderBottom: '1px solid #E6E6E6', background: '#FAFAFA',
-      position: 'sticky', top: 0, zIndex: 1,
-    }}>
-      <ToolbarBtn label="Paragraph" active={editor.isActive('paragraph')} onClick={() => editor.chain().focus().setParagraph().run()} />
-      <ToolbarBtn label="H2" active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
-      <ToolbarBtn label="H3" active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
+    <div style={{ border: '1px solid #D4D4D4', borderRadius: 6, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+      <Toolbar editor={editor} onRequestInsertImage={onRequestInsertImage} onSetLink={setLink} />
+      <div style={{ padding: '12px 14px', flex: 1 }}>
+        <EditorContent editor={editor} />
+      </div>
+      <RichEditorStyles />
+    </div>
+  );
+});
+
+function Toolbar({
+  editor,
+  onRequestInsertImage,
+  onSetLink,
+}: {
+  editor: Editor;
+  onRequestInsertImage: () => void;
+  onSetLink: () => void;
+}) {
+  // All toolbar commands use focus({ scrollIntoView: false }) so
+  // clicking a button never jerks the viewport back to the top.
+  const noScrollFocus = { scrollIntoView: false } as const;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 4,
+        flexWrap: 'wrap',
+        padding: '6px 8px',
+        borderBottom: '1px solid #E6E6E6',
+        background: '#FAFAFA',
+      }}
+      // Prevent mousedown from blurring the editor before the command
+      // runs. Without this, every toolbar click would blur the
+      // contenteditable, lose the selection, and only then run the
+      // command — which TipTap would run against a de-selected doc.
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      <ToolbarBtn label="Paragraph" active={editor.isActive('paragraph')} onClick={() => editor.chain().focus(undefined, noScrollFocus).setParagraph().run()} />
+      <ToolbarBtn label="H2" active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus(undefined, noScrollFocus).toggleHeading({ level: 2 }).run()} />
+      <ToolbarBtn label="H3" active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus(undefined, noScrollFocus).toggleHeading({ level: 3 }).run()} />
       <Divider />
-      <ToolbarBtn label="B" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} style={{ fontWeight: 700 }} />
-      <ToolbarBtn label="I" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} style={{ fontStyle: 'italic' }} />
-      <ToolbarBtn label="Link" active={editor.isActive('link')} onClick={setLink} />
+      <ToolbarBtn label="B" active={editor.isActive('bold')} onClick={() => editor.chain().focus(undefined, noScrollFocus).toggleBold().run()} style={{ fontWeight: 700 }} />
+      <ToolbarBtn label="I" active={editor.isActive('italic')} onClick={() => editor.chain().focus(undefined, noScrollFocus).toggleItalic().run()} style={{ fontStyle: 'italic' }} />
+      <ToolbarBtn label="Link" active={editor.isActive('link')} onClick={onSetLink} />
       <Divider />
-      <ToolbarBtn label="• List" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-      <ToolbarBtn label="1. List" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-      <ToolbarBtn label="Quote" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
+      <ToolbarBtn label="• List" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus(undefined, noScrollFocus).toggleBulletList().run()} />
+      <ToolbarBtn label="1. List" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus(undefined, noScrollFocus).toggleOrderedList().run()} />
+      <ToolbarBtn label="Quote" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus(undefined, noScrollFocus).toggleBlockquote().run()} />
       <Divider />
       <ToolbarBtn label="Insert image…" onClick={onRequestInsertImage} />
     </div>
@@ -168,11 +252,6 @@ function Divider() {
   return <span aria-hidden style={{ width: 1, background: '#D4D4D4', margin: '0 4px' }} />;
 }
 
-/**
- * Minimal styling for the editor surface. Mirrors the public article
- * typography enough that the rich surface looks like what will ship.
- * Scoped via a unique class name on the editor root.
- */
 function RichEditorStyles() {
   return (
     <style
@@ -188,6 +267,7 @@ function RichEditorStyles() {
           .rich-editor-surface a { color: #0A5BB7; text-decoration: underline; }
           .rich-editor-surface img { max-width: 100%; height: auto; display: block; border-radius: 6px; margin: 8px 0; }
           .rich-editor-surface figure { margin: 12px 0; }
+          .rich-editor-surface figure.ProseMirror-selectednode { outline: 2px solid #0A5BB7; border-radius: 6px; }
           .rich-editor-surface figcaption { font-size: 12px; color: #666; margin-top: 4px; }
           .rich-editor-surface p.is-editor-empty:first-child::before {
             content: attr(data-placeholder); float: left; color: #AAA; pointer-events: none; height: 0;
