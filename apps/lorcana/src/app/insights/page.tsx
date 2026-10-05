@@ -2,6 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { canonicalFor } from '@/lib/seo';
 import { LORCANA_ARTICLES } from '@/lib/insights';
+import { listNetworkArticles } from '@/server/network-articles';
+
+export const revalidate = 900;
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title:
@@ -11,7 +15,36 @@ export const metadata: Metadata = {
   alternates: { canonical: canonicalFor('/insights') },
 };
 
-export default function InsightsIndex() {
+interface Tile {
+  slug: string;
+  title: string;
+  description: string;
+  publishedAt: string;
+  tags: string[];
+}
+
+export default async function InsightsIndex() {
+  const networkArticles = await listNetworkArticles();
+  const registrySlugs = new Set(LORCANA_ARTICLES.map((a) => a.slug));
+  const tiles: Tile[] = [
+    ...LORCANA_ARTICLES.map((a) => ({
+      slug: a.slug,
+      title: a.title,
+      description: a.description,
+      publishedAt: a.publishedAt,
+      tags: a.tags,
+    })),
+    ...networkArticles
+      .filter((n) => !registrySlugs.has(n.slug))
+      .map((n) => ({
+        slug: n.slug,
+        title: n.title,
+        description: n.summary ?? '',
+        publishedAt: n.publishedAt ?? n.updatedAt,
+        tags: ['Editorial'] as string[],
+      })),
+  ].sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
+
   return (
     <div className="lc-container lc-section" style={{ maxWidth: 900 }}>
       <header className="lc-page-hero" style={{ marginBottom: 24 }}>
@@ -29,7 +62,7 @@ export default function InsightsIndex() {
       </header>
 
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 14 }}>
-        {LORCANA_ARTICLES.map((a) => (
+        {tiles.map((a) => (
           <li key={a.slug}>
             <Link
               href={`/insights/${a.slug}`}
@@ -49,9 +82,11 @@ export default function InsightsIndex() {
               <h2 className="lc-serif" style={{ margin: '0 0 8px', fontSize: 22, letterSpacing: '-0.01em' }}>
                 {a.title}
               </h2>
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
-                {a.description}
-              </p>
+              {a.description && (
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55 }}>
+                  {a.description}
+                </p>
+              )}
               <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {a.tags.map((t) => (
                   <span key={t} className="chip" style={{ fontSize: 11 }}>

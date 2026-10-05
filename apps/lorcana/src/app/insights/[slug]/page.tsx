@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { canonicalFor, SITE_ORIGIN } from '@/lib/seo';
 import { findArticle, LORCANA_ARTICLES } from '@/lib/insights';
+import { findNetworkArticle, renderMarkdownToHtml } from '@/server/network-articles';
 import { getPricedTiles } from '@/server/discovery';
 import { buildPrintingSlug, slugifyCardName } from '@/lib/lorcana/slug';
 import { getLorcanaCurrency } from '@/lib/currency-server';
@@ -24,19 +25,37 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const article = findArticle(slug);
-  if (!article) return { title: 'Article not found · LorcanaPrices' };
-  const canonical = canonicalFor(`/insights/${article.slug}`);
-  return {
-    title: article.metaTitle,
-    description: article.metaDescription,
-    alternates: { canonical },
-    openGraph: {
+  if (article) {
+    const canonical = canonicalFor(`/insights/${article.slug}`);
+    return {
       title: article.metaTitle,
       description: article.metaDescription,
+      alternates: { canonical },
+      openGraph: {
+        title: article.metaTitle,
+        description: article.metaDescription,
+        url: canonical,
+        type: 'article',
+        publishedTime: article.publishedAt,
+        modifiedTime: article.updatedAt,
+      },
+    };
+  }
+  // Fall back to a Collector Network OS published article.
+  const net = await findNetworkArticle(slug);
+  if (!net) return { title: 'Article not found · LorcanaPrices' };
+  const canonical = canonicalFor(`/insights/${slug}`);
+  return {
+    title: net.metaTitle ?? net.title,
+    description: net.metaDescription ?? net.summary ?? undefined,
+    alternates: { canonical },
+    openGraph: {
+      title: net.title,
+      description: net.metaDescription ?? net.summary ?? undefined,
       url: canonical,
       type: 'article',
-      publishedTime: article.publishedAt,
-      modifiedTime: article.updatedAt,
+      publishedTime: net.publishedAt ?? undefined,
+      modifiedTime: net.updatedAt,
     },
   };
 }
@@ -48,6 +67,49 @@ export default async function ArticlePage({
 }) {
   const { slug } = await params;
   const article = findArticle(slug);
+  const network = article ? null : await findNetworkArticle(slug);
+  if (!article && !network) notFound();
+
+  if (network) {
+    const canonical = canonicalFor(`/insights/${slug}`);
+    const bodyHtml = renderMarkdownToHtml(network.bodyMarkdown ?? '');
+    const netLd = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: network.title,
+      description: network.summary ?? '',
+      datePublished: network.publishedAt ?? undefined,
+      dateModified: network.updatedAt,
+      author: { '@type': 'Organization', name: network.author ?? 'LorcanaPrices' },
+      publisher: { '@type': 'Organization', name: 'LorcanaPrices', url: SITE_ORIGIN },
+      mainEntityOfPage: canonical,
+    };
+    return (
+      <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(netLd) }} />
+        <section className="lc-section">
+          <div className="lc-container" style={{ maxWidth: 780, margin: '0 auto' }}>
+            <nav aria-label="Breadcrumb" style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Link href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Home</Link>
+              <span aria-hidden>›</span>
+              <Link href="/insights" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Insights</Link>
+              <span aria-hidden>›</span>
+              <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{network.title}</span>
+            </nav>
+            <h1 style={{ margin: '4px 0 8px', fontSize: 34, lineHeight: 1.15, letterSpacing: '-0.01em' }}>{network.title}</h1>
+            {network.summary && (
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.55 }}>{network.summary}</p>
+            )}
+            <article className="article-body" style={{ marginTop: 24, fontSize: 15, lineHeight: 1.7, color: 'var(--text)' }} dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            <nav style={{ marginTop: 32 }}>
+              <Link href="/insights" style={{ fontSize: 13 }}>← All insights</Link>
+            </nav>
+          </div>
+        </section>
+      </>
+    );
+  }
+
   if (!article) notFound();
 
   const canonical = canonicalFor(`/insights/${article.slug}`);
