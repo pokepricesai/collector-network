@@ -2,14 +2,21 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/server/admin/require-admin';
-import { buildEpnPreview, type EpnCampaignMap, type EpnPreview } from './epn-import';
+import {
+  buildEpnPreview,
+  classifyReconciliation,
+  type EpnCampaignMap,
+  type EpnPreview,
+  type EpnRow,
+  type ExistingLedgerRow,
+} from './epn-import';
 
 // Build the campaign map from env + the live network_revenue_sources
 // table. Env is the source of truth for which campaign ID maps to
 // which site (EPN controls campaign IDs, not us). Format:
 //   EPN_CAMPAIGN_MAP="5338606910:pokemon:ebay_epn_uk:GBP,5339215010:lorcana:ebay_epn_uk:GBP,..."
-// `source_slug` is the slug of a row in network_revenue_sources.
 
 async function loadCampaignMap(): Promise<EpnCampaignMap> {
   const { sb } = await requireAdmin('/admin/revenue/import');
@@ -42,8 +49,7 @@ async function loadCampaignMap(): Promise<EpnCampaignMap> {
   return map;
 }
 
-// Preview blob stashed in network_settings. network_settings.key is
-// constrained to ^[a-z][a-z0-9_.-]*$ so we lowercase the UUID.
+// Preview blob stashed in network_settings.
 function previewKey(adminRowId: string): string {
   return `epn_import_preview.${adminRowId.toLowerCase()}`;
 }
@@ -51,8 +57,6 @@ function previewKey(adminRowId: string): string {
 async function savePreview(preview: EpnPreview, adminRowId: string): Promise<void> {
   const { sb } = await requireAdmin('/admin/revenue/import');
   const key = previewKey(adminRowId);
-  // delete-then-insert: NULL site_id in unique(site_id, key) doesn't
-  // collide, so upsert on key alone wouldn't dedupe.
   await sb.from('network_settings').delete().eq('key', key);
   const { error } = await sb.from('network_settings').insert({
     key,
@@ -77,8 +81,44 @@ async function clearPreview(adminRowId: string): Promise<void> {
   await sb.from('network_settings').delete().eq('key', previewKey(adminRowId));
 }
 
+/**
+ * Fetch existing network_revenue_events rows that match the
+ * (source_id, idempotency_key) pairs we're about to import. Returned
+ * rows feed the reconciliation classifier so the UI can preview the
+ * diff before committing.
+ */
+async function fetchExistingLedgerRows(
+  sb: SupabaseClient,
+  mappedRows: EpnRow[],
+): Promise<ExistingLedgerRow[]> {
+  if (mappedRows.length === 0) return [];
+  // Postgres `IN` can swallow thousands of ids but we chunk to stay
+  // under PostgREST's URL length cap on big annual CSVs.
+  const CHUNK = 500;
+  const seen = new Set<string>();
+  const out: ExistingLedgerRow[] = [];
+  for (let i = 0; i < mappedRows.length; i += CHUNK) {
+    const chunk = mappedRows.slice(i, i + CHUNK);
+    const keys = chunk.map((r) => r.idempotency_key);
+    const { data, error } = await sb
+      .from('network_revenue_events')
+      .select('id, source_id, idempotency_key, amount_minor, event_kind, ledger_status, occurred_on')
+      .in('idempotency_key', keys);
+    if (error) throw new Error(`[epn] fetchExisting: ${error.message}`);
+    for (const row of (data ?? []) as ExistingLedgerRow[]) {
+      // Second-level filter: match on BOTH source_id + idempotency_key
+      // because the unique constraint is composite.
+      const compositeKey = `${row.source_id}:${row.idempotency_key}`;
+      if (seen.has(compositeKey)) continue;
+      seen.add(compositeKey);
+      out.push(row);
+    }
+  }
+  return out;
+}
+
 export async function previewEpnImportAction(formData: FormData): Promise<void> {
-  const { admin } = await requireAdmin('/admin/revenue/import');
+  const { admin, sb } = await requireAdmin('/admin/revenue/import');
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) {
     throw new Error('CSV file required');
@@ -89,8 +129,56 @@ export async function previewEpnImportAction(formData: FormData): Promise<void> 
   const text = await file.text();
   const map = await loadCampaignMap();
   const preview = buildEpnPreview(file.name, text, map);
+  // Attach the reconciliation diff BEFORE committing so Luke sees
+  // "281 new / 3,850 unchanged / 74 pending → confirmed / 9 → reversed"
+  // in the preview UI, not just a totals summary.
+  const mappedRows = preview.accepted.filter((r) => r.mapped_source_id && r.mapped_site_id);
+  const existing = await fetchExistingLedgerRows(sb, mappedRows);
+  preview.reconciliation = classifyReconciliation(preview, existing);
   await savePreview(preview, admin.adminRowId);
   redirect('/admin/revenue/import?step=preview');
+}
+
+/**
+ * Build the row payload for a revenue event — the shape we insert
+ * or update. Signed amount_minor for reversals; event_kind reflects
+ * current status (revenue vs reversal). ledger_status is persisted
+ * on the dedicated column so queries don't need to probe jsonb.
+ */
+function buildRevenueRow(
+  row: EpnRow,
+  preview: EpnPreview,
+  adminId: string,
+  nowIso: string,
+  isFirstSeen: boolean,
+  priorFirstSeenAt: string | null,
+): Record<string, unknown> {
+  const sourceDetail: Record<string, unknown> = {
+    status: row.status,
+    campaign_id: row.campaign_id,
+    custom_id: row.custom_id,
+    item_title: row.item_title,
+    row_index: row.row_index,
+    file_name: preview.file_name,
+  };
+  const eventKind: 'revenue' | 'reversal' = row.status === 'reversed' ? 'reversal' : 'revenue';
+  return {
+    source_id: row.mapped_source_id!,
+    site_id: row.mapped_site_id!,
+    event_kind: eventKind,
+    occurred_on: row.occurred_on,
+    amount_minor: row.earnings_minor,
+    currency: row.currency,
+    description: row.item_title ?? `EPN ${row.status} · ${row.custom_id ?? ''}`,
+    source_detail: sourceDetail,
+    external_ref: row.transaction_id,
+    idempotency_key: row.idempotency_key,
+    entered_by: adminId,
+    ledger_status: row.status,
+    // Preserve first_seen on updates; stamp on first observation.
+    first_seen_at: isFirstSeen ? nowIso : (priorFirstSeenAt ?? nowIso),
+    status_changed_at: nowIso,
+  };
 }
 
 export async function commitEpnImportAction(): Promise<void> {
@@ -98,37 +186,116 @@ export async function commitEpnImportAction(): Promise<void> {
   const preview = await loadPreview(admin.adminRowId);
   if (!preview) throw new Error('no preview to commit');
 
-  // Only rows with resolved site + source attribute; others would
-  // land without a FK and are intentionally skipped. The preview UI
-  // already surfaces unmapped campaigns before this point.
   const mapped = preview.accepted.filter((r) => r.mapped_source_id && r.mapped_site_id);
   const skipped = preview.accepted.length - mapped.length;
 
-  const revenueRows = mapped.map((row) => {
-    const sourceDetail: Record<string, unknown> = {
-      status: row.status,
-      campaign_id: row.campaign_id,
-      custom_id: row.custom_id,
-      item_title: row.item_title,
-      row_index: row.row_index,
-      file_name: preview.file_name,
-    };
-    const eventKind: 'revenue' | 'reversal' = row.status === 'reversed' ? 'reversal' : 'revenue';
-    return {
-      source_id: row.mapped_source_id,
-      site_id: row.mapped_site_id,
-      event_kind: eventKind,
-      occurred_on: row.occurred_on,
-      amount_minor: row.earnings_minor,
-      currency: row.currency,
-      description: row.item_title ?? `EPN ${row.status} · ${row.custom_id ?? ''}`,
-      source_detail: sourceDetail,
-      external_ref: row.transaction_id,
-      idempotency_key: row.idempotency_key,
-      entered_by: admin.adminRowId,
-    };
-  });
+  // Refresh reconciliation at commit time so the diff is based on
+  // the current DB state (the preview could have been staged
+  // minutes/hours ago).
+  const existing = await fetchExistingLedgerRows(sb, mapped);
+  const reconciliation = classifyReconciliation(preview, existing);
 
+  const existingByKey = new Map<string, ExistingLedgerRow>();
+  for (const e of existing) existingByKey.set(`${e.source_id}:${e.idempotency_key}`, e);
+
+  const nowIso = new Date().toISOString();
+
+  // Separate inserts (new transactions) from updates (status/amount
+  // changes). Unchanged rows are skipped — no DB write at all.
+  const toInsert: Record<string, unknown>[] = [];
+  const toUpdate: Array<{ id: string; row: Record<string, unknown>; prior: ExistingLedgerRow; incoming: EpnRow }> = [];
+
+  for (const row of mapped) {
+    const key = `${row.mapped_source_id}:${row.idempotency_key}`;
+    const prior = existingByKey.get(key);
+    if (!prior) {
+      toInsert.push(buildRevenueRow(row, preview, admin.adminRowId, nowIso, true, null));
+      continue;
+    }
+    const statusDiffers = (prior.ledger_status ?? 'unknown') !== row.status;
+    const amountDiffers = prior.amount_minor !== row.earnings_minor;
+    if (!statusDiffers && !amountDiffers) continue; // untouched
+    toUpdate.push({
+      id: prior.id,
+      row: buildRevenueRow(row, preview, admin.adminRowId, nowIso, false, null),
+      prior,
+      incoming: row,
+    });
+  }
+
+  const CHUNK = 500;
+  let insertedRevenue = 0;
+  const historyRowsForNew: Record<string, unknown>[] = [];
+  const historyRowsForUpdates: Record<string, unknown>[] = [];
+
+  // 1. Bulk-insert the genuinely new rows and capture their ids for
+  //    the matching history rows.
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const chunk = toInsert.slice(i, i + CHUNK);
+    const { data, error } = await sb
+      .from('network_revenue_events')
+      .insert(chunk)
+      .select('id, idempotency_key, source_id, amount_minor, event_kind, ledger_status, source_detail');
+    if (error) throw new Error(`[epn] revenue insert: ${error.message}`);
+    insertedRevenue += (data ?? []).length;
+    for (const r of (data ?? []) as Array<{ id: string; idempotency_key: string; source_id: string; amount_minor: number; event_kind: string; ledger_status: string; source_detail: Record<string, unknown> | null }>) {
+      historyRowsForNew.push({
+        revenue_event_id: r.id,
+        observed_at: nowIso,
+        from_status: null,
+        to_status: r.ledger_status,
+        from_amount_minor: null,
+        to_amount_minor: r.amount_minor,
+        from_event_kind: null,
+        to_event_kind: r.event_kind,
+        import_file_name: preview.file_name,
+        notes: 'First observation via EPN import.',
+      });
+    }
+  }
+
+  // 2. Apply updates one-by-one. Supabase-js doesn't support
+  //    batched different-value UPDATEs in a single statement without
+  //    a stored procedure; the write count here is bounded by the
+  //    status_transitions + amount_corrections size, which is
+  //    typically small vs the full file.
+  let updatedRevenue = 0;
+  for (const u of toUpdate) {
+    const { error } = await sb
+      .from('network_revenue_events')
+      .update(u.row)
+      .eq('id', u.id);
+    if (error) throw new Error(`[epn] revenue update: ${error.message}`);
+    updatedRevenue += 1;
+    const newEventKind = u.incoming.status === 'reversed' ? 'reversal' : 'revenue';
+    historyRowsForUpdates.push({
+      revenue_event_id: u.id,
+      observed_at: nowIso,
+      from_status: u.prior.ledger_status,
+      to_status: u.incoming.status,
+      from_amount_minor: u.prior.amount_minor,
+      to_amount_minor: u.incoming.earnings_minor,
+      from_event_kind: u.prior.event_kind,
+      to_event_kind: newEventKind,
+      import_file_name: preview.file_name,
+      notes: null,
+    });
+  }
+
+  // 3. Append history rows.
+  const allHistory = [...historyRowsForNew, ...historyRowsForUpdates];
+  for (let i = 0; i < allHistory.length; i += CHUNK) {
+    const chunk = allHistory.slice(i, i + CHUNK);
+    const { error } = await sb
+      .from('network_affiliate_status_history')
+      .insert(chunk);
+    if (error) throw new Error(`[epn] history insert: ${error.message}`);
+  }
+
+  // 4. Mirror into network_affiliate_conversions. For conversions
+  //    the primary reconciliation lives on the revenue event, but
+  //    we still want provider_payload refreshed when the status
+  //    changes so the conversion ledger isn't lying either.
   const conversionRows = mapped.map((row) => ({
     source_id: row.mapped_source_id,
     site_id: row.mapped_site_id,
@@ -143,32 +310,19 @@ export async function commitEpnImportAction(): Promise<void> {
       item_title: row.item_title,
       file_name: preview.file_name,
     },
+    ledger_status: row.status,
     idempotency_key: `epn:conv:${row.transaction_id}`,
   }));
-
-  // Chunked upsert with ignoreDuplicates so already-imported rows
-  // collide silently on (source_id, idempotency_key) and we don't
-  // pay a round-trip per row. Chunk size 500 keeps POST body under
-  // PostgREST's default limits and well under Vercel's response caps.
-  const CHUNK = 500;
-  let insertedRevenue = 0;
   let insertedConversions = 0;
-
-  for (let i = 0; i < revenueRows.length; i += CHUNK) {
-    const chunk = revenueRows.slice(i, i + CHUNK);
-    const { data, error } = await sb
-      .from('network_revenue_events')
-      .upsert(chunk, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: true })
-      .select('id');
-    if (error) throw new Error(`[epn] revenue upsert: ${error.message}`);
-    insertedRevenue += (data ?? []).length;
-  }
-
   for (let i = 0; i < conversionRows.length; i += CHUNK) {
     const chunk = conversionRows.slice(i, i + CHUNK);
+    // ignoreDuplicates:false → ON CONFLICT DO UPDATE on
+    // (source_id, idempotency_key). ALL columns get refreshed, which
+    // is correct for provider_payload because its freshness mirrors
+    // the EPN report.
     const { data, error } = await sb
       .from('network_affiliate_conversions')
-      .upsert(chunk, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: true })
+      .upsert(chunk, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: false })
       .select('id');
     if (error) throw new Error(`[epn] conv upsert: ${error.message}`);
     insertedConversions += (data ?? []).length;
@@ -185,8 +339,12 @@ export async function commitEpnImportAction(): Promise<void> {
       accepted_rows: preview.accepted.length,
       rejected_rows: preview.rejected.length,
       mapped_rows: mapped.length,
-      revenue_inserted: insertedRevenue,
-      conversions_inserted: insertedConversions,
+      unchanged: reconciliation.unchanged_count,
+      new_revenue: insertedRevenue,
+      updated_revenue: updatedRevenue,
+      status_transitions: reconciliation.status_transitions.length,
+      amount_corrections: reconciliation.amount_corrections.length,
+      conversions_touched: insertedConversions,
       skipped,
       unmapped_campaigns: preview.unmapped_campaigns,
     },
@@ -195,7 +353,10 @@ export async function commitEpnImportAction(): Promise<void> {
   await clearPreview(admin.adminRowId);
   revalidatePath('/admin/revenue');
   revalidatePath('/admin/revenue/entries');
-  redirect(`/admin/revenue?imported=${insertedRevenue}&conv=${insertedConversions}`);
+  revalidatePath('/admin/revenue/audit');
+  redirect(
+    `/admin/revenue?imported=${insertedRevenue}&updated=${updatedRevenue}&unchanged=${reconciliation.unchanged_count}`,
+  );
 }
 
 export async function cancelEpnPreviewAction(): Promise<void> {
@@ -214,7 +375,7 @@ export interface CampaignMapRow {
   site_slug: string;
   source_slug: string;
   currency: string;
-  resolved: boolean;        // true if site + source both found in DB
+  resolved: boolean;
   issue?: string;
 }
 
@@ -225,13 +386,6 @@ export interface CampaignMapAudit {
   invalid_rows: Array<{ raw_part: string; reason: string }>;
 }
 
-/**
- * Public read of the parsed EPN_CAMPAIGN_MAP for display on
- * /admin/revenue/import. Campaign IDs are already public (they
- * ride on every outbound eBay link); nothing else is exposed.
- * Validates each row against network_sites + network_revenue_sources
- * so the admin can see which rows will actually attribute.
- */
 export async function readCampaignMapAudit(): Promise<CampaignMapAudit> {
   const { sb } = await requireAdmin('/admin/revenue/import');
   const raw = (process.env['EPN_CAMPAIGN_MAP'] ?? '').trim();

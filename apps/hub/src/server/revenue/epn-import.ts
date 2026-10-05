@@ -57,6 +57,121 @@ export interface EpnPreview {
   date_max: string | null;
   unmapped_campaigns: string[];
   duplicate_transaction_ids: string[];
+  reconciliation?: ReconciliationSummary;
+}
+
+export interface ExistingLedgerRow {
+  id: string;
+  source_id: string;
+  idempotency_key: string;
+  amount_minor: number;
+  event_kind: string;
+  ledger_status: string | null;
+  occurred_on: string;
+}
+
+export interface ReconciliationSummary {
+  rows_examined: number;
+  mapped_rows: number;
+  new_count: number;
+  unchanged_count: number;
+  status_transitions: Array<{
+    transaction_id: string;
+    from_status: string | null;
+    to_status: string;
+    amount_minor: number;
+    currency: string;
+    occurred_on: string;
+    site_slug: string | null;
+  }>;
+  amount_corrections: Array<{
+    transaction_id: string;
+    from_minor: number;
+    to_minor: number;
+    currency: string;
+    status: string;
+  }>;
+  new_amount_by_status: Record<string, Record<string, number>>; // currency -> status -> minor
+  unmapped_campaigns: string[];
+  duplicate_transaction_ids: string[];
+}
+
+/**
+ * Pure classifier. Given the accepted rows from a preview + the
+ * existing ledger rows for those keys, decide what each row is:
+ *   NEW                → insert
+ *   UNCHANGED          → skip
+ *   STATUS_TRANSITION  → update + history row
+ *   AMOUNT_CORRECTION  → update + history row
+ *
+ * Returned classification is used by both the preview UI (so Luke
+ * sees the diff before committing) and the commit action (so the
+ * reported numbers match what the DB will do).
+ */
+export function classifyReconciliation(
+  preview: EpnPreview,
+  existing: ExistingLedgerRow[],
+): ReconciliationSummary {
+  const byKey = new Map<string, ExistingLedgerRow>();
+  for (const e of existing) byKey.set(`${e.source_id}:${e.idempotency_key}`, e);
+
+  let newCount = 0;
+  let unchangedCount = 0;
+  const statusTransitions: ReconciliationSummary['status_transitions'] = [];
+  const amountCorrections: ReconciliationSummary['amount_corrections'] = [];
+  const newAmountByStatus: Record<string, Record<string, number>> = {};
+
+  const mapped = preview.accepted.filter((r) => r.mapped_source_id && r.mapped_site_id);
+
+  for (const row of mapped) {
+    const key = `${row.mapped_source_id}:${row.idempotency_key}`;
+    const prior = byKey.get(key);
+    if (!prior) {
+      newCount += 1;
+      const perCurrency = newAmountByStatus[row.currency] ?? {};
+      perCurrency[row.status] = (perCurrency[row.status] ?? 0) + row.earnings_minor;
+      newAmountByStatus[row.currency] = perCurrency;
+      continue;
+    }
+    const statusDiffers = (prior.ledger_status ?? 'unknown') !== row.status;
+    const amountDiffers = prior.amount_minor !== row.earnings_minor;
+    if (!statusDiffers && !amountDiffers) {
+      unchangedCount += 1;
+      continue;
+    }
+    if (statusDiffers) {
+      statusTransitions.push({
+        transaction_id: row.transaction_id,
+        from_status: prior.ledger_status,
+        to_status: row.status,
+        amount_minor: row.earnings_minor,
+        currency: row.currency,
+        occurred_on: row.occurred_on,
+        site_slug: row.mapped_site_slug,
+      });
+    }
+    if (amountDiffers) {
+      amountCorrections.push({
+        transaction_id: row.transaction_id,
+        from_minor: prior.amount_minor,
+        to_minor: row.earnings_minor,
+        currency: row.currency,
+        status: row.status,
+      });
+    }
+  }
+
+  return {
+    rows_examined: preview.accepted.length,
+    mapped_rows: mapped.length,
+    new_count: newCount,
+    unchanged_count: unchangedCount,
+    status_transitions: statusTransitions,
+    amount_corrections: amountCorrections,
+    new_amount_by_status: newAmountByStatus,
+    unmapped_campaigns: preview.unmapped_campaigns,
+    duplicate_transaction_ids: preview.duplicate_transaction_ids,
+  };
 }
 
 const EARNINGS_KEYS = ['Earnings', 'Total Earnings', 'Commission', 'Partner Earnings', 'Earnings USD', 'Earnings GBP'];

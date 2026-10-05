@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { Panel, SectionHeader, StatusBadge, Table, EmptyState, MetricCard } from '@/components/admin/admin-ui';
+import { Panel, SectionHeader, StatusBadge, Table, EmptyState, MetricCard, Notice } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import {
@@ -15,6 +15,20 @@ import {
 } from '@/server/revenue/queries';
 import { pokepricesClickTotals } from '@/server/revenue/pokeprices-clicks';
 import { formatInt, formatMoneyMinor, formatDateOnly } from '@/lib/format';
+import {
+  monthlyRevenueByCurrency,
+  revenueBySite as chartRevenueBySite,
+  revenueBySource as chartRevenueBySource,
+  revenuePerThousandUsers,
+} from '@/server/revenue/charts';
+import { monthlyObservations } from '@/server/revenue/observations';
+import { fetchLedgerAudit } from '@/server/revenue/audit';
+import {
+  RevenueOverTimeChart,
+  StatusMixChart,
+  BreakdownBarChart,
+  RpkuChart,
+} from '@/components/charts/RevenueCharts';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -42,6 +56,7 @@ export default async function RevenuePage() {
     clicks28, convs28,
     sponsor, pipeline, recent,
     ppClicks,
+    monthly12m, chartBySite12m, chartBySource12m, rpkuPoints, observations, audit,
   ] = await Promise.all([
     windowBookedTotals(sb, today),
     windowBookedTotals(sb, since7),
@@ -55,6 +70,12 @@ export default async function RevenuePage() {
     pipelineTotals(sb),
     listRecentRevenueEvents(sb, 25),
     pokepricesClickTotals(sb, since28).catch(() => null),
+    monthlyRevenueByCurrency(sb, '12m'),
+    chartRevenueBySite(sb, '12m'),
+    chartRevenueBySource(sb, '12m'),
+    revenuePerThousandUsers(sb, '12m'),
+    monthlyObservations(sb),
+    fetchLedgerAudit(sb),
   ]);
 
   // Union of all currencies that appear in any window. We iterate
@@ -93,17 +114,159 @@ export default async function RevenuePage() {
         description={
           <span>
             Real revenue only. Clicks are shown separately. Pipeline value is contract value, not revenue.
-            For the GBP line we treat <code>source_detail.status = &quot;pending&quot;</code> as pending affiliate revenue.
+            Currencies are never combined.
           </span>
         }
         actions={
           <span style={{ display: 'inline-flex', gap: 8 }}>
-            <Link className="status-badge status-active" href="/admin/revenue/import">↓ Import CSV</Link>
-            <Link className="status-badge status-info" href="/admin/revenue/entries/new">+ Manual revenue</Link>
-            <Link className="status-badge status-info" href="/admin/revenue/entries">All entries</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/audit">Diagnostic</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/entries">All entries</Link>
+            <Link className="ui-btn ui-btn--primary ui-btn--sm"   href="/admin/revenue/import">Import CSV</Link>
           </span>
         }
       />
+
+      {observations.length > 0 && (
+        <Panel title="What the data is saying" eyebrow="Monthly observations">
+          <div style={{ display: 'grid', gap: 8 }}>
+            {observations.map((o) => (
+              <Notice key={o.id} tone={o.tone === 'positive' ? 'success' : o.tone === 'negative' ? 'danger' : o.tone === 'warning' ? 'warning' : 'info'}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <strong style={{ fontSize: 13 }}>{o.headline}</strong>
+                  <span style={{ fontSize: 12, opacity: 0.85 }}>{o.evidence}</span>
+                </div>
+              </Notice>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {(() => {
+        const chartCurrencies = Array.from(new Set(monthly12m.map((m) => m.currency))).sort();
+        if (chartCurrencies.length === 0) return null;
+        return (
+          <Panel title="Revenue over time" eyebrow="Trailing 12 months" actions={<span className="col-dim" style={{ fontSize: 11.5 }}>Confirmed vs pending vs reversed, by month</span>}>
+            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))` }}>
+              {chartCurrencies.map((ccy) => (
+                <div key={ccy}>
+                  <div className="admin-eyebrow" style={{ marginBottom: 6 }}>{ccy}</div>
+                  <RevenueOverTimeChart currency={ccy} data={monthly12m.filter((m) => m.currency === ccy)} />
+                </div>
+              ))}
+            </div>
+          </Panel>
+        );
+      })()}
+
+      {(() => {
+        const chartCurrencies = Array.from(new Set(monthly12m.map((m) => m.currency))).sort();
+        if (chartCurrencies.length === 0) return null;
+        return (
+          <Panel title="Status mix" eyebrow="Confirmed · pending · reversed" actions={<span className="col-dim" style={{ fontSize: 11.5 }}>Stacked monthly, by currency</span>}>
+            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))` }}>
+              {chartCurrencies.map((ccy) => (
+                <div key={ccy}>
+                  <div className="admin-eyebrow" style={{ marginBottom: 6 }}>{ccy}</div>
+                  <StatusMixChart currency={ccy} data={monthly12m.filter((m) => m.currency === ccy)} />
+                </div>
+              ))}
+            </div>
+          </Panel>
+        );
+      })()}
+
+      {(() => {
+        const chartCurrencies = Array.from(new Set(chartBySite12m.map((m) => m.currency))).sort();
+        if (chartCurrencies.length === 0) return null;
+        return (
+          <Panel title="By site" eyebrow="Trailing 12 months">
+            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))` }}>
+              {chartCurrencies.map((ccy) => (
+                <div key={ccy}>
+                  <div className="admin-eyebrow" style={{ marginBottom: 6 }}>{ccy}</div>
+                  <BreakdownBarChart
+                    currency={ccy}
+                    rows={chartBySite12m
+                      .filter((m) => m.currency === ccy)
+                      .map((m) => ({ label: m.site_name, confirmed_minor: m.confirmed_minor, pending_minor: m.pending_minor }))}
+                  />
+                </div>
+              ))}
+            </div>
+          </Panel>
+        );
+      })()}
+
+      {(() => {
+        const chartCurrencies = Array.from(new Set(chartBySource12m.map((m) => m.currency))).sort();
+        if (chartCurrencies.length === 0) return null;
+        return (
+          <Panel title="By affiliate source" eyebrow="Trailing 12 months">
+            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))` }}>
+              {chartCurrencies.map((ccy) => (
+                <div key={ccy}>
+                  <div className="admin-eyebrow" style={{ marginBottom: 6 }}>{ccy}</div>
+                  <BreakdownBarChart
+                    currency={ccy}
+                    rows={chartBySource12m
+                      .filter((m) => m.currency === ccy)
+                      .map((m) => ({ label: m.source_name, confirmed_minor: m.confirmed_minor, pending_minor: m.pending_minor }))}
+                  />
+                </div>
+              ))}
+            </div>
+          </Panel>
+        );
+      })()}
+
+      {(() => {
+        const chartCurrencies = Array.from(new Set(
+          rpkuPoints.flatMap((p) => Object.keys(p.rpku_minor_by_currency)),
+        )).sort();
+        if (chartCurrencies.length === 0 || rpkuPoints.length === 0) return null;
+        return (
+          <Panel title="Revenue per 1,000 users" eyebrow="Efficiency" actions={<span className="col-dim" style={{ fontSize: 11.5 }}>GA4 active users ÷ confirmed revenue</span>}>
+            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))` }}>
+              {chartCurrencies.map((ccy) => (
+                <div key={ccy}>
+                  <div className="admin-eyebrow" style={{ marginBottom: 6 }}>{ccy}</div>
+                  <RpkuChart
+                    currency={ccy}
+                    data={rpkuPoints.map((p) => ({
+                      bucket: p.bucket,
+                      users: p.users,
+                      rpku_minor: p.rpku_minor_by_currency[ccy] ?? 0,
+                    }))}
+                  />
+                </div>
+              ))}
+            </div>
+          </Panel>
+        );
+      })()}
+
+      <Panel title="Pending ageing" eyebrow="How old is pending commission">
+        <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
+          Based on <code>occurred_on</code> relative to today. Only rows currently flagged <code>pending</code>.
+          We do not yet have enough transition history to estimate clearance probability truthfully — that will land once reconciled imports accumulate.
+        </p>
+        <Table
+          columns={[
+            { key: 'bucket', header: 'Age', render: (r) => <strong>{r.bucket}</strong> },
+            { key: 'rows', header: 'Rows', className: 'col-num', render: (r) => r.rows.toLocaleString() },
+            { key: 'gbp', header: 'GBP', className: 'col-num', render: (r) => r.gbp != null ? formatMoneyMinor(r.gbp, 'GBP') : <span className="col-dim">—</span> },
+            { key: 'usd', header: 'USD', className: 'col-num', render: (r) => r.usd != null ? formatMoneyMinor(r.usd, 'USD') : <span className="col-dim">—</span> },
+          ]}
+          rows={audit.aged_pending.map((b, i) => ({
+            id: i,
+            bucket: b.bucket,
+            rows: b.rows,
+            gbp: b.amount_minor_by_currency['GBP'] ?? null,
+            usd: b.amount_minor_by_currency['USD'] ?? null,
+          }))}
+          empty="No pending rows."
+        />
+      </Panel>
 
       <Panel title="Headline — separated by currency" eyebrow="Never combined">
         {currencies.map((ccy) => {

@@ -28,8 +28,8 @@ export default async function RevenueImportPage({ searchParams }: Params) {
       <SectionHeader
         eyebrow="Revenue"
         title="Import affiliate CSV"
-        description="Upload an eBay Partner Network transactions export. We parse, preview and require explicit confirmation before writing anything to network_revenue_events. Rows are deduped by EPN transaction id."
-        actions={<Link className="status-badge status-not_connected" href="/admin/revenue">← Dashboard</Link>}
+        description="Upload an eBay Partner Network transactions export. We parse, preview and require explicit confirmation before any DB write. Already-known transactions are reconciled: status changes (pending → confirmed, pending → reversed) and amount corrections are detected and recorded in the status history."
+        actions={<Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue">← Dashboard</Link>}
       />
 
       <Panel title="Integrations" eyebrow="Status">
@@ -153,6 +153,71 @@ Example:      5338606910:pokemon:ebay_epn_uk:GBP,5339215010:lorcana:ebay_epn_uk:
             )}
           </Panel>
 
+          {preview.reconciliation && (
+            <Panel title="Reconciliation plan" eyebrow="What will change in the database">
+              <div className="metric-grid metric-grid--compact" style={{ marginBottom: 12 }}>
+                <div className="metric-card">
+                  <div className="metric-label">New transactions</div>
+                  <div className="metric-value metric-value--ok">{preview.reconciliation.new_count}</div>
+                  <div className="metric-helper">will be inserted</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Unchanged</div>
+                  <div className="metric-value metric-value--muted">{preview.reconciliation.unchanged_count}</div>
+                  <div className="metric-helper">no DB write</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Status transitions</div>
+                  <div className={`metric-value ${preview.reconciliation.status_transitions.length ? 'metric-value--ok' : 'metric-value--muted'}`}>{preview.reconciliation.status_transitions.length}</div>
+                  <div className="metric-helper">pending → confirmed / reversed etc.</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Amount corrections</div>
+                  <div className={`metric-value ${preview.reconciliation.amount_corrections.length ? 'metric-value--ok' : 'metric-value--muted'}`}>{preview.reconciliation.amount_corrections.length}</div>
+                  <div className="metric-helper">commission re-stated by eBay</div>
+                </div>
+              </div>
+
+              {preview.reconciliation.status_transitions.length > 0 && (() => {
+                const bucket: Record<string, number> = {};
+                for (const t of preview.reconciliation.status_transitions) {
+                  const k = `${t.from_status ?? 'unknown'} → ${t.to_status}`;
+                  bucket[k] = (bucket[k] ?? 0) + 1;
+                }
+                return (
+                  <>
+                    <p className="col-dim" style={{ fontSize: 12, margin: '0 0 6px' }}>Transition breakdown:</p>
+                    <ul style={{ fontSize: 13, margin: 0, paddingLeft: 20 }}>
+                      {Object.entries(bucket)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([k, n]) => <li key={k}><code>{k}</code> — {n} row{n === 1 ? '' : 's'}</li>)}
+                    </ul>
+                  </>
+                );
+              })()}
+
+              {preview.reconciliation.amount_corrections.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <p className="col-dim" style={{ fontSize: 12, margin: '0 0 6px' }}>First 10 amount corrections:</p>
+                  <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+                    {preview.reconciliation.amount_corrections.slice(0, 10).map((c, i) => (
+                      <li key={i}>
+                        <code>{c.transaction_id.slice(0, 20)}</code>:{' '}
+                        {formatMoneyMinor(c.from_minor, c.currency)} → {formatMoneyMinor(c.to_minor, c.currency)} ({c.status})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {preview.reconciliation.unmapped_campaigns.length > 0 && (
+                <p className="col-dim" style={{ fontSize: 12, marginTop: 10 }}>
+                  Unmapped campaigns in this file: <code>{preview.reconciliation.unmapped_campaigns.join(', ')}</code>
+                </p>
+              )}
+            </Panel>
+          )}
+
           <Panel title={`Accepted rows (${preview.accepted.length})`} eyebrow="First 25">
             <Table
               rows={preview.accepted.slice(0, 25).map((r) => ({ id: r.row_index, ...r }))}
@@ -180,15 +245,14 @@ Example:      5338606910:pokemon:ebay_epn_uk:GBP,5339215010:lorcana:ebay_epn_uk:
 
           <Panel title="Step 3: Commit" eyebrow="Explicit confirmation">
             <p style={{ fontSize: 13 }}>
-              This will insert {formatInt(preview.accepted.length)} row(s) into <code>network_revenue_events</code> and <code>network_affiliate_conversions</code>.
-              Rows with unmapped campaigns are skipped. Already-imported transaction ids are silently deduped.
+              This will insert {preview.reconciliation?.new_count ?? '?'} new transaction(s), update {preview.reconciliation?.status_transitions.length ?? '?'} status transition(s) and {preview.reconciliation?.amount_corrections.length ?? '?'} amount correction(s). Unchanged rows ({preview.reconciliation?.unchanged_count ?? '?'}) perform no DB write. Rows with unmapped campaigns are skipped. Every observation also appends to <code>network_affiliate_status_history</code>.
             </p>
             <div style={{ display: 'inline-flex', gap: 8 }}>
               <form action={commitEpnImportAction}>
-                <button type="submit" className="status-badge status-active" style={{ cursor: 'pointer', border: 'none', fontSize: 13, padding: '8px 14px' }}>Commit import</button>
+                <button type="submit" className="ui-btn ui-btn--primary">Commit import</button>
               </form>
               <form action={cancelEpnPreviewAction}>
-                <button type="submit" className="status-badge status-dismissed" style={{ cursor: 'pointer', border: 'none', fontSize: 12, padding: '6px 12px' }}>Cancel preview</button>
+                <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm">Cancel preview</button>
               </form>
             </div>
           </Panel>
@@ -199,9 +263,10 @@ Example:      5338606910:pokemon:ebay_epn_uk:GBP,5339215010:lorcana:ebay_epn_uk:
         <Panel title="How this works" eyebrow="Transparency">
           <ul style={{ fontSize: 13, lineHeight: 1.7, margin: 0, paddingLeft: 20 }}>
             <li>CSV parsed server-side; nothing is written until you click <strong>Commit import</strong>.</li>
-            <li>Each row's EPN transaction id becomes the idempotency key — safe to re-upload the same report.</li>
-            <li>Pending vs confirmed vs reversed is preserved from the CSV status column; the dashboard reads these separately.</li>
-            <li>Rows go into both <code>network_revenue_events</code> (headline revenue) and <code>network_affiliate_conversions</code> (conversion ledger).</li>
+            <li>Each row&apos;s EPN transaction id is the idempotency key. Re-uploading the same report is <strong>safe</strong>: unchanged rows are skipped and only genuine changes are applied.</li>
+            <li>When a known transaction appears with a <strong>different status</strong> (e.g. pending → confirmed, pending → reversed) or a <strong>corrected amount</strong>, the row is updated and the transition is appended to <code>network_affiliate_status_history</code>.</li>
+            <li>Reversed transactions are stored with <code>event_kind = &apos;reversal&apos;</code> and a negative amount so the ledger nets correctly without double-counting.</li>
+            <li>Pending vs confirmed vs reversed is read from <code>ledger_status</code> on each row (indexable). The dashboard separates them by currency and never combines GBP + USD.</li>
           </ul>
         </Panel>
       )}
