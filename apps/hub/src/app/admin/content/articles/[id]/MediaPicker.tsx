@@ -44,13 +44,14 @@ export interface MediaPickerProps {
   onMediaChanged?: () => void;
 }
 
+// Keep in sync with ALLOWED_MIME in src/server/content/media.ts.
+// SVG is excluded — stored XSS risk on a public same-origin bucket.
 const CLIENT_MIME_WHITELIST = [
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/gif',
   'image/avif',
-  'image/svg+xml',
 ];
 const CLIENT_MAX_BYTES = 15 * 1024 * 1024;
 
@@ -65,7 +66,7 @@ export function MediaPicker({ articleId, media, featuredMediaId, onInsertInline,
     if (!file) return;
     setUploadError(null);
     if (!CLIENT_MIME_WHITELIST.includes(file.type)) {
-      setUploadError(`Unsupported file type (${file.type}). Allowed: JPG, PNG, WebP, GIF, AVIF, SVG.`);
+      setUploadError(`Unsupported file type (${file.type}). Allowed: JPG, PNG, WebP, GIF, AVIF.`);
       return;
     }
     if (file.size > CLIENT_MAX_BYTES) {

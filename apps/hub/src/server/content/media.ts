@@ -28,13 +28,18 @@ export interface ArticleMediaRow {
   position: number | null;
 }
 
+// SVG is deliberately excluded. A stored SVG served from the public
+// bucket origin can carry <script>, inline event handlers,
+// <foreignObject>, and external <use href=…> refs — stored XSS that
+// would run on every product-site visitor's browser since those sites
+// consume the same bucket. A MIME check alone cannot defend against
+// this; we'd need a full XML sanitiser we do not run.
 export const ALLOWED_MIME = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/gif',
   'image/avif',
-  'image/svg+xml',
 ]);
 
 export const MAX_BYTES = 15 * 1024 * 1024;

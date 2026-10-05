@@ -79,7 +79,8 @@ export async function uploadMediaAction(fd: FormData): Promise<UploadResult> {
       height = dims.height;
     }
   } catch {
-    // Dimension extraction failed (e.g. svg) — proceed without.
+    // Dimension extraction failed — proceed without; width/height
+    // stay null and the renderer falls back to intrinsic sizing.
   }
 
   // Upload to the public bucket. The admin's RLS policy on
