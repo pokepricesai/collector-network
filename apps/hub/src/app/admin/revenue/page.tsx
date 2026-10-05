@@ -119,7 +119,8 @@ export default async function RevenuePage() {
         }
         actions={
           <span style={{ display: 'inline-flex', gap: 8 }}>
-            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/audit">Diagnostic</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/audit">EPN diagnostic</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/impact-audit">Impact API audit</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/entries">All entries</Link>
             <Link className="ui-btn ui-btn--primary ui-btn--sm"   href="/admin/revenue/import">Import CSV</Link>
           </span>
