@@ -2,7 +2,71 @@
 // this is the inside of the OS, not a landing page. Server-safe
 // unless marked otherwise.
 
-import type { ReactNode } from 'react';
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+export function Button({
+  variant = 'secondary',
+  size = 'md',
+  className,
+  type = 'button',
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
+  const cls = [
+    'ui-btn',
+    `ui-btn--${variant}`,
+    size === 'sm' ? 'ui-btn--sm' : size === 'lg' ? 'ui-btn--lg' : '',
+    className ?? '',
+  ].filter(Boolean).join(' ');
+  return <button type={type} className={cls} {...rest} />;
+}
+
+export function Field({
+  label,
+  help,
+  error,
+  children,
+  htmlFor,
+}: {
+  label: string;
+  help?: string;
+  error?: string | null;
+  children: ReactNode;
+  htmlFor?: string;
+}) {
+  return (
+    <label className="ui-field" htmlFor={htmlFor}>
+      <span className="ui-field-label">{label}</span>
+      {children}
+      {help && !error && <span className="ui-field-help">{help}</span>}
+      {error && <span className="ui-field-error">{error}</span>}
+    </label>
+  );
+}
+
+export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={['ui-input', props.className ?? ''].join(' ').trim()} />;
+}
+
+export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={['ui-textarea', props.className ?? ''].join(' ').trim()} />;
+}
+
+export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={['ui-select', props.className ?? ''].join(' ').trim()} />;
+}
+
+export function Notice({
+  tone = 'info',
+  children,
+}: {
+  tone?: 'info' | 'success' | 'warning' | 'danger';
+  children: ReactNode;
+}) {
+  return <div className={`ui-notice ui-notice--${tone}`}>{children}</div>;
+}
 
 export function SectionHeader(props: {
   eyebrow?: string;

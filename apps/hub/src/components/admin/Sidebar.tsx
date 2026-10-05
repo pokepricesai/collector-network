@@ -1,73 +1,33 @@
 import Link from 'next/link';
 
-// Static left-sidebar navigation. Groups match the Phase 0 IA:
-// Overview; Sites; (SEO/Health/Content/Social/Revenue) module
-// pillar; Tasks/Alerts/Approvals/Automation operations pillar;
-// Integrations and Settings at the bottom.
+// Left rail navigation. Five visual groups per the UI polish spec.
+// Each top-level link lands on a module's overview — sub-pages live
+// inside that module's own page nav (/admin/seo lists Pages,
+// Queries, Opportunities etc. with its own tabs).
 
 const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string }> }> = [
   {
     label: 'Overview',
     items: [
-      { href: '/admin',       label: 'Overview' },
+      { href: '/admin',       label: 'Dashboard' },
       { href: '/admin/brief', label: 'Daily brief' },
       { href: '/admin/sites', label: 'Sites' },
     ],
   },
   {
-    label: 'SEO',
+    label: 'Growth',
     items: [
-      { href: '/admin/seo',                   label: 'SEO overview' },
-      { href: '/admin/seo/opportunities',     label: 'Opportunities' },
-      { href: '/admin/seo/internal-links',    label: 'Internal links' },
-      { href: '/admin/seo/page-opportunities',label: 'Page opportunities' },
-      { href: '/admin/seo/sitemaps',          label: 'Sitemaps' },
-      { href: '/admin/seo/indexing',          label: 'Indexing' },
-      { href: '/admin/seo/changes',           label: 'Changes' },
+      { href: '/admin/seo',     label: 'SEO' },
+      { href: '/admin/content', label: 'Content' },
+      { href: '/admin/social',  label: 'Social' },
+      { href: '/admin/newsletter', label: 'Newsletter' },
     ],
   },
   {
-    label: 'Content',
+    label: 'Commercial',
     items: [
-      { href: '/admin/content',           label: 'Overview' },
-      { href: '/admin/content/ideas',     label: 'Ideas' },
-      { href: '/admin/content/briefs',    label: 'Briefs' },
-      { href: '/admin/content/articles',  label: 'Articles' },
-      { href: '/admin/content/calendar',  label: 'Calendar' },
-    ],
-  },
-  {
-    label: 'Distribution',
-    items: [
-      { href: '/admin/social',          label: 'Social · Today' },
-      { href: '/admin/social/ideas',    label: 'Social · Ideas' },
-      { href: '/admin/social/posts',    label: 'Social · Posts' },
-      { href: '/admin/social/calendar', label: 'Social · Calendar' },
-      { href: '/admin/newsletter',      label: 'Newsletter' },
-    ],
-  },
-  {
-    label: 'Portfolio',
-    items: [
-      { href: '/admin/health',  label: 'Health' },
-    ],
-  },
-  {
-    label: 'Revenue',
-    items: [
-      { href: '/admin/revenue',               label: 'Revenue dashboard' },
-      { href: '/admin/revenue/entries',       label: 'Entries ledger' },
-      { href: '/admin/revenue/import',        label: 'Import affiliate CSV' },
-      { href: '/admin/revenue/costs',         label: 'Costs + contribution' },
-      { href: '/admin/revenue/opportunities', label: 'Opportunities' },
-    ],
-  },
-  {
-    label: 'Partners',
-    items: [
-      { href: '/admin/partners',               label: 'Partner CRM' },
-      { href: '/admin/partners/offers',        label: 'Offer catalogue' },
-      { href: '/admin/partners/sponsorships',  label: 'Sponsorships' },
+      { href: '/admin/revenue',  label: 'Revenue' },
+      { href: '/admin/partners', label: 'Partners' },
     ],
   },
   {
@@ -76,12 +36,13 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
       { href: '/admin/tasks',      label: 'Tasks' },
       { href: '/admin/alerts',     label: 'Alerts' },
       { href: '/admin/approvals',  label: 'Approvals' },
-      { href: '/admin/jobs',       label: 'Jobs' },
       { href: '/admin/automation', label: 'Automation' },
+      { href: '/admin/jobs',       label: 'Jobs' },
+      { href: '/admin/health',     label: 'Health' },
     ],
   },
   {
-    label: 'Platform',
+    label: 'System',
     items: [
       { href: '/admin/integrations', label: 'Integrations' },
       { href: '/admin/settings',     label: 'Settings' },
@@ -126,7 +87,7 @@ export function Sidebar({ pathname }: { pathname: string; activeSlug?: string })
       </nav>
       <div className="admin-sidebar-footer">
         <Link href="/" className="admin-nav-link admin-nav-link--muted">
-          ← Public site
+          View public site
         </Link>
       </div>
     </aside>

@@ -2,8 +2,8 @@
 
 // Chrome (top bar + viewport frame + SEO panel) around the server-
 // rendered site preview. Receives the already-rendered article shell
-// as `children` so the preview DOM lives inside a scrollable iframe-
-// like container with a fixed max-width.
+// as `children` so the preview DOM lives inside a scrollable frame
+// with a fixed max-width.
 //
 // Switching target / viewport is navigation, not a client swap — this
 // keeps each render fully SSR and the preview DOM identical to what
@@ -67,161 +67,88 @@ export function PreviewFrame({
   const widthPx = VIEWPORT_PX[viewport];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1A1A1A' }}>
-      {/* Chrome bar */}
-      <header style={{
-        padding: '10px 16px',
-        background: '#141414',
-        color: '#F2F2F2',
-        borderBottom: '1px solid #2A2A2A',
-        display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-      }}>
-        <Link
-          href={`/admin/content/articles/${articleId}`}
-          style={{ color: '#AAA', textDecoration: 'none', fontSize: 12 }}
-        >
+    <div className="preview-root">
+      <header className="preview-chrome">
+        <Link href={`/admin/content/articles/${articleId}`} className="preview-chrome-back">
           ← Editor
         </Link>
-        <span style={{ color: '#555' }}>|</span>
-        <span style={{ fontSize: 11, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          Preview
-        </span>
+        <span className="preview-chrome-divider">·</span>
+        <span className="preview-chrome-eyebrow">Preview</span>
 
-        {/* Target switcher */}
-        <div style={{ display: 'flex', gap: 4, marginLeft: 10 }}>
+        <div className="preview-chrome-group" role="tablist" aria-label="Site target">
           {TARGETS.map((t) => (
             <button
               key={t}
               type="button"
+              role="tab"
+              aria-selected={t === target}
               onClick={() => setParam('target', t)}
-              style={{
-                background: t === target ? '#F2F2F2' : 'transparent',
-                color: t === target ? '#141414' : '#CCC',
-                border: '1px solid #333',
-                borderRadius: 4,
-                padding: '4px 8px',
-                fontSize: 11,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
+              className={`preview-chrome-btn${t === target ? ' is-active' : ''}`}
             >
               {TARGET_LABELS[t]}
             </button>
           ))}
         </div>
 
-        {/* Viewport switcher */}
-        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+        <div className="preview-chrome-group preview-chrome-group--right" role="tablist" aria-label="Viewport">
           {(['desktop', 'mobile'] as const).map((v) => (
             <button
               key={v}
               type="button"
+              role="tab"
+              aria-selected={v === viewport}
               onClick={() => setParam('viewport', v)}
-              style={{
-                background: v === viewport ? '#F2F2F2' : 'transparent',
-                color: v === viewport ? '#141414' : '#CCC',
-                border: '1px solid #333',
-                borderRadius: 4,
-                padding: '4px 10px',
-                fontSize: 11,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                textTransform: 'capitalize',
-              }}
+              className={`preview-chrome-btn${v === viewport ? ' is-active' : ''}`}
             >
-              {v === 'desktop' ? `Desktop (${VIEWPORT_PX.desktop}px)` : `Mobile (${VIEWPORT_PX.mobile}px)`}
+              {v === 'desktop' ? 'Desktop' : 'Mobile'}
             </button>
           ))}
           <button
             type="button"
             onClick={() => setSeoOpen((o) => !o)}
-            style={{
-              background: seoOpen ? '#F2F2F2' : 'transparent',
-              color: seoOpen ? '#141414' : '#CCC',
-              border: '1px solid #333',
-              borderRadius: 4,
-              padding: '4px 10px',
-              fontSize: 11,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
+            aria-pressed={seoOpen}
+            className={`preview-chrome-btn${seoOpen ? ' is-active' : ''}`}
           >
             SEO
           </button>
         </div>
       </header>
 
-      {/* Optional dirty banner */}
       {isDirtyNote && (
-        <div style={{
-          padding: '8px 16px',
-          background: '#8A6A1C',
-          color: '#FFF9E6',
-          fontSize: 12,
-          fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-        }}>
-          {isDirtyNote}
-        </div>
+        <div className="preview-dirty-banner" role="status">{isDirtyNote}</div>
       )}
 
-      {/* Optional SEO panel */}
       {seoOpen && (
-        <aside style={{
-          padding: '14px 20px',
-          background: '#F5F5F0',
-          borderBottom: '1px solid #D4D4D4',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: 14,
-          fontSize: 12,
-          color: '#333',
-          fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-        }}>
+        <aside className="preview-seo-panel">
           <SeoField label="Site target">{seo.siteName}</SeoField>
           <SeoField label="Slug"><code>{seo.slug}</code></SeoField>
-          <SeoField label="Canonical URL prediction">
-            <a href={seo.canonicalUrlPrediction} target="_blank" rel="noopener noreferrer" style={{ color: '#1A3A7B' }}>
+          <SeoField label="Canonical URL">
+            <a href={seo.canonicalUrlPrediction} target="_blank" rel="noopener noreferrer">
               {seo.canonicalUrlPrediction}
             </a>
           </SeoField>
           <SeoField label="Title">{seo.title}</SeoField>
-          <SeoField label="Meta title">{seo.metaTitle ?? <span style={{ color: '#888' }}>(falls back to title)</span>}</SeoField>
+          <SeoField label="Meta title">{seo.metaTitle ?? <em>falls back to title</em>}</SeoField>
           <SeoField label="Meta description">
-            {seo.metaDescription ?? <span style={{ color: '#888' }}>(falls back to summary)</span>}
+            {seo.metaDescription ?? <em>falls back to summary</em>}
           </SeoField>
           <SeoField label="Featured image">
             {seo.featuredImageUrl ? (
-              <a href={seo.featuredImageUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#1A3A7B' }}>
+              <a href={seo.featuredImageUrl} target="_blank" rel="noopener noreferrer">
                 {seo.featuredImageUrl.replace(/^.*\//, '')}
               </a>
-            ) : <span style={{ color: '#888' }}>(none)</span>}
+            ) : <em>none</em>}
           </SeoField>
           <SeoField label="OG image">
             {seo.ogImageUrl
-              ? <a href={seo.ogImageUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#1A3A7B' }}>{seo.ogImageUrl.replace(/^.*\//, '')}</a>
-              : <span style={{ color: '#888' }}>(uses featured)</span>}
+              ? <a href={seo.ogImageUrl} target="_blank" rel="noopener noreferrer">{seo.ogImageUrl.replace(/^.*\//, '')}</a>
+              : <em>uses featured</em>}
           </SeoField>
         </aside>
       )}
 
-      {/* Viewport frame */}
-      <div style={{
-        flex: 1,
-        padding: viewport === 'mobile' ? '20px 10px 40px' : '20px 20px 40px',
-        display: 'flex',
-        justifyContent: 'center',
-        overflow: 'auto',
-      }}>
-        <div style={{
-          width: '100%',
-          maxWidth: widthPx,
-          background: '#FFFFFF',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-          borderRadius: 6,
-          overflow: 'hidden',
-          transition: 'max-width 220ms ease',
-        }}>
+      <div className={`preview-canvas${viewport === 'mobile' ? ' preview-canvas--mobile' : ''}`}>
+        <div className="preview-canvas-frame" style={{ maxWidth: widthPx }}>
           {children}
         </div>
       </div>
@@ -231,11 +158,9 @@ export function PreviewFrame({
 
 function SeoField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#777', marginBottom: 2 }}>
-        {label}
-      </div>
-      <div style={{ wordBreak: 'break-word' }}>{children}</div>
+    <div className="preview-seo-field">
+      <div>{label}</div>
+      <div>{children}</div>
     </div>
   );
 }
