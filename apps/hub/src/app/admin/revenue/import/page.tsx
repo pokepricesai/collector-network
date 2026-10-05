@@ -95,6 +95,21 @@ export default async function RevenueImportPage({ searchParams }: Params) {
       )}
 
       {!preview && (
+        <Panel title="Export a fresh CSV from eBay EPN first" eyebrow="Important for reconciliation">
+          <ul style={{ fontSize: 13, lineHeight: 1.75, margin: 0, paddingLeft: 20 }}>
+            <li>Open the eBay Partner Network <strong>Transactions</strong> report and export <strong>right now</strong>. An old static CSV from a previous month can only prove dedupe — it cannot discover status changes (pending → confirmed, pending → reversed) that happened after it was downloaded.</li>
+            <li>Set the date range to <strong>the earliest EPN activity you want reconciled → today</strong>. For a full-year refresh, pick a <strong>365-day</strong> window ending today.</li>
+            <li>Keep <strong>all statuses included</strong> (confirmed + pending + reversed). Filtering out pending/reversed hides exactly the transitions this flow needs to see.</li>
+            <li>Up to <strong>~50,000 rows per file</strong> is comfortable. Beyond that, split by quarter and upload sequentially — each run is idempotent so chunk order doesn&apos;t matter.</li>
+            <li>Prefer <strong>one file</strong> if it fits — fewer uploads, one Reconciliation Preview to inspect, one history row per actual transition.</li>
+          </ul>
+          <p className="col-dim" style={{ fontSize: 12, marginTop: 10 }}>
+            <strong>What you should expect on the Reconciliation Preview:</strong> a large <em>Unchanged</em> count equal to most of the file (previously-known transactions that haven&apos;t moved), a <em>New</em> count for transactions eBay has booked since your last import, and non-zero <em>Status transitions</em> + <em>Amount corrections</em> if any pending rows have cleared, reversed, or been re-stated.
+          </p>
+        </Panel>
+      )}
+
+      {!preview && (
         <Panel title="Step 1: Upload" eyebrow="EPN CSV">
           <form action={previewEpnImportAction} encType="multipart/form-data" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 820 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

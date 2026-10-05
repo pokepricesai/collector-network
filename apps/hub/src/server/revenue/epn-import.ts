@@ -68,6 +68,7 @@ export interface ExistingLedgerRow {
   event_kind: string;
   ledger_status: string | null;
   occurred_on: string;
+  first_seen_at: string | null;
 }
 
 export interface ReconciliationSummary {

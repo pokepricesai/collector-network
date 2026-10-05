@@ -102,7 +102,7 @@ async function fetchExistingLedgerRows(
     const keys = chunk.map((r) => r.idempotency_key);
     const { data, error } = await sb
       .from('network_revenue_events')
-      .select('id, source_id, idempotency_key, amount_minor, event_kind, ledger_status, occurred_on')
+      .select('id, source_id, idempotency_key, amount_minor, event_kind, ledger_status, occurred_on, first_seen_at')
       .in('idempotency_key', keys);
     if (error) throw new Error(`[epn] fetchExisting: ${error.message}`);
     for (const row of (data ?? []) as ExistingLedgerRow[]) {
@@ -201,26 +201,27 @@ export async function commitEpnImportAction(): Promise<void> {
   const nowIso = new Date().toISOString();
 
   // Separate inserts (new transactions) from updates (status/amount
-  // changes). Unchanged rows are skipped — no DB write at all.
+  // changes). Unchanged rows are skipped — no DB write at all. This
+  // is the critical performance invariant: for an annual re-import
+  // where ~90% of rows are unchanged, those rows cost zero write
+  // calls after classification.
   const toInsert: Record<string, unknown>[] = [];
-  const toUpdate: Array<{ id: string; row: Record<string, unknown>; prior: ExistingLedgerRow; incoming: EpnRow }> = [];
+  const toUpdate: Array<{ priorRow: ExistingLedgerRow; incoming: EpnRow }> = [];
+  const touchedRows: EpnRow[] = [];  // new + changed, for conversion mirror
 
   for (const row of mapped) {
     const key = `${row.mapped_source_id}:${row.idempotency_key}`;
     const prior = existingByKey.get(key);
     if (!prior) {
       toInsert.push(buildRevenueRow(row, preview, admin.adminRowId, nowIso, true, null));
+      touchedRows.push(row);
       continue;
     }
     const statusDiffers = (prior.ledger_status ?? 'unknown') !== row.status;
     const amountDiffers = prior.amount_minor !== row.earnings_minor;
-    if (!statusDiffers && !amountDiffers) continue; // untouched
-    toUpdate.push({
-      id: prior.id,
-      row: buildRevenueRow(row, preview, admin.adminRowId, nowIso, false, null),
-      prior,
-      incoming: row,
-    });
+    if (!statusDiffers && !amountDiffers) continue; // untouched — zero writes
+    toUpdate.push({ priorRow: prior, incoming: row });
+    touchedRows.push(row);
   }
 
   const CHUNK = 500;
@@ -228,17 +229,16 @@ export async function commitEpnImportAction(): Promise<void> {
   const historyRowsForNew: Record<string, unknown>[] = [];
   const historyRowsForUpdates: Record<string, unknown>[] = [];
 
-  // 1. Bulk-insert the genuinely new rows and capture their ids for
-  //    the matching history rows.
+  // 1. Bulk-insert the genuinely new rows and capture ids for history.
   for (let i = 0; i < toInsert.length; i += CHUNK) {
     const chunk = toInsert.slice(i, i + CHUNK);
     const { data, error } = await sb
       .from('network_revenue_events')
       .insert(chunk)
-      .select('id, idempotency_key, source_id, amount_minor, event_kind, ledger_status, source_detail');
+      .select('id, idempotency_key, source_id, amount_minor, event_kind, ledger_status');
     if (error) throw new Error(`[epn] revenue insert: ${error.message}`);
     insertedRevenue += (data ?? []).length;
-    for (const r of (data ?? []) as Array<{ id: string; idempotency_key: string; source_id: string; amount_minor: number; event_kind: string; ledger_status: string; source_detail: Record<string, unknown> | null }>) {
+    for (const r of (data ?? []) as Array<{ id: string; idempotency_key: string; source_id: string; amount_minor: number; event_kind: string; ledger_status: string }>) {
       historyRowsForNew.push({
         revenue_event_id: r.id,
         observed_at: nowIso,
@@ -254,35 +254,47 @@ export async function commitEpnImportAction(): Promise<void> {
     }
   }
 
-  // 2. Apply updates one-by-one. Supabase-js doesn't support
-  //    batched different-value UPDATEs in a single statement without
-  //    a stored procedure; the write count here is bounded by the
-  //    status_transitions + amount_corrections size, which is
-  //    typically small vs the full file.
+  // 2. Chunked UPSERT of changed rows. supabase-js ignoreDuplicates:
+  //    false emits `ON CONFLICT (source_id, idempotency_key) DO UPDATE
+  //    SET ...`, giving us a single round-trip per 500 rows regardless
+  //    of how many of them changed. We preserve each row's prior
+  //    first_seen_at so the stamp doesn't flap on repeat imports.
+  //
+  //    Also builds history rows from the pre-change classification
+  //    (we have the prior state in hand — no re-read needed).
   let updatedRevenue = 0;
-  for (const u of toUpdate) {
-    const { error } = await sb
-      .from('network_revenue_events')
-      .update(u.row)
-      .eq('id', u.id);
-    if (error) throw new Error(`[epn] revenue update: ${error.message}`);
-    updatedRevenue += 1;
+  const upsertPayload = toUpdate.map((u) => {
+    const row = buildRevenueRow(
+      u.incoming, preview, admin.adminRowId, nowIso, false,
+      u.priorRow.first_seen_at,
+    );
+    // event_kind flip for status transitions in/out of 'reversed'.
     const newEventKind = u.incoming.status === 'reversed' ? 'reversal' : 'revenue';
     historyRowsForUpdates.push({
-      revenue_event_id: u.id,
+      revenue_event_id: u.priorRow.id,
       observed_at: nowIso,
-      from_status: u.prior.ledger_status,
+      from_status: u.priorRow.ledger_status,
       to_status: u.incoming.status,
-      from_amount_minor: u.prior.amount_minor,
+      from_amount_minor: u.priorRow.amount_minor,
       to_amount_minor: u.incoming.earnings_minor,
-      from_event_kind: u.prior.event_kind,
+      from_event_kind: u.priorRow.event_kind,
       to_event_kind: newEventKind,
       import_file_name: preview.file_name,
       notes: null,
     });
+    return row;
+  });
+  for (let i = 0; i < upsertPayload.length; i += CHUNK) {
+    const chunk = upsertPayload.slice(i, i + CHUNK);
+    const { data, error } = await sb
+      .from('network_revenue_events')
+      .upsert(chunk, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: false })
+      .select('id');
+    if (error) throw new Error(`[epn] revenue upsert: ${error.message}`);
+    updatedRevenue += (data ?? []).length;
   }
 
-  // 3. Append history rows.
+  // 3. Append history rows (one call per 500).
   const allHistory = [...historyRowsForNew, ...historyRowsForUpdates];
   for (let i = 0; i < allHistory.length; i += CHUNK) {
     const chunk = allHistory.slice(i, i + CHUNK);
@@ -292,11 +304,10 @@ export async function commitEpnImportAction(): Promise<void> {
     if (error) throw new Error(`[epn] history insert: ${error.message}`);
   }
 
-  // 4. Mirror into network_affiliate_conversions. For conversions
-  //    the primary reconciliation lives on the revenue event, but
-  //    we still want provider_payload refreshed when the status
-  //    changes so the conversion ledger isn't lying either.
-  const conversionRows = mapped.map((row) => ({
+  // 4. Mirror new+changed rows into network_affiliate_conversions.
+  //    Unchanged conversions already have correct provider_payload
+  //    from the prior import — no reason to re-upsert them.
+  const conversionRows = touchedRows.map((row) => ({
     source_id: row.mapped_source_id,
     site_id: row.mapped_site_id,
     provider_order_id: row.transaction_id,
@@ -316,10 +327,6 @@ export async function commitEpnImportAction(): Promise<void> {
   let insertedConversions = 0;
   for (let i = 0; i < conversionRows.length; i += CHUNK) {
     const chunk = conversionRows.slice(i, i + CHUNK);
-    // ignoreDuplicates:false → ON CONFLICT DO UPDATE on
-    // (source_id, idempotency_key). ALL columns get refreshed, which
-    // is correct for provider_payload because its freshness mirrors
-    // the EPN report.
     const { data, error } = await sb
       .from('network_affiliate_conversions')
       .upsert(chunk, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: false })

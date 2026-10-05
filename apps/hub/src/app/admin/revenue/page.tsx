@@ -225,7 +225,7 @@ export default async function RevenuePage() {
         )).sort();
         if (chartCurrencies.length === 0 || rpkuPoints.length === 0) return null;
         return (
-          <Panel title="Revenue per 1,000 users" eyebrow="Efficiency" actions={<span className="col-dim" style={{ fontSize: 11.5 }}>GA4 active users ÷ confirmed revenue</span>}>
+          <Panel title="Revenue per 1,000 users" eyebrow="Efficiency" actions={<span className="col-dim" style={{ fontSize: 11.5 }}>(confirmed revenue ÷ summed daily active users) × 1,000</span>}>
             <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))` }}>
               {chartCurrencies.map((ccy) => (
                 <div key={ccy}>

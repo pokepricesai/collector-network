@@ -193,9 +193,25 @@ export interface RevenuePerKUsersPoint {
 }
 
 /**
- * Revenue-per-1000-users monthly series. GA4 active users summed
- * across sites. If GA4 data is missing for a month, users=0 and
- * rpku is 0 for that month — do not fabricate.
+ * Revenue-per-1000-users monthly series.
+ *
+ * Formula per month per currency:
+ *   rpku_minor = (confirmed_revenue_minor / users) * 1000
+ *
+ * i.e. "how many minor-currency units of confirmed affiliate
+ * commission did each 1,000 users produce this month". GBP and USD
+ * are tracked independently — never summed.
+ *
+ * `users` is the sum of GA4 `active_users` across every row in
+ * `network_ga4_site_daily` for the month. That is a sum of daily
+ * actives, NOT monthly unique visitors (we don't have a monthly
+ * dedupe table). A visitor who browsed on 3 different days counts
+ * 3 times. The ratio trends correctly MoM because the overcount is
+ * roughly proportional, but the absolute number should be read as
+ * "per 1,000 session-days" if precision matters.
+ *
+ * If GA4 data is missing for a month, users = 0 and rpku is 0 for
+ * that month — do not fabricate.
  */
 export async function revenuePerThousandUsers(
   sb: SupabaseClient,
