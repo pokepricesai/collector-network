@@ -45,6 +45,8 @@ export interface ImpactResponse<T = unknown> {
   data: T | null;
   rawExcerpt: string;      // first 2 KB of body for diagnostics
   errorMessage: string | null;
+  contentType: string | null;
+  bodyBytes: number;
 }
 
 /**
@@ -92,12 +94,15 @@ export function createImpactClient() {
         data: null,
         rawExcerpt: '',
         errorMessage: err instanceof Error ? err.message : String(err),
+        contentType: null,
+        bodyBytes: 0,
       };
     }
     const rawFull = await response.text();
     const rawExcerpt = rawFull.length > 2048 ? rawFull.slice(0, 2048) + '…' : rawFull;
+    const contentType = response.headers.get('content-type');
     let data: T | null = null;
-    if (response.ok) {
+    if (response.ok && contentType && contentType.includes('application/json')) {
       try {
         data = JSON.parse(rawFull) as T;
       } catch {
@@ -114,6 +119,8 @@ export function createImpactClient() {
       data,
       rawExcerpt,
       errorMessage,
+      contentType,
+      bodyBytes: rawFull.length,
     };
   }
 

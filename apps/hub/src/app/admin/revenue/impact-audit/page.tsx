@@ -8,14 +8,17 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const maxDuration = 60;
 
-// Read-only Impact API audit. Admin-only, server-side only. The
-// Impact token and account SID stay in the function's env; neither
-// leaves the server. Burns ~6 Impact API calls per load.
+// Read-only Impact API audit. Admin-only, server-side only.
 
 export default async function ImpactAuditPage() {
   const { admin, sb } = await requireAdmin('/admin/revenue/impact-audit');
   const sites = await listNetworkSites(sb);
   const audit = await runImpactAudit();
+
+  const verdictTone =
+    audit.canReplaceCsv.verdict === 'yes' ? 'success' :
+    audit.canReplaceCsv.verdict === 'partial' ? 'warning' :
+    audit.canReplaceCsv.verdict === 'no' ? 'danger' : 'info';
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/revenue/impact-audit">
@@ -33,32 +36,55 @@ export default async function ImpactAuditPage() {
 
       <Panel title="Authentication" eyebrow="Credential + reachability">
         {audit.auth_result === 'ok' ? (
-          <Notice tone="success"><strong>Authenticated</strong> — all probed endpoints returned 2xx.</Notice>
+          <Notice tone="success"><strong>Valid.</strong> {audit.auth_evidence}</Notice>
         ) : audit.auth_result === 'missing_env' ? (
-          <Notice tone="danger"><strong>Not configured.</strong> IMPACT_ACCOUNT_SID or IMPACT_API_TOKEN is missing from this environment.</Notice>
+          <Notice tone="danger"><strong>Not configured.</strong> {audit.auth_evidence}</Notice>
         ) : audit.auth_result === 'rejected' ? (
-          <Notice tone="danger"><strong>Authentication rejected.</strong> At least one endpoint returned 401/403. Verify the SID and token in Vercel.</Notice>
+          <Notice tone="danger"><strong>Rejected.</strong> {audit.auth_evidence}</Notice>
         ) : audit.auth_result === 'network_error' ? (
-          <Notice tone="warning"><strong>Network error.</strong> One or more calls failed before reaching Impact.</Notice>
+          <Notice tone="warning"><strong>Network error.</strong> {audit.auth_evidence}</Notice>
         ) : (
-          <Notice tone="warning"><strong>Unknown.</strong> No endpoint returned 2xx or an auth error — see per-endpoint status below.</Notice>
+          <Notice tone="warning"><strong>Unknown.</strong> {audit.auth_evidence}</Notice>
         )}
         <ul style={{ fontSize: 13, lineHeight: 1.7, margin: '10px 0 0', paddingLeft: 20 }}>
           <li>Credential vars present in env: <code>{audit.auth_configured ? 'yes' : 'no'}</code></li>
           <li>Account SID present: <code>{audit.account_sid_present ? 'yes' : 'no'}</code></li>
           <li>Auth method: <code>HTTP Basic (base64(SID:token))</code></li>
           <li>Base URL: <code>https://api.impact.com/Mediapartners/&lt;SID&gt;</code></li>
-          <li>Sample window: last 90 days (ActionDateStart → ActionDateEnd)</li>
+          <li>Actions / ActionUpdates window: <strong>30 days</strong> (Impact caps Actions at 45; 30 keeps a safety margin).</li>
+          <li>ClickExport window: <strong>7 days</strong>.</li>
+          <li>400 and endpoint-specific 403 are <strong>not</strong> credential rejection — see per-endpoint status below.</li>
+        </ul>
+      </Panel>
+
+      <Panel title="Can this replace our EPN CSV workflow?" eyebrow="Verdict">
+        <Notice tone={verdictTone}>
+          <strong style={{ textTransform: 'uppercase' }}>{audit.canReplaceCsv.verdict}</strong>
+        </Notice>
+        <ul style={{ fontSize: 13, lineHeight: 1.7, margin: '10px 0 0', paddingLeft: 20 }}>
+          {audit.canReplaceCsv.reasons.map((r, i) => <li key={i}>{r}</li>)}
         </ul>
       </Panel>
 
       {audit.warnings.length > 0 && (
-        <Panel title={`Warnings (${audit.warnings.length})`} eyebrow="Found during audit">
+        <Panel title={`Warnings (${audit.warnings.length})`} eyebrow="Observations">
           <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.7 }}>
             {audit.warnings.map((w, i) => <li key={i}>{w}</li>)}
           </ul>
         </Panel>
       )}
+
+      <Panel title="Campaigns" eyebrow="Advertiser programs on this account">
+        <Table
+          columns={[
+            { key: 'cid',  header: 'Campaign ID',    render: (r) => <code>{r.campaignId}</code> },
+            { key: 'name', header: 'Campaign name',  render: (r) => r.campaignName ?? <span className="col-dim">—</span> },
+            { key: 'adv',  header: 'Advertiser',     render: (r) => r.advertiserName ?? <span className="col-dim">—</span> },
+          ]}
+          rows={audit.attribution.distinctCampaigns.map((c) => ({ ...c, id: c.campaignId || c.campaignName || Math.random().toString() }))}
+          empty="No campaigns returned."
+        />
+      </Panel>
 
       {Object.entries(audit.endpoints).map(([key, ep]) => (
         <EndpointPanel key={key} name={key} ep={ep} />
@@ -66,9 +92,9 @@ export default async function ImpactAuditPage() {
 
       <Panel title="Attribution signals" eyebrow="SubId / SharedId / URL population">
         <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
-          Across the {audit.attribution.totalSampleRows} sampled rows (Actions + Clicks), how often each attribution
-          field is populated. SubId1 is our best candidate for site attribution if outbound links are configured to carry
-          the Collector Network site slug.
+          Across the {audit.attribution.totalSampleRows} sampled rows (Actions + Clicks when available), how often each
+          attribution field is populated. SubId1 is our best candidate for site attribution if outbound links are
+          configured to carry the Collector Network site slug.
         </p>
         <Table
           columns={[
@@ -93,17 +119,6 @@ export default async function ImpactAuditPage() {
             {audit.attribution.distinctSubId1Values.map((v) => <code key={v} style={{ marginRight: 6 }}>{v}</code>)}
           </div>
         )}
-      </Panel>
-
-      <Panel title="Campaigns" eyebrow="Programs the account is enrolled in">
-        <Table
-          columns={[
-            { key: 'id', header: 'ID', render: (r) => <code>{r.id}</code> },
-            { key: 'name', header: 'Name', render: (r) => r.name ?? <span className="col-dim">—</span> },
-          ]}
-          rows={audit.attribution.distinctCampaigns.map((c, i) => ({ ...c, id: `camp-${i}` }))}
-          empty="No campaign records returned."
-        />
       </Panel>
 
       <Panel title="Status + payout semantics" eyebrow="What Impact is actually returning">
@@ -150,30 +165,90 @@ export default async function ImpactAuditPage() {
           </div>
         </div>
       </Panel>
+
+      <Panel title="EPN CSV ↔ Impact API field map" eyebrow="Documented mapping (confirm against the live field samples above)">
+        <Table
+          columns={[
+            { key: 'csv', header: 'CSV column', render: (r) => <strong>{r.csvColumn}</strong> },
+            { key: 'api', header: 'API field', render: (r) => r.apiField ? <code>{r.apiField}</code> : <span className="col-dim">—</span> },
+            { key: 'ep',  header: 'Endpoint', render: (r) => <code>{r.endpoint}</code> },
+            { key: 'notes', header: 'Notes', render: (r) => <span style={{ fontSize: 12.5 }}>{r.notes}</span> },
+          ]}
+          rows={audit.csvComparison.map((r, i) => ({ ...r, id: i }))}
+          empty=""
+        />
+      </Panel>
+
+      <Panel title="Historical backfill plan (DESIGN ONLY — not executed)" eyebrow="How we would ingest a year">
+        <ul style={{ fontSize: 13, lineHeight: 1.7, margin: '0 0 10px', paddingLeft: 20 }}>
+          <li>Total days: <strong>{audit.backfillPlan.totalDays}</strong></li>
+          <li>Window size: <strong>{audit.backfillPlan.windowDays}</strong> days (safely under Impact's 45-day Actions cap)</li>
+          <li>Window count: <strong>{audit.backfillPlan.windowCount}</strong> (newest-first)</li>
+          <li>API-call estimate: <strong>{audit.backfillPlan.estimatedApiCalls.totalMin}–{audit.backfillPlan.estimatedApiCalls.totalMax}</strong> total requests</li>
+        </ul>
+        <ul style={{ fontSize: 12.5, lineHeight: 1.65, margin: '0 0 12px', paddingLeft: 20, color: 'var(--admin-text-muted)' }}>
+          <li>/Actions: {audit.backfillPlan.estimatedApiCalls.actions}</li>
+          <li>/ActionUpdates: {audit.backfillPlan.estimatedApiCalls.actionUpdates}</li>
+          <li>/ClickExport: {audit.backfillPlan.estimatedApiCalls.clickExport}</li>
+          <li>/Campaigns: {audit.backfillPlan.estimatedApiCalls.campaigns}</li>
+          <li>/Invoices: {audit.backfillPlan.estimatedApiCalls.invoices}</li>
+        </ul>
+        <h3 className="admin-eyebrow" style={{ marginBottom: 6 }}>Planned windows</h3>
+        <ol style={{ fontSize: 12.5, columns: 2, margin: '0 0 12px', paddingLeft: 20 }}>
+          {audit.backfillPlan.windows.map((w, i) => (
+            <li key={i}><code>{w.start} → {w.end}</code></li>
+          ))}
+        </ol>
+        <h3 className="admin-eyebrow" style={{ marginBottom: 6 }}>Notes</h3>
+        <ul style={{ fontSize: 13, lineHeight: 1.7, margin: 0, paddingLeft: 20 }}>
+          {audit.backfillPlan.notes.map((n, i) => <li key={i}>{n}</li>)}
+        </ul>
+      </Panel>
     </AdminShell>
   );
 }
 
 function EndpointPanel({ name, ep }: { name: string; ep: EndpointAudit }) {
   const label = name.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+  const statusTone =
+    ep.ok ? 'success' :
+    ep.status === 401 ? 'failed' :
+    ep.status === 403 ? 'warning' :
+    ep.status === 400 ? 'warning' :
+    ep.status === 404 ? 'info' :
+    'info';
   return (
     <Panel
       title={`${label} — ${ep.endpoint}`}
       eyebrow={ep.description}
       actions={
         <StatusBadge
-          state={ep.ok ? 'success' : ep.status === 401 || ep.status === 403 ? 'failed' : ep.status === 404 ? 'warning' : 'info'}
+          state={statusTone}
           label={`${ep.status} ${ep.ok ? 'OK' : (ep.errorMessage ?? 'error')}`}
         />
       }
     >
+      {Object.keys(ep.queryUsed).length > 0 && (
+        <p className="col-dim" style={{ fontSize: 12, margin: '0 0 8px' }}>
+          <strong>Query:</strong>{' '}
+          {Object.entries(ep.queryUsed).map(([k, v]) => (
+            <span key={k} style={{ marginRight: 10 }}><code>{k}={v}</code></span>
+          ))}
+        </p>
+      )}
+      {ep.contentType && (
+        <p className="col-dim" style={{ fontSize: 12, margin: '0 0 8px' }}>
+          <strong>Content-Type:</strong> <code>{ep.contentType}</code>
+          {ep.bodyBytes > 0 && <> · {ep.bodyBytes.toLocaleString()} bytes</>}
+        </p>
+      )}
       {!ep.ok && (
-        <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
-          Response excerpt:
-          <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, maxHeight: 160, overflow: 'auto', fontSize: 11, fontFamily: 'var(--admin-font-mono)', marginTop: 4 }}>
+        <div style={{ fontSize: 12.5, margin: '0 0 10px' }}>
+          <div className="col-dim" style={{ marginBottom: 4 }}>Response excerpt:</div>
+          <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, maxHeight: 160, overflow: 'auto', fontSize: 11, fontFamily: 'var(--admin-font-mono)' }}>
             {ep.rawExcerpt || '(empty)'}
           </pre>
-        </p>
+        </div>
       )}
       {ep.ok && (
         <>
@@ -182,7 +257,7 @@ function EndpointPanel({ name, ep }: { name: string; ep: EndpointAudit }) {
             <span><strong>Top-level keys:</strong> {ep.topLevelKeys.join(', ') || '—'}</span>
             <span><strong>Record keys:</strong> {ep.recordKeys.length}</span>
           </div>
-          {ep.sampleFields.length > 0 && (
+          {ep.sampleFields.length > 0 ? (
             <Table
               columns={[
                 { key: 'f', header: 'Field', render: (r) => <code>{r.key}</code> },
@@ -193,9 +268,20 @@ function EndpointPanel({ name, ep }: { name: string; ep: EndpointAudit }) {
                     ? <span className="col-dim">—</span>
                     : <code style={{ fontSize: 11 }}>{r.exampleValue}</code> },
               ]}
-              rows={ep.sampleFields.map((f) => ({ id: f.key, ...f }))}
-              empty="No sample record available."
+              rows={ep.sampleFields.map((f) => ({ ...f, id: f.key }))}
+              empty=""
             />
+          ) : (
+            ep.contentType?.includes('text/csv') ? (
+              <>
+                <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 6px' }}>CSV body excerpt (first 2 KB):</p>
+                <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, maxHeight: 220, overflow: 'auto', fontSize: 11, fontFamily: 'var(--admin-font-mono)' }}>
+                  {ep.rawExcerpt || '(empty)'}
+                </pre>
+              </>
+            ) : (
+              <span className="col-dim" style={{ fontSize: 12.5 }}>Response was 2xx but no record array was found at known keys. Raw body:</span>
+            )
           )}
         </>
       )}
