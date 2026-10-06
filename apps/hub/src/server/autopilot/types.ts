@@ -306,6 +306,56 @@ export interface ScoredOpportunity {
   };
 }
 
+// ────────────────────── Discovery (stage 1) ────────────────────
+//
+// Cheap pre-research scoring. A DiscoveryCandidate is what we have
+// BEFORE spending time extracting external pages or running entity
+// matching. Its score is 0..40 and intentionally shallower than the
+// final editorial score — missing-after-research dimensions are not
+// penalised to zero here because research hasn't happened yet.
+
+export interface DiscoveryCandidate {
+  kind: 'internal_idea' | 'external_cluster';
+  key: string;                                // idea_id or cluster_key
+  working_title: string;
+  template_id: ArticleTemplateId;
+  // Signals that back this candidate (external only). For internal
+  // ideas this is [].
+  signals: DiscoveredSignal[];
+  // Flat view of the publishers in the cluster.
+  publishers: Array<{ name: string; tier: SourceTier; domain: string }>;
+  age_days: number | null;
+  discovery_score: number;                    // 0..40
+  discovery_rationale: string[];
+}
+
+// ────────────────────── Researched (stage 2) ───────────────────
+
+export interface ResearchedCandidate {
+  discovery: DiscoveryCandidate;
+  entities: {
+    cards: Array<{ name: string; collector_number: string | null; url: string; image_url: string | null }>;
+    sets: Array<{ name: string; code: string; url: string }>;
+  };
+  internal_links_outbound: EvidenceInternalLink[];
+  internal_links_inbound_opportunity_count: number;
+  images: EvidenceImage[];
+  external_sources: ExternalSource[];
+  official_corroboration: {
+    attempted: boolean;
+    found: boolean;
+    reason: string;
+    sources: Array<{ url: string; publisher: string; tier: SourceTier }>;
+  };
+  existing_similar_count: number;
+  closest_existing_overlap: number;
+  final_score: OpportunityScore;
+  routing: RoutingResult;
+  evidence_pack: EvidencePackPayload;
+  evidence_quality: EvidenceQualityVerdict;
+  eligible_for_generation: boolean;
+}
+
 // ────────────────────── Generation + model ─────────────────────
 
 export type ExecutionMode = 'fixture' | 'real';

@@ -48,6 +48,7 @@ export const HOLD_REASON_LABELS: Record<string, { title: string; detail: string;
   semantic_qa_failed:              { title: 'Semantic QA flagged issues',        detail: 'The optional semantic-QA pass flagged unsupported or incoherent content.',         resolution: 'Regenerate or dismiss based on QA findings.' },
   adapter_unavailable:             { title: 'Site adapter not auto-publish safe', detail: 'This site is not yet configured for autopilot publishing.',                      resolution: 'Finish adapter work for this site or publish manually.' },
   autopilot_disabled:              { title: 'Autopilot disabled',                detail: 'Global autopilot or per-site enable flag is off at run time.',                    resolution: 'Flip the switch at /admin/content/autopilot when ready.' },
+  below_min_score:                 { title: 'Final score below threshold',       detail: 'After research, the candidate did not score at or above min_opportunity_score.',  resolution: 'Wait for stronger signals/evidence, or deliberately lower the threshold.' },
 };
 
 export interface HoldRow {

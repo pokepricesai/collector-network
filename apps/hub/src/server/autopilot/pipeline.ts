@@ -1,35 +1,46 @@
 import 'server-only';
 
-// Unified Autopilot pipeline orchestrator (preview / dry-run).
+// Two-stage Autopilot pipeline (fixture / dry-run).
 //
-// Checkpoint B.1 unifies internal content ideas and externally
-// discovered signals into one candidate pool. The scorer picks the
-// best candidate; the evidence pack builder is handed the signals
-// for the chosen topic so the research pack carries real external
-// sources. No AI call, no publishing, no budget reservation.
+//   Stage 1 — Discovery
+//     Build a cheap DiscoveryCandidate per internal idea + external
+//     signal cluster. Pre-score each 0..40 using only pre-research
+//     information. Rank. Take the top N.
+//
+//   Stage 2 — Research
+//     For the shortlist only, run the deterministic enrichment
+//     pipeline (extraction + entity match + internal links + images
+//     + overlap + official corroboration) and compute the final
+//     0..100 editorial score.
+//
+//   Gate
+//     Final score >= min_opportunity_score AND evidence_quality='ready'
+//     → eligible for the first paid run.
+//     Otherwise → HELD.
+//
+// Fixture executor still runs for the top-scored eligible candidate
+// so the preview exercises the full downstream pipeline. No AI call,
+// no publishing, no budget reservation.
 
-import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AutopilotSiteSlug } from './config';
 import type {
   ArticleTemplateId,
-  DiscoveredSignal,
+  DiscoveryCandidate,
   EvidenceQualityVerdict,
   PipelineResult,
-  ScoredOpportunity,
+  ResearchedCandidate,
   SourceTier,
 } from './types';
 import { loadAutopilotSnapshot } from './config';
-import { buildScoredOpportunity, type ScoringSignals } from './opportunity-scoring';
-import { buildEvidencePack, evaluateEvidenceQuality } from './evidence-pack';
 import { estimateCost } from './cost-estimator';
 import { executeDraft } from './executor';
 import { runDeterministicQA } from './qa';
 import { draftToBodyRich, type TiptapDoc } from './body-rich';
 import { runDiscovery, loadActiveSignals } from './discovery';
-import { buildInternalLinks } from './internal-links';
 import { assemblePrompt, loadVoiceSnapshot, type AssembledPrompt } from './prompt';
-import { extractSignalsForPack, type ExtractionResult } from './external-extraction';
+import { toDiscoveryCandidate, DISCOVERY_SHORTLIST_SIZE } from './discovery-scoring';
+import { researchCandidate } from './research';
 
 export interface PreviewParams {
   sb: SupabaseClient;
@@ -37,26 +48,13 @@ export interface PreviewParams {
   force_discovery?: boolean;
 }
 
-export interface CandidateSummary {
-  kind: 'internal_idea' | 'external_cluster';
-  key: string;                            // idea_id or cluster_key
-  working_title: string;
-  template_id: ArticleTemplateId;
-  score: number;
-  score_rationale: string[];
-  supporting_signal_ids: string[];        // external only
-  supporting_source_tiers: SourceTier[];  // external only
-  decision: ScoredOpportunity['routing']['decision'];
-}
-
 export interface PreviewResult {
   pipeline: PipelineResult;
   body_rich: TiptapDoc | null;
   evidence_quality: EvidenceQualityVerdict;
   stop_reason: string | null;
-  // Visibility: all candidates considered, so the admin can see WHY
-  // the top one was chosen (and what the runners-up were).
-  candidates: CandidateSummary[];
+  discovery_candidates: DiscoveryCandidate[];     // all discovery candidates, sorted by discovery_score desc
+  researched_shortlist: ResearchedCandidate[];    // top N researched, sorted by final_score desc
   discovery: {
     cached: boolean;
     cache_age_minutes: number | null;
@@ -67,14 +65,7 @@ export interface PreviewResult {
     total_active_signals: number;
     enabled_sources: number;
   };
-  internal_links: {
-    outbound_count: number;
-    inbound_opportunity_count: number;
-    validation: Array<{ url: string; status: 'ok' | 'warning'; message: string }>;
-    outbound: Array<{ target_url: string; anchor_concepts: string[]; reason: string; priority: number }>;
-  };
   prompt: AssembledPrompt | null;
-  extraction: ExtractionResult[];
 }
 
 const CHECKPOINT_B_MODE = 'fixture' as const;
@@ -82,29 +73,18 @@ const CHECKPOINT_B_MODE = 'fixture' as const;
 export async function previewPipeline(params: PreviewParams): Promise<PreviewResult> {
   const snap = await loadAutopilotSnapshot(params.sb);
 
-  // ─── Resolve pilot site ──────────────────────────────────────
-  const { data: siteRow, error: siteErr } = await params.sb
+  // ── Resolve pilot site ──────────────────────────────────────
+  const { data: siteRow } = await params.sb
     .from('network_sites')
     .select('id, slug, name')
     .eq('slug', params.site_slug)
     .maybeSingle();
-  if (siteErr || !siteRow) {
-    const stub = emptyPreview('Pilot site not found in network_sites.', snap.global.max_cost_per_article_usd);
-    return {
-      pipeline: stub.pipeline,
-      body_rich: stub.body_rich,
-      evidence_quality: stub.evidence_quality,
-      stop_reason: stub.stop_reason,
-      candidates: [],
-      discovery: { cached: false, cache_age_minutes: null, sources_scanned: 0, signals_found: 0, signals_inserted: 0, errors: [], total_active_signals: 0, enabled_sources: 0 },
-      internal_links: { outbound_count: 0, inbound_opportunity_count: 0, validation: [], outbound: [] },
-      prompt: null,
-      extraction: [],
-    };
+  if (!siteRow) {
+    return emptyPreview('Pilot site not found in network_sites.', snap.global);
   }
   const site = siteRow as { id: string; slug: string; name: string };
 
-  // ─── Discovery (cached) ──────────────────────────────────────
+  // ── Discovery pass (cached) ─────────────────────────────────
   const discovery = await runDiscovery(params.sb, params.site_slug, { force: params.force_discovery, maxAgeMinutes: 60 });
   const signals = await loadActiveSignals(params.sb, params.site_slug, 50);
   const { count: enabledSourcesCount } = await params.sb
@@ -114,226 +94,111 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
     .eq('enabled', true);
   const enabledSources = enabledSourcesCount ?? 0;
 
-  // ─── Internal candidates ─────────────────────────────────────
-  const { data: ideaRows } = await params.sb
-    .from('network_content_ideas')
-    .select('id, working_title, primary_query, secondary_queries, summary, content_type, status, created_at, origin_type')
-    .eq('site_id', site.id)
-    .in('status', ['new', 'in_brief'])
-    .order('priority', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(10);
-  const internalCandidates = (ideaRows ?? []) as Array<{
-    id: string; working_title: string; primary_query: string | null; secondary_queries: string[];
-    summary: string | null; content_type: string; created_at: string; origin_type: string;
-  }>;
-
-  // ─── Existing article corpus (for duplication / routing) ─────
-  const existingForRouting = await params.sb
+  // ── Existing article corpus (used both in discovery pre-score
+  //    and later for overlap in research) ───────────────────────
+  const { data: existingData } = await params.sb
     .from('network_articles')
     .select('id, slug, title, published_at, publication_url')
     .eq('site_id', site.id)
     .in('status', ['published', 'approved', 'scheduled', 'review']);
-  const existingArticles = ((existingForRouting.data ?? []) as Array<{ id: string; slug: string; title: string; published_at: string | null; publication_url: string | null }>);
+  const existing_articles = (existingData ?? []) as Array<{ id: string; slug: string; title: string; published_at: string | null; publication_url: string | null }>;
 
-  // ─── Build a cluster-level view of external signals ──────────
-  // Group signals by cluster_key (or by url when cluster_key is null).
-  const clusters = new Map<string, DiscoveredSignal[]>();
-  for (const s of signals) {
-    const key = s.cluster_key ?? `url:${s.url}`;
-    const bucket = clusters.get(key) ?? [];
-    bucket.push(s);
-    clusters.set(key, bucket);
-  }
+  // ── Stage 1: Build discovery candidate pool ─────────────────
+  const discovery_candidates = await buildDiscoveryCandidates(params.sb, site, signals, existing_articles);
 
-  // ─── Score candidates ────────────────────────────────────────
-  const scoredInternal = internalCandidates.map((idea) => {
-    const template_id = toTemplate(idea.content_type);
-    const scoringSignals = buildInternalSignals(idea.working_title, 0, existingArticles.length);
-    const existing = existingArticles.map((r) => ({
-      article_id: r.id,
-      url: r.publication_url ?? `https://ygoprices.io/insights/${r.slug}`,
-      overlap: lexicalOverlap(idea.working_title, r.title),
-      age_days: r.published_at ? Math.max(0, Math.floor((Date.now() - new Date(r.published_at).getTime()) / 86_400_000)) : null,
-    }));
-    const opp = buildScoredOpportunity(
-      { idea_id: idea.id, site_slug: params.site_slug, working_title: idea.working_title, template_id, signals: scoringSignals },
-      existing,
-    );
-    return { kind: 'internal_idea' as const, key: idea.id, opp, idea, signals_for_pack: [] as DiscoveredSignal[] };
-  });
+  // ── Shortlist for research ──────────────────────────────────
+  const shortlistKeys = discovery_candidates
+    .slice(0, DISCOVERY_SHORTLIST_SIZE)
+    .map((c) => c.key);
 
-  const scoredExternal = Array.from(clusters.entries()).map(([clusterKey, clusterSignals]) => {
-    const title = clusterSignals[0]!.title;
-    // Choose template based on dominant tier: news for official/secondary, trend_story for community-only.
-    const hasAuth = clusterSignals.some((s) => s.source_tier !== 'community');
-    const template_id: ArticleTemplateId = hasAuth ? 'news' : 'trend_story';
-    const scoringSignals: ScoringSignals = {
-      search_impressions_28d: 0,
-      search_clicks_28d: 0,
-      search_position_avg: null,
-      search_striking_distance_count: 0,
-      market_observations: 0,
-      market_max_abs_percentage_change: 0,
-      signal_age_days: clusterSignals[0]!.published_at
-        ? Math.max(0, Math.floor((Date.now() - new Date(clusterSignals[0]!.published_at!).getTime()) / 86_400_000))
-        : 7,
-      images_available: 1,  // we assume at least a card image is available via internal catalogue
-      internal_link_candidates: 0,
-      related_pages: existingArticles.length,
-      affiliate_links_available: 3,
-      existing_similar_articles: existingArticles.filter((e) => lexicalOverlap(title, e.title) > 0.3).length,
-      closest_existing_overlap: existingArticles.reduce((m, e) => Math.max(m, lexicalOverlap(title, e.title)), 0),
-      closest_existing_age_days: null,
-      template_complexity: 'medium',
-      external_source_count: clusterSignals.length,
-      external_official_count: clusterSignals.filter((s) => s.source_tier === 'official').length,
-      external_secondary_count: clusterSignals.filter((s) => s.source_tier === 'secondary').length,
-      external_community_count: clusterSignals.filter((s) => s.source_tier === 'community').length,
-      external_distinct_domains: new Set(clusterSignals.map((s) => s.domain)).size,
-      external_newest_age_days: scoringSignals_newest(clusterSignals),
-    };
-    const existing = existingArticles.map((r) => ({
-      article_id: r.id,
-      url: r.publication_url ?? `https://ygoprices.io/insights/${r.slug}`,
-      overlap: lexicalOverlap(title, r.title),
-      age_days: r.published_at ? Math.max(0, Math.floor((Date.now() - new Date(r.published_at).getTime()) / 86_400_000)) : null,
-    }));
-    const opp = buildScoredOpportunity(
-      { idea_id: `ext:${clusterKey}`, site_slug: params.site_slug, working_title: title, template_id, signals: scoringSignals },
-      existing,
-    );
-    return { kind: 'external_cluster' as const, key: clusterKey, opp, signals_for_pack: clusterSignals };
-  });
-
-  const allScored = [...scoredInternal, ...scoredExternal].sort((a, b) => b.opp.score.total - a.opp.score.total);
-  const chosen = allScored[0] ?? null;
-
-  // Build the full candidate summary list for the preview UI.
-  const candidates: CandidateSummary[] = allScored.map((c) => ({
-    kind: c.kind,
-    key: c.key,
-    working_title: c.opp.working_title,
-    template_id: c.opp.template_id,
-    score: c.opp.score.total,
-    score_rationale: c.opp.score.rationale,
-    supporting_signal_ids: c.kind === 'external_cluster' ? c.signals_for_pack.map((s) => s.id).filter(Boolean) as string[] : [],
-    supporting_source_tiers: c.kind === 'external_cluster' ? c.signals_for_pack.map((s) => s.source_tier) : [],
-    decision: c.opp.routing.decision,
+  // ── Stage 2: Research each shortlisted candidate ────────────
+  const poolForCorroboration = signals.map((s) => ({
+    cluster_key: s.cluster_key,
+    url: s.url,
+    source_name: s.source_name,
+    source_tier: s.source_tier,
+    domain: s.domain,
   }));
 
+  const researched_shortlist: ResearchedCandidate[] = [];
+  for (const c of discovery_candidates) {
+    if (!shortlistKeys.includes(c.key)) continue;
+    const r = await researchCandidate({
+      sb: params.sb,
+      site_slug: params.site_slug,
+      site_id: site.id,
+      site_name: site.name,
+      candidate: c,
+      all_signals_in_pool: poolForCorroboration,
+      existing_articles,
+      max_cost_per_article_usd: snap.global.max_cost_per_article_usd,
+    });
+    researched_shortlist.push(r);
+  }
+  researched_shortlist.sort((a, b) => b.final_score.total - a.final_score.total);
+
+  // ── Pick top eligible researched candidate ──────────────────
+  const chosen = researched_shortlist.find((r) => r.eligible_for_generation) ?? researched_shortlist[0] ?? null;
+
+  // Budget snapshot (so the UI shows real remaining even when held).
+  const budget = await loadBudgetFromSnapshot(params.sb, snap.global.daily_article_budget_usd, snap.global.monthly_article_budget_usd);
   const budget_preview_base = {
     projected_cost_usd: 0,
     per_article_cap_usd: snap.global.max_cost_per_article_usd,
-    daily_remaining_usd: 0,
-    monthly_remaining_usd: 0,
+    daily_remaining_usd: budget.daily_remaining_usd,
+    monthly_remaining_usd: budget.monthly_remaining_usd,
   };
 
   if (!chosen) {
-    const stub = emptyPreview('No internal ideas or external signals available for this site. Enable sources at /admin/content/autopilot/sources OR create an idea at /admin/content/ideas.', snap.global.max_cost_per_article_usd);
-    return {
-      pipeline: stub.pipeline,
-      body_rich: stub.body_rich,
-      evidence_quality: stub.evidence_quality,
-      stop_reason: stub.stop_reason,
-      candidates: [],
-      discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
-      internal_links: { outbound_count: 0, inbound_opportunity_count: 0, validation: [], outbound: [] },
-      prompt: null,
-      extraction: [],
-    };
-  }
-
-  if (chosen.opp.score.total < snap.global.min_opportunity_score) {
     return {
       pipeline: {
         mode: CHECKPOINT_B_MODE,
         outcome: 'held',
-        hold_reasons: ['below_min_score'],
-        opportunity: chosen.opp,
+        hold_reasons: ['evidence_insufficient'],
+        opportunity: synthEmptyOpportunity(params.site_slug),
         evidence_pack_id: null,
-        evidence_pack: synthEmptyPack(chosen.opp.working_title, params.site_slug, site.name, chosen.opp.template_id, snap.global.max_cost_per_article_usd),
+        evidence_pack: synthEmptyPack('(none)', params.site_slug, site.name, 'evergreen_guide', snap.global.max_cost_per_article_usd),
         draft: null,
         qa: null,
         budget_preview: budget_preview_base,
       },
       body_rich: null,
-      evidence_quality: { status: 'held', hold_reasons: ['below_min_score'], warnings: [] },
-      stop_reason: `Top candidate score ${chosen.opp.score.total} is below min_opportunity_score ${snap.global.min_opportunity_score}.`,
-      candidates,
+      evidence_quality: { status: 'held', hold_reasons: ['evidence_insufficient'], warnings: [] },
+      stop_reason: discovery_candidates.length === 0
+        ? 'Discovery produced no candidates. Enable sources at /admin/content/autopilot/sources OR create an idea.'
+        : 'Research produced no shortlist.',
+      discovery_candidates,
+      researched_shortlist: [],
       discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
-      internal_links: { outbound_count: 0, inbound_opportunity_count: 0, validation: [], outbound: [] },
       prompt: null,
-      extraction: [],
     };
   }
 
-  // ─── Internal link engine ────────────────────────────────────
-  const linkEngine = await buildInternalLinks({
-    sb: params.sb,
-    site_slug: params.site_slug,
-    site_id: site.id,
-    working_title: chosen.opp.working_title,
-    primary_query: chosen.kind === 'internal_idea' ? ((chosen as { idea?: { primary_query: string | null } }).idea?.primary_query ?? null) : null,
-    candidate_url: null,
-  });
-
-  // ─── External extraction for the top signals of the chosen candidate ─
-  const extractionResults = chosen.kind === 'external_cluster'
-    ? await extractSignalsForPack(params.sb, chosen.signals_for_pack, params.site_slug, 3)
-    : [] as ExtractionResult[];
-  const extractedByUrl = new Map<string, { extracted_text: string; og_image_url: string | null; published_at: string | null }>();
-  for (const e of extractionResults) {
-    if (e.success && e.extracted_text) {
-      extractedByUrl.set(e.url, {
-        extracted_text: e.extracted_text,
-        og_image_url: e.og_image_url ?? null,
-        published_at: e.published_at ?? null,
-      });
-    }
-  }
-
-  // ─── Build evidence pack ─────────────────────────────────────
-  const packIdeaId = chosen.kind === 'internal_idea' ? chosen.key : null;
-  const packBuilt = await buildEvidencePack(params.sb, {
-    site_slug: params.site_slug,
-    site_name: site.name,
-    site_id: site.id,
-    template_id: chosen.opp.template_id,
-    working_title: chosen.opp.working_title,
-    primary_query: chosen.kind === 'internal_idea' ? (chosen as { idea?: { primary_query: string | null } }).idea?.primary_query ?? null : null,
-    secondary_queries: chosen.kind === 'internal_idea' ? (chosen as { idea?: { secondary_queries: string[] } }).idea?.secondary_queries ?? [] : [],
-    summary: chosen.kind === 'internal_idea' ? (chosen as { idea?: { summary: string | null } }).idea?.summary ?? null : chosen.signals_for_pack[0]?.summary ?? null,
-    date_range_days: 30,
-    external_signals: chosen.signals_for_pack,
-    extracted_by_url: extractedByUrl,
-    approved_internal_links: linkEngine.outbound,
-    budget: {
-      max_cost_usd: snap.global.max_cost_per_article_usd,
-      projected_draft_cost_usd: 0,
-      projected_qa_cost_usd: null,
-    },
-  });
-
-  const quality = evaluateEvidenceQuality(packBuilt.payload);
-
-  const costEst = await estimateCost(params.sb, packBuilt.payload, { include_qa: false });
-  packBuilt.payload.budget = {
+  // ── Cost estimate for the chosen candidate ──────────────────
+  const costEst = await estimateCost(params.sb, chosen.evidence_pack, { include_qa: false });
+  chosen.evidence_pack.budget = {
     max_cost_usd: snap.global.max_cost_per_article_usd,
     projected_draft_cost_usd: costEst.projected_draft_usd,
     projected_qa_cost_usd: costEst.qa_model ? costEst.projected_qa_usd : null,
     projected_total_cost_usd: costEst.projected_total_usd,
   };
 
-  if (quality.status === 'held') {
+  const hold_reasons: string[] = [];
+  if (chosen.final_score.total < snap.global.min_opportunity_score) hold_reasons.push('below_min_score');
+  if (chosen.evidence_quality.status === 'held') hold_reasons.push(...chosen.evidence_quality.hold_reasons);
+  if (!costEst.fits) hold_reasons.push(...costEst.blockers);
+
+  // Short-circuit the executor + QA when the candidate is held — no
+  // point drafting a fixture if nothing can proceed.
+  if (hold_reasons.length > 0) {
     return {
       pipeline: {
         mode: CHECKPOINT_B_MODE,
         outcome: 'held',
-        hold_reasons: quality.hold_reasons,
-        opportunity: chosen.opp,
+        hold_reasons: Array.from(new Set(hold_reasons)),
+        opportunity: toScoredShape(chosen),
         evidence_pack_id: null,
-        evidence_pack: packBuilt.payload,
+        evidence_pack: chosen.evidence_pack,
         draft: null,
         qa: null,
         budget_preview: {
@@ -344,60 +209,50 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
         },
       },
       body_rich: null,
-      evidence_quality: quality,
-      stop_reason: `Evidence quality: held. Reasons: ${quality.hold_reasons.join(', ')}.`,
-      candidates,
+      evidence_quality: chosen.evidence_quality,
+      stop_reason: `Pipeline held. Reasons: ${hold_reasons.join(', ')}.`,
+      discovery_candidates,
+      researched_shortlist,
       discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
-      internal_links: {
-        outbound_count: linkEngine.outbound.length,
-        inbound_opportunity_count: linkEngine.inbound_opportunities.length,
-        validation: linkEngine.validation,
-        outbound: linkEngine.outbound.map((l) => ({ target_url: l.target_url, anchor_concepts: l.anchor_concepts, reason: l.reason, priority: l.priority })),
-      },
-      prompt: null,  // not assembled on held path
-      extraction: extractionResults,
+      prompt: null,
     };
   }
 
-  // ─── Prompt assembly (deterministic, no AI call) ─────────────
+  // ── Fixture executor + QA for the eligible chosen one ───────
   const voice = await loadVoiceSnapshot(params.sb, site.id);
   const prompt = assemblePrompt({
-    pack: packBuilt.payload,
+    pack: chosen.evidence_pack,
     voice,
-    approved_internal_links: linkEngine.outbound,
+    approved_internal_links: chosen.internal_links_outbound,
   });
-
-  const exec = await executeDraft(params.sb, { mode: CHECKPOINT_B_MODE, pack: packBuilt.payload });
+  const exec = await executeDraft(params.sb, { mode: CHECKPOINT_B_MODE, pack: chosen.evidence_pack });
   const bodyRich = draftToBodyRich(exec.draft);
   const { report, repaired } = await runDeterministicQA({
     sb: params.sb,
-    pack: packBuilt.payload,
+    pack: chosen.evidence_pack,
     draft: exec.draft,
     site_id: site.id,
   });
 
   const outcome: PipelineResult['outcome'] =
     report.blocker_count > 0 ? 'held' : 'ready_for_first_paid_run';
-  const hold_reasons: string[] = [];
-  if (report.blocker_count > 0) {
-    for (const f of report.findings) {
-      if (f.severity !== 'blocker') continue;
-      if (f.check_name === 'slug_unique' || f.check_name === 'title_cannibalisation') hold_reasons.push('title_cannibalisation');
-      else if (f.check_name === 'price_claim_traceable' || f.check_name === 'percentage_claim_traceable') hold_reasons.push('price_claim_failed');
-      else if (f.check_name === 'image_resolves') hold_reasons.push('image_missing');
-      else if (f.check_name === 'banned_filler_phrase' || f.check_name === 'body_rich_sanitised') hold_reasons.push('semantic_qa_failed');
-    }
+  const qa_holds: string[] = [];
+  for (const f of report.findings) {
+    if (f.severity !== 'blocker') continue;
+    if (f.check_name === 'slug_unique' || f.check_name === 'title_cannibalisation') qa_holds.push('title_cannibalisation');
+    else if (f.check_name === 'price_claim_traceable' || f.check_name === 'percentage_claim_traceable') qa_holds.push('price_claim_failed');
+    else if (f.check_name === 'image_resolves') qa_holds.push('image_missing');
+    else if (f.check_name === 'banned_filler_phrase' || f.check_name === 'body_rich_sanitised') qa_holds.push('semantic_qa_failed');
   }
-  if (!costEst.fits) hold_reasons.push(...costEst.blockers);
 
   return {
     pipeline: {
       mode: CHECKPOINT_B_MODE,
-      outcome: hold_reasons.length > 0 ? 'held' : outcome,
-      hold_reasons: Array.from(new Set(hold_reasons)),
-      opportunity: chosen.opp,
+      outcome: qa_holds.length > 0 ? 'held' : outcome,
+      hold_reasons: Array.from(new Set(qa_holds)),
+      opportunity: toScoredShape(chosen),
       evidence_pack_id: null,
-      evidence_pack: packBuilt.payload,
+      evidence_pack: chosen.evidence_pack,
       draft: repaired,
       qa: report,
       budget_preview: {
@@ -408,20 +263,61 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
       },
     },
     body_rich: bodyRich,
-    evidence_quality: quality,
-    stop_reason: hold_reasons.length > 0 ? `Pipeline held. Reasons: ${hold_reasons.join(', ')}.` : null,
-    candidates,
+    evidence_quality: chosen.evidence_quality,
+    stop_reason: qa_holds.length > 0 ? `Pipeline held. Reasons: ${qa_holds.join(', ')}.` : null,
+    discovery_candidates,
+    researched_shortlist,
     discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
-    internal_links: {
-      outbound_count: linkEngine.outbound.length,
-      inbound_opportunity_count: linkEngine.inbound_opportunities.length,
-      validation: linkEngine.validation,
-      outbound: linkEngine.outbound.map((l) => ({ target_url: l.target_url, anchor_concepts: l.anchor_concepts, reason: l.reason, priority: l.priority })),
-    },
     prompt,
-    extraction: extractionResults,
   };
 }
+
+// ─── Stage 1 ───────────────────────────────────────────────────
+
+async function buildDiscoveryCandidates(
+  sb: SupabaseClient,
+  site: { id: string; name: string },
+  signals: Awaited<ReturnType<typeof loadActiveSignals>>,
+  existing_articles: Array<{ id: string; title: string }>,
+): Promise<DiscoveryCandidate[]> {
+  // ── Internal ideas ────────────────────────────────────────
+  const { data: ideaData } = await sb
+    .from('network_content_ideas')
+    .select('id, working_title, content_type, status')
+    .eq('site_id', site.id)
+    .in('status', ['new', 'in_brief'])
+    .order('priority', { ascending: false })
+    .limit(10);
+  const internal = (ideaData ?? []) as Array<{ id: string; working_title: string; content_type: string }>;
+
+  // ── External clusters ─────────────────────────────────────
+  const clusters = new Map<string, typeof signals>();
+  for (const s of signals) {
+    const key = s.cluster_key ?? `url:${s.url}`;
+    const bucket = clusters.get(key) ?? [];
+    bucket.push(s);
+    clusters.set(key, bucket);
+  }
+
+  const candidates: DiscoveryCandidate[] = [];
+  for (const idea of internal) {
+    const existingSimilar = existing_articles.filter((a) => lexicalOverlap(idea.working_title, a.title) > 0.3).length;
+    const template_id = toTemplate(idea.content_type);
+    candidates.push(toDiscoveryCandidate('internal_idea', idea.id, idea.working_title, template_id, [], existingSimilar));
+  }
+  for (const [key, clusterSignals] of clusters.entries()) {
+    const title = clusterSignals[0]!.title;
+    const existingSimilar = existing_articles.filter((a) => lexicalOverlap(title, a.title) > 0.3).length;
+    const hasAuth = clusterSignals.some((s) => s.source_tier !== 'community');
+    const template_id: ArticleTemplateId = hasAuth ? 'news' : 'trend_story';
+    candidates.push(toDiscoveryCandidate('external_cluster', key, title, template_id, clusterSignals, existingSimilar));
+  }
+
+  candidates.sort((a, b) => b.discovery_score - a.discovery_score);
+  return candidates;
+}
+
+// ─── Helpers ───────────────────────────────────────────────────
 
 function toTemplate(contentType: string): ArticleTemplateId {
   switch (contentType) {
@@ -443,42 +339,6 @@ function toTemplate(contentType: string): ArticleTemplateId {
   }
 }
 
-function buildInternalSignals(_title: string, _market: number, existing: number): ScoringSignals {
-  return {
-    search_impressions_28d: 0,
-    search_clicks_28d: 0,
-    search_position_avg: null,
-    search_striking_distance_count: 0,
-    market_observations: 0,
-    market_max_abs_percentage_change: 0,
-    signal_age_days: 1,
-    images_available: 1,
-    internal_link_candidates: 0,
-    related_pages: Math.min(20, existing),
-    affiliate_links_available: 5,
-    existing_similar_articles: 0,
-    closest_existing_overlap: 0,
-    closest_existing_age_days: null,
-    template_complexity: 'low',
-    external_source_count: 0,
-    external_official_count: 0,
-    external_secondary_count: 0,
-    external_community_count: 0,
-    external_distinct_domains: 0,
-    external_newest_age_days: null,
-  };
-}
-
-function scoringSignals_newest(signals: DiscoveredSignal[]): number | null {
-  let newest: number | null = null;
-  for (const s of signals) {
-    if (!s.published_at) continue;
-    const age = Math.max(0, Math.floor((Date.now() - new Date(s.published_at).getTime()) / 86_400_000));
-    if (newest == null || age < newest) newest = age;
-  }
-  return newest;
-}
-
 function lexicalOverlap(a: string, b: string): number {
   const tokensA = new Set(a.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2));
   const tokensB = new Set(b.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2));
@@ -489,41 +349,67 @@ function lexicalOverlap(a: string, b: string): number {
   return union === 0 ? 0 : inter / union;
 }
 
-function emptyPreview(reason: string, cap: number): Omit<PreviewResult, 'candidates' | 'discovery' | 'internal_links' | 'prompt' | 'extraction'> {
-  const stub: PipelineResult = {
-    mode: CHECKPOINT_B_MODE,
-    outcome: 'held',
-    hold_reasons: ['evidence_insufficient'],
-    opportunity: {
-      idea_id: '',
-      site_slug: 'ygo',
-      working_title: '(none)',
-      template_id: 'evergreen_guide',
-      score: { total: 0, components: emptyComponents(), rationale: [reason] },
-      routing: { decision: 'skip', reason, target_article_id: null, target_url: null },
-      evidence_summary: { market_observations: 0, search_observations: 0, related_pages: 0, images_available: 0, internal_link_candidates: 0, existing_similar_articles: 0 },
+async function loadBudgetFromSnapshot(sb: SupabaseClient, dailyCap: number, monthlyCap: number): Promise<{ daily_remaining_usd: number; monthly_remaining_usd: number }> {
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const monthStart = new Date(Date.UTC(dayStart.getUTCFullYear(), dayStart.getUTCMonth(), 1));
+  const { data: rows } = await sb
+    .from('network_ai_budget_reservations')
+    .select('status, estimated_cost_usd, actual_cost_usd, created_at')
+    .in('status', ['reserved', 'consumed'])
+    .gte('created_at', monthStart.toISOString())
+    .limit(5_000);
+  let today = 0, month = 0;
+  for (const r of (rows ?? []) as Array<{ status: string; estimated_cost_usd: number; actual_cost_usd: number | null; created_at: string }>) {
+    const eff = r.actual_cost_usd ?? r.estimated_cost_usd ?? 0;
+    month += eff;
+    if (r.created_at >= dayStart.toISOString()) today += eff;
+  }
+  return {
+    daily_remaining_usd: Math.max(0, dailyCap - today),
+    monthly_remaining_usd: Math.max(0, monthlyCap - month),
+  };
+}
+
+function toScoredShape(r: ResearchedCandidate): PipelineResult['opportunity'] {
+  return {
+    idea_id: r.discovery.kind === 'internal_idea' ? r.discovery.key : `ext:${r.discovery.key}`,
+    site_slug: r.evidence_pack.site.slug,
+    working_title: r.discovery.working_title,
+    template_id: r.discovery.template_id,
+    score: r.final_score,
+    routing: r.routing,
+    evidence_summary: {
+      market_observations: r.evidence_pack.market_data.length,
+      search_observations: r.evidence_pack.search_data.length,
+      related_pages: r.evidence_pack.related_pages.length,
+      images_available: r.evidence_pack.images.length,
+      internal_link_candidates: r.internal_links_outbound.length,
+      existing_similar_articles: r.existing_similar_count,
     },
-    evidence_pack_id: null,
-    evidence_pack: synthEmptyPack('(none)', 'ygo', 'YGOPrices', 'evergreen_guide', cap),
-    draft: null,
-    qa: null,
-    budget_preview: { projected_cost_usd: 0, per_article_cap_usd: cap, daily_remaining_usd: 0, monthly_remaining_usd: 0 },
-  };
-  return { pipeline: stub, body_rich: null, evidence_quality: { status: 'held', hold_reasons: ['evidence_insufficient'], warnings: [] }, stop_reason: reason };
-}
-
-function emptyComponents() {
-  return {
-    search_potential: 0, market_significance: 0, timeliness: 0, evidence_quality: 0,
-    commercial_relevance: 0, internal_link_opportunity: 0, existing_content_gap: 0,
-    newsworthiness: 0, source_authority: 0,
-    duplication_penalty: 0, source_agreement_penalty: 0, effort_adjustment: 0,
   };
 }
 
-function synthEmptyPack(title: string, slug: AutopilotSiteSlug, siteName: string, template: ArticleTemplateId, cap: number) {
+function synthEmptyOpportunity(siteSlug: AutopilotSiteSlug): PipelineResult['opportunity'] {
   return {
-    schema_version: '2' as const,
+    idea_id: '',
+    site_slug: siteSlug,
+    working_title: '(none)',
+    template_id: 'evergreen_guide',
+    score: { total: 0, components: {
+      search_potential: 0, market_significance: 0, timeliness: 0, evidence_quality: 0,
+      commercial_relevance: 0, internal_link_opportunity: 0, existing_content_gap: 0,
+      newsworthiness: 0, source_authority: 0,
+      duplication_penalty: 0, source_agreement_penalty: 0, effort_adjustment: 0,
+    }, rationale: [] },
+    routing: { decision: 'skip', reason: 'no candidate', target_article_id: null, target_url: null },
+    evidence_summary: { market_observations: 0, search_observations: 0, related_pages: 0, images_available: 0, internal_link_candidates: 0, existing_similar_articles: 0 },
+  };
+}
+
+function synthEmptyPack(title: string, slug: AutopilotSiteSlug, siteName: string, template: ArticleTemplateId, cap: number): PipelineResult['evidence_pack'] {
+  return {
+    schema_version: '2',
     site: { slug, name: siteName },
     topic: { kind: template, working_title: title, primary_query: null, secondary_queries: [], summary: null },
     date_range: { from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
@@ -536,7 +422,7 @@ function synthEmptyPack(title: string, slug: AutopilotSiteSlug, siteName: string
     images: [],
     commercial_links: [],
     external_sources: [],
-    article_angle: { anchor: 'explainer' as const, one_line: '', must_cover: [], must_not_cover: [], dominant_tier: 'internal' as const },
+    article_angle: { anchor: 'explainer', one_line: '', must_cover: [], must_not_cover: [], dominant_tier: 'internal' },
     generation_constraints: { template_id: template, max_output_tokens: 4000, target_word_count_min: 300, target_word_count_max: 700, banned_phrases: [] },
     budget: { max_cost_usd: cap, projected_draft_cost_usd: 0, projected_qa_cost_usd: null, projected_total_cost_usd: 0 },
   };
@@ -553,7 +439,33 @@ function discoveryToSummary(d: Awaited<ReturnType<typeof runDiscovery>>): Omit<P
   };
 }
 
-// Compute enabled_sources inline — the `head: true` form earlier
-// returns the count on the result wrapper, not on `data`. We don't
-// use that pattern here because the preview page can live with a
-// best-effort number; a dedicated query runs separately below.
+function emptyPreview(reason: string, g: Awaited<ReturnType<typeof loadAutopilotSnapshot>>['global']): PreviewResult {
+  return {
+    pipeline: {
+      mode: CHECKPOINT_B_MODE,
+      outcome: 'held',
+      hold_reasons: ['evidence_insufficient'],
+      opportunity: synthEmptyOpportunity('ygo'),
+      evidence_pack_id: null,
+      evidence_pack: synthEmptyPack('(none)', 'ygo', 'YGOPrices', 'evergreen_guide', g.max_cost_per_article_usd),
+      draft: null,
+      qa: null,
+      budget_preview: {
+        projected_cost_usd: 0,
+        per_article_cap_usd: g.max_cost_per_article_usd,
+        daily_remaining_usd: g.daily_article_budget_usd,
+        monthly_remaining_usd: g.monthly_article_budget_usd,
+      },
+    },
+    body_rich: null,
+    evidence_quality: { status: 'held', hold_reasons: ['evidence_insufficient'], warnings: [] },
+    stop_reason: reason,
+    discovery_candidates: [],
+    researched_shortlist: [],
+    discovery: { cached: false, cache_age_minutes: null, sources_scanned: 0, signals_found: 0, signals_inserted: 0, errors: [], total_active_signals: 0, enabled_sources: 0 },
+    prompt: null,
+  };
+}
+
+// Re-export the SourceTier so callers can still see it via pipeline.ts.
+export type { SourceTier };

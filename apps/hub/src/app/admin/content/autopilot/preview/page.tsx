@@ -81,7 +81,7 @@ export default async function AutopilotPreviewPage() {
         </ul>
       </Panel>
 
-      <Panel title="1b. Candidate pool" eyebrow="All candidates considered, highest score first">
+      <Panel title="1b. Stage 1 · Discovery candidates" eyebrow="Pre-score 0..40, no research spent yet">
         <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
           <strong>Discovery:</strong>{' '}
           {preview.discovery.enabled_sources} enabled source(s); {preview.discovery.total_active_signals} active signal(s).
@@ -90,36 +90,86 @@ export default async function AutopilotPreviewPage() {
             : `fresh — scanned ${preview.discovery.sources_scanned} source(s), ${preview.discovery.signals_inserted} new signal(s)`}
           {preview.discovery.errors.length > 0 && <>, {preview.discovery.errors.length} error(s)</>}.
         </p>
-        {preview.candidates.length === 0 ? (
+        {preview.discovery_candidates.length === 0 ? (
           <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No candidates. Enable sources at <Link href="/admin/content/autopilot/sources">/admin/content/autopilot/sources</Link> and refresh.</p>
         ) : (
           <Table
             columns={[
-              { key: 'r',  header: '#',       className: 'num', render: (r: CandRow) => String(r.rank) },
-              { key: 'k',  header: 'Kind',    render: (r: CandRow) => r.kind === 'external_cluster'
+              { key: 'r',  header: '#',       className: 'num', render: (r: DiscoveryRow) => String(r.rank) },
+              { key: 'k',  header: 'Kind',    render: (r: DiscoveryRow) => r.kind === 'external_cluster'
                 ? <StatusBadge state="warning" label="external" />
                 : <StatusBadge state="info" label="internal" /> },
-              { key: 's',  header: 'Score',   className: 'num', render: (r: CandRow) => <strong>{r.score.toString()}</strong> },
-              { key: 't',  header: 'Template', render: (r: CandRow) => <code style={{ fontSize: 11 }}>{r.template_id}</code> },
-              { key: 'd',  header: 'Decision', render: (r: CandRow) => <code style={{ fontSize: 11 }}>{r.decision}</code> },
-              { key: 'tt', header: 'Working title', render: (r: CandRow) => <span style={{ fontSize: 13 }}>{r.working_title}</span> },
-              { key: 'tiers', header: 'Supporting tiers', render: (r: CandRow) =>
-                r.kind === 'external_cluster' && r.tiers.length > 0
-                  ? r.tiers.map((t, i) => <code key={i} style={{ marginRight: 4, fontSize: 10 }}>{t[0]}</code>)
-                  : <span className="col-dim">—</span> },
+              { key: 's',  header: 'Discovery score', className: 'num', render: (r: DiscoveryRow) => <strong>{r.score}/40</strong> },
+              { key: 't',  header: 'Template', render: (r: DiscoveryRow) => <code style={{ fontSize: 11 }}>{r.template_id}</code> },
+              { key: 'tt', header: 'Working title', render: (r: DiscoveryRow) => <span style={{ fontSize: 13 }}>{r.working_title}</span> },
+              { key: 'tiers', header: 'Publishers', render: (r: DiscoveryRow) =>
+                r.publishers.length === 0
+                  ? <span className="col-dim">internal</span>
+                  : <span style={{ fontSize: 11 }}>{r.publishers.map((p) => `${p.name} (T${p.tier === 'official' ? 1 : p.tier === 'secondary' ? 2 : 3})`).join(', ')}</span> },
+              { key: 'age', header: 'Age', render: (r: DiscoveryRow) => r.age_days != null ? <code style={{ fontSize: 11 }}>{r.age_days}d</code> : <span className="col-dim">—</span> },
             ]}
-            rows={preview.candidates.map((c, i) => ({
+            rows={preview.discovery_candidates.slice(0, 25).map((c, i) => ({
               id: `${c.kind}:${c.key}`,
               rank: i + 1,
               kind: c.kind,
-              score: c.score,
+              score: c.discovery_score,
               template_id: c.template_id,
-              decision: c.decision,
               working_title: c.working_title,
-              tiers: c.supporting_source_tiers,
+              publishers: c.publishers,
+              age_days: c.age_days,
             }))}
             empty=""
           />
+        )}
+      </Panel>
+
+      <Panel title="1c. Stage 2 · Researched shortlist" eyebrow="Full 0..100 editorial score after enrichment">
+        {preview.researched_shortlist.length === 0 ? (
+          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>Nothing shortlisted — no discovery candidates to research.</p>
+        ) : (
+          <Table
+            columns={[
+              { key: 'r',  header: '#',       className: 'num', render: (r: ResearchedRow) => String(r.rank) },
+              { key: 'tt', header: 'Topic',   render: (r: ResearchedRow) => <strong style={{ fontSize: 13 }}>{r.working_title}</strong> },
+              { key: 'fs', header: 'Final score', className: 'num', render: (r: ResearchedRow) =>
+                <span style={{ fontWeight: 700, color: r.final_score >= 60 ? 'var(--admin-text)' : 'var(--admin-text-muted)' }}>{r.final_score}/100</span> },
+              { key: 'ds', header: 'Discovery', className: 'num', render: (r: ResearchedRow) => <span className="col-dim">{r.discovery_score}/40</span> },
+              { key: 't',  header: 'Template', render: (r: ResearchedRow) => <code style={{ fontSize: 11 }}>{r.template_id}</code> },
+              { key: 'ent', header: 'Entities', render: (r: ResearchedRow) =>
+                <span style={{ fontSize: 11 }}>{r.cards_count} card(s), {r.sets_count} set(s)</span> },
+              { key: 'li', header: 'Links',   className: 'num', render: (r: ResearchedRow) => <code style={{ fontSize: 11 }}>{r.outbound_links}</code> },
+              { key: 'im', header: 'Images',  className: 'num', render: (r: ResearchedRow) => <code style={{ fontSize: 11 }}>{r.images}</code> },
+              { key: 'cv', header: 'Evidence', render: (r: ResearchedRow) =>
+                r.quality === 'ready'
+                  ? <StatusBadge state="success" label="ready" />
+                  : <StatusBadge state="warning" label={`held: ${r.hold_reasons.join(',')}`} /> },
+              { key: 'ok', header: 'Eligible', render: (r: ResearchedRow) =>
+                r.eligible ? <StatusBadge state="success" label="yes" /> : <StatusBadge state="warning" label="no" /> },
+              { key: 'dec', header: 'Decision', render: (r: ResearchedRow) => <code style={{ fontSize: 11 }}>{r.decision}</code> },
+            ]}
+            rows={preview.researched_shortlist.map((r, i) => ({
+              id: `${r.discovery.kind}:${r.discovery.key}`,
+              rank: i + 1,
+              working_title: r.discovery.working_title,
+              final_score: r.final_score.total,
+              discovery_score: r.discovery.discovery_score,
+              template_id: r.discovery.template_id,
+              cards_count: r.entities.cards.length,
+              sets_count: r.entities.sets.length,
+              outbound_links: r.internal_links_outbound.length,
+              images: r.images.length,
+              quality: r.evidence_quality.status,
+              hold_reasons: r.evidence_quality.hold_reasons,
+              eligible: r.eligible_for_generation,
+              decision: r.routing.decision,
+            }))}
+            empty=""
+          />
+        )}
+        {preview.researched_shortlist.length > 0 && (
+          <p className="col-dim" style={{ fontSize: 12, margin: '10px 0 0' }}>
+            Final score uses all signals (search / market / timeliness / evidence / commercial / internal-link / gap / newsworthiness / source-authority) with duplication + source-agreement penalties. A candidate must score ≥ min_opportunity_score AND have evidence_quality="ready" to be eligible.
+          </p>
         )}
       </Panel>
 
@@ -212,9 +262,9 @@ export default async function AutopilotPreviewPage() {
         )}
       </Panel>
 
-      <Panel title="4. Internal link candidates" eyebrow="Outbound links the article may include">
+      <Panel title="4. Internal link candidates" eyebrow="Outbound links the article may include (from opportunity table + entity catalogue)">
         {preview.pipeline.evidence_pack.internal_links.length === 0 ? (
-          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No link candidates sourced yet. A follow-up checkpoint will plug in <code>network_internal_link_opportunities</code>.</p>
+          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No relevant internal links found for this topic.</p>
         ) : (
           <Table
             columns={[
@@ -261,35 +311,28 @@ export default async function AutopilotPreviewPage() {
         )}
       </Panel>
 
-      <Panel title="5c. External extraction" eyebrow="Fetched source text (research only, not reproduced)">
-        {preview.extraction.length === 0 ? (
-          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No external extraction run (selected candidate had no external signals).</p>
+      <Panel title="5c. External extraction (chosen candidate)" eyebrow="Fetched source text (research only, not reproduced)">
+        {preview.pipeline.evidence_pack.external_sources.length === 0 ? (
+          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No external sources — selected candidate is internal or had no external cluster signals.</p>
         ) : (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
-              <KV label="Signals extracted" value={String(preview.extraction.filter((e) => e.success).length)} />
-              <KV label="Signals failed" value={String(preview.extraction.filter((e) => !e.success).length)} warn={preview.extraction.some((e) => !e.success)} />
-            </div>
-            <Table
-              columns={[
-                { key: 's', header: 'Status',   render: (r: ExtRow) => r.success ? <StatusBadge state="success" label="ok" /> : <StatusBadge state="failed" label="failed" /> },
-                { key: 'u', header: 'URL',      render: (r: ExtRow) => <code style={{ fontSize: 10 }}>{r.url.length > 60 ? r.url.slice(0, 57) + '…' : r.url}</code> },
-                { key: 'h', header: 'Hash',     render: (r: ExtRow) => r.content_hash ? <code style={{ fontSize: 10 }}>{r.content_hash.slice(0, 12)}…</code> : <span className="col-dim">—</span> },
-                { key: 'p', header: 'Preview',  render: (r: ExtRow) => r.extracted_text
-                  ? <span style={{ fontSize: 11 }}>{r.extracted_text.slice(0, 180)}…</span>
-                  : <span className="col-dim">{r.reason ?? '—'}</span> },
-              ]}
-              rows={preview.extraction.map((e, i) => ({
-                id: i,
-                success: e.success,
-                url: e.url,
-                content_hash: e.content_hash,
-                extracted_text: e.extracted_text,
-                reason: e.reason,
-              }))}
-              empty=""
-            />
-          </>
+          <Table
+            columns={[
+              { key: 't', header: 'Tier',     render: (r: ExtRow) => <StatusBadge state={r.tier === 'official' ? 'success' : r.tier === 'secondary' ? 'info' : 'warning'} label={`T${r.tier === 'official' ? 1 : r.tier === 'secondary' ? 2 : 3}`} /> },
+              { key: 'u', header: 'URL',      render: (r: ExtRow) => <code style={{ fontSize: 10 }}>{r.url.length > 60 ? r.url.slice(0, 57) + '…' : r.url}</code> },
+              { key: 'f', header: 'Facts extracted', className: 'num', render: (r: ExtRow) => String(r.facts_count) },
+              { key: 'p', header: 'Summary preview',  render: (r: ExtRow) => r.summary
+                ? <span style={{ fontSize: 11 }}>{r.summary.slice(0, 200)}{r.summary.length > 200 ? '…' : ''}</span>
+                : <span className="col-dim">(none)</span> },
+            ]}
+            rows={preview.pipeline.evidence_pack.external_sources.map((s, i) => ({
+              id: i,
+              tier: s.source_tier,
+              url: s.url,
+              facts_count: s.facts.length,
+              summary: s.summary,
+            }))}
+            empty=""
+          />
         )}
       </Panel>
 
@@ -437,9 +480,10 @@ function scoreBreakdownRows(c: {
 interface ImgRow { id: number; role: string | null; alt: string; url: string }
 interface LinkRow { id: number; url: string; anchors: string[]; reason: string; priority: number }
 interface QARow { id: number; severity: string; check: string; message: string }
-interface CandRow { id: string; rank: number; kind: 'internal_idea' | 'external_cluster'; score: number; template_id: string; decision: string; working_title: string; tiers: string[] }
 interface ExtSrcRow { id: number; tier: string; publisher: string; published_at: string | null; headline: string; url: string }
-interface ExtRow { id: number; success: boolean; url: string; content_hash?: string; extracted_text?: string; reason?: string }
+interface ExtRow { id: number; tier: string; url: string; facts_count: number; summary: string | null }
+interface DiscoveryRow { id: string; rank: number; kind: 'internal_idea' | 'external_cluster'; score: number; template_id: string; working_title: string; publishers: Array<{ name: string; tier: string; domain: string }>; age_days: number | null }
+interface ResearchedRow { id: string; rank: number; working_title: string; final_score: number; discovery_score: number; template_id: string; cards_count: number; sets_count: number; outbound_links: number; images: number; quality: string; hold_reasons: string[]; eligible: boolean; decision: string }
 
 function KV({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
