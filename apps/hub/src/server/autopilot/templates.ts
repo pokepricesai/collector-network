@@ -86,12 +86,78 @@ export const REFRESH_TEMPLATE: ArticleTemplate = {
   min_evidence: { market_data: 1 },
 };
 
+// External-driven news template. Must have at least one authoritative
+// (tier-1 or tier-2) external source. Short, carefully attributed,
+// internally-linked. Not a rewrite of the source article.
+export const NEWS_TEMPLATE: ArticleTemplate = {
+  id: 'news',
+  label: 'News update',
+  description: 'Report an external announcement with internal collector context. Short, attributed, never a rewrite.',
+  sections: [
+    { id: 'intro',         heading_level: null, title_hint: 'Lede',             min_sentences: 2, max_sentences: 4, evidence: ['external_sources', 'article_angle', 'topic'],         required: true },
+    { id: 'context',       heading_level: 2,    title_hint: 'What was said',    min_sentences: 2, max_sentences: 6, evidence: ['external_sources', 'article_angle'],                   required: true },
+    { id: 'card_detail',   heading_level: 2,    title_hint: 'For collectors',   min_sentences: 2, max_sentences: 6, evidence: ['related_pages', 'market_data', 'internal_links'],      required: false },
+    { id: 'what_to_watch', heading_level: 2,    title_hint: 'What to watch',    min_sentences: 1, max_sentences: 3, evidence: ['article_angle', 'external_sources'],                   required: false },
+    { id: 'related',       heading_level: 2,    title_hint: 'Related',          min_sentences: 1, max_sentences: 2, evidence: ['related_pages', 'internal_links'],                     required: false },
+  ],
+  min_evidence: { external_sources: 1, images: 1 },
+};
+
+export const SET_DEEP_DIVE_TEMPLATE: ArticleTemplate = {
+  id: 'set_deep_dive',
+  label: 'Set deep dive',
+  description: 'Historical / collectability deep dive on a single set. Prefers at least one authoritative external source.',
+  sections: [
+    { id: 'set_overview',  heading_level: null, title_hint: 'Standfirst',       min_sentences: 2, max_sentences: 4, evidence: ['topic', 'external_sources', 'related_pages'],      required: true },
+    { id: 'context',       heading_level: 2,    title_hint: 'Historical context', min_sentences: 2, max_sentences: 6, evidence: ['external_sources', 'article_angle'],              required: true },
+    { id: 'set_key_cards', heading_level: 2,    title_hint: 'Key cards',        min_sentences: 2, max_sentences: 8, evidence: ['market_data', 'images', 'related_pages'],          required: true },
+    { id: 'set_market',    heading_level: 2,    title_hint: 'Collectability',   min_sentences: 1, max_sentences: 4, evidence: ['market_data', 'external_sources'],                 required: false },
+    { id: 'related',       heading_level: 2,    title_hint: 'Related',          min_sentences: 1, max_sentences: 2, evidence: ['related_pages', 'internal_links'],                 required: false },
+  ],
+  min_evidence: { external_sources: 1 },
+};
+
+export const ARCHETYPE_GUIDE_TEMPLATE: ArticleTemplate = {
+  id: 'archetype_guide',
+  label: 'Archetype guide',
+  description: 'Theme / archetype guide — history, key cards, context.',
+  sections: [
+    { id: 'intro',         heading_level: null, title_hint: 'Standfirst',       min_sentences: 2, max_sentences: 4, evidence: ['topic', 'article_angle'],                           required: true },
+    { id: 'context',       heading_level: 2,    title_hint: 'Where it came from', min_sentences: 2, max_sentences: 6, evidence: ['external_sources', 'article_angle'],              required: true },
+    { id: 'card_detail',   heading_level: 2,    title_hint: 'Core cards',       min_sentences: 3, max_sentences: 8, evidence: ['related_pages', 'market_data', 'images'],          required: true },
+    { id: 'related',       heading_level: 2,    title_hint: 'Related',          min_sentences: 1, max_sentences: 2, evidence: ['related_pages', 'internal_links'],                 required: false },
+  ],
+  min_evidence: {},
+};
+
+export const RETROSPECTIVE_TEMPLATE: ArticleTemplate = {
+  id: 'retrospective',
+  label: 'Retrospective',
+  description: 'Historical retrospective on a set, card, era, or format change. Dates must trace to evidence.',
+  sections: [
+    { id: 'intro',         heading_level: null, title_hint: 'Lede',             min_sentences: 2, max_sentences: 4, evidence: ['article_angle', 'topic', 'external_sources'],      required: true },
+    { id: 'context',       heading_level: 2,    title_hint: 'What happened',    min_sentences: 2, max_sentences: 8, evidence: ['external_sources', 'article_angle'],               required: true },
+    { id: 'card_detail',   heading_level: 2,    title_hint: 'The cards involved', min_sentences: 2, max_sentences: 6, evidence: ['market_data', 'related_pages', 'images'],         required: false },
+    { id: 'close',         heading_level: 2,    title_hint: 'In hindsight',     min_sentences: 1, max_sentences: 4, evidence: ['article_angle', 'external_sources'],                required: false },
+  ],
+  min_evidence: { external_sources: 1 },
+};
+
 const TEMPLATE_MAP: Record<ArticleTemplateId, ArticleTemplate> = {
-  market_movers:   MARKET_MOVERS_TEMPLATE,
-  set_guide:       SET_GUIDE_TEMPLATE,
-  card_guide:      CARD_GUIDE_TEMPLATE,
-  evergreen_guide: EVERGREEN_GUIDE_TEMPLATE,
-  refresh:         REFRESH_TEMPLATE,
+  market_movers:      MARKET_MOVERS_TEMPLATE,
+  set_guide:          SET_GUIDE_TEMPLATE,
+  set_deep_dive:      SET_DEEP_DIVE_TEMPLATE,
+  card_guide:         CARD_GUIDE_TEMPLATE,
+  card_deep_dive:     CARD_GUIDE_TEMPLATE,       // same contract; the deep_dive flavour comes via angle + token budget
+  archetype_guide:    ARCHETYPE_GUIDE_TEMPLATE,
+  collector_guide:    EVERGREEN_GUIDE_TEMPLATE,  // alias — same section shape
+  evergreen_guide:    EVERGREEN_GUIDE_TEMPLATE,
+  search_led:         EVERGREEN_GUIDE_TEMPLATE,  // alias for intent-matched
+  news:               NEWS_TEMPLATE,
+  trend_story:        NEWS_TEMPLATE,             // same shape; min_evidence enforced by scorer penalty on single-tier
+  tournament_context: NEWS_TEMPLATE,
+  retrospective:      RETROSPECTIVE_TEMPLATE,
+  refresh:            REFRESH_TEMPLATE,
 };
 
 export function getTemplate(id: ArticleTemplateId): ArticleTemplate {

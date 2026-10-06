@@ -22,16 +22,20 @@ import 'server-only';
 import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
+  ArticleAngle,
   ArticleTemplateId,
   CommercialLink,
+  DiscoveredSignal,
   EvidenceImage,
   EvidenceInternalLink,
   EvidencePackPayload,
   EvidenceQualityVerdict,
   ExistingContentRef,
+  ExternalSource,
   MarketObservation,
   RelatedPage,
   SearchObservation,
+  SourceTier,
 } from './types';
 import { getTemplate, BANNED_FILLER_PHRASES } from './templates';
 import type { AutopilotSiteSlug } from './config';
@@ -46,8 +50,11 @@ export interface BuildPackInput {
   secondary_queries: string[];
   summary: string | null;
   date_range_days: number;
-  // Caller can pass projected cost from the cost estimator so the
-  // pack is a complete snapshot of what the AI will see.
+  // Caller may inject already-discovered external signals; the pack
+  // builder promotes them into the ExternalSource shape the AI reads.
+  // In Checkpoint B.1 the discovery engine populates this on behalf
+  // of the orchestrator.
+  external_signals?: DiscoveredSignal[];
   budget: {
     max_cost_usd: number;
     projected_draft_cost_usd: number;
@@ -69,10 +76,12 @@ export async function buildEvidencePack(sb: SupabaseClient, input: BuildPackInpu
     fetchInternalLinks(sb, input),
     fetchCommercialLinks(sb, input),
   ]);
+  const external_sources: ExternalSource[] = (input.external_signals ?? []).map(signalToSource);
+  const article_angle = deriveArticleAngle(input, external_sources, market_data.length > 0);
 
   const template = getTemplate(input.template_id);
   const payload: EvidencePackPayload = {
-    schema_version: '1',
+    schema_version: '2',
     site: { slug: input.site_slug, name: input.site_name },
     topic: {
       kind: input.template_id,
@@ -90,6 +99,8 @@ export async function buildEvidencePack(sb: SupabaseClient, input: BuildPackInpu
     existing_content,
     images,
     commercial_links,
+    external_sources,
+    article_angle,
     generation_constraints: {
       template_id: input.template_id,
       max_output_tokens: 4000,
@@ -116,22 +127,112 @@ export function evaluateEvidenceQuality(payload: EvidencePackPayload): EvidenceQ
 
   const needMarket = t.min_evidence.market_data ?? 0;
   const needImages = t.min_evidence.images ?? 0;
+  const needExternal = t.min_evidence.external_sources ?? 0;
+  const needOfficial = t.min_evidence.official_source_count ?? 0;
+
   if (payload.market_data.length < needMarket) {
     hold_reasons.push('evidence_insufficient');
   }
   if (payload.images.length < needImages) {
     hold_reasons.push('image_missing');
   }
+  if (payload.external_sources.length < needExternal) {
+    hold_reasons.push('evidence_insufficient');
+  }
+  const officialCount = payload.external_sources.filter((s) => s.official || s.source_tier === 'official').length;
+  if (officialCount < needOfficial) {
+    hold_reasons.push('evidence_insufficient');
+  }
+  // Community-only sources are a signal, not evidence. Templates that
+  // require tier-1 or tier-2 sources trip this hold.
+  if (payload.external_sources.length > 0 && payload.external_sources.every((s) => s.source_tier === 'community')) {
+    const needsAuthoritative = t.min_evidence.external_sources != null && t.min_evidence.external_sources > 0;
+    if (needsAuthoritative) hold_reasons.push('evidence_insufficient');
+    else warnings.push('All external signals come from community sources — treat as discovery only, not as authoritative evidence.');
+  }
   if (payload.existing_content.some((e) => e.overlap_score >= 0.75)) {
     hold_reasons.push('duplicate_topic');
   }
-  // Freshness warning for market observations (not blocker — just surface).
   const stale = payload.market_data.filter((m) => daysBetween(m.end_date, payload.date_range.to) > 7).length;
   if (stale > 0) warnings.push(`${stale} market observation(s) are more than 7 days old relative to the pack's date range.`);
 
-  // Dedup check — hard block if hold_reasons has duplicate_topic (above).
   const status = hold_reasons.length > 0 ? 'held' : 'ready';
   return { status, hold_reasons, warnings };
+}
+
+// Convert a discovered signal to an external source. Facts are left
+// empty in Checkpoint B.1 — the fetch step for the full page body
+// lands in Checkpoint C. For now we persist title + optional summary.
+function signalToSource(s: DiscoveredSignal): ExternalSource {
+  const tier: SourceTier = s.source_tier;
+  const trust: 1 | 2 | 3 = tier === 'official' ? 1 : tier === 'secondary' ? 2 : 3;
+  return {
+    url: s.url,
+    domain: s.domain,
+    publisher: s.source_name,
+    source_tier: tier,
+    trust_level: trust,
+    official: tier === 'official',
+    published_at: s.published_at,
+    retrieved_at: s.retrieved_at,
+    headline: s.title,
+    summary: s.summary,
+    og_image_url: null,
+    facts: [],
+  };
+}
+
+// Deterministic article angle derivation. The angle is what the
+// writing model is told the article should BE about and HOW to frame
+// it. We pick one of a small enum based on the dominant source tier
+// and template.
+function deriveArticleAngle(input: BuildPackInput, external: ExternalSource[], has_market: boolean): ArticleAngle {
+  const dominant: ArticleAngle['dominant_tier'] =
+    external.some((s) => s.source_tier === 'official') ? 'official' :
+    external.some((s) => s.source_tier === 'secondary') ? 'secondary' :
+    external.length > 0 ? 'community' :
+    'internal';
+  let anchor: ArticleAngle['anchor'] = 'explainer';
+  switch (input.template_id) {
+    case 'news':             anchor = 'news_update'; break;
+    case 'market_movers':    anchor = 'market_commentary'; break;
+    case 'retrospective':    anchor = 'retrospective'; break;
+    case 'set_deep_dive':
+    case 'card_deep_dive':
+    case 'archetype_guide':
+    case 'collector_guide':  anchor = 'deep_dive'; break;
+    case 'trend_story':      anchor = 'news_update'; break;
+    case 'tournament_context': anchor = 'collector_perspective'; break;
+    case 'card_guide':
+    case 'set_guide':        anchor = 'collector_perspective'; break;
+    case 'search_led':
+    case 'evergreen_guide':
+    case 'refresh':
+    default:                 anchor = 'explainer'; break;
+  }
+  const must_cover: string[] = [];
+  const must_not_cover: string[] = [
+    'Do not reproduce more than a short attributed quote from any external source.',
+    'Do not describe cards as investments.',
+    'Do not invent prices, release dates, or set contents.',
+  ];
+  if (anchor === 'news_update' && external.length > 0) {
+    must_cover.push(`State what the news is, who announced it (${external[0]!.publisher}), and when.`);
+    must_cover.push('Explain why collectors should care — reference internal pages where helpful.');
+  }
+  if (anchor === 'deep_dive') must_cover.push('Cover history, printings, and current relevance in that order.');
+  if (anchor === 'retrospective') must_cover.push('Anchor to a specific era, set, or event; cite dates from the evidence.');
+  if (anchor === 'market_commentary' && has_market) {
+    must_cover.push('Lead with the biggest observed movement; show methodology once near the top.');
+  }
+  const one_line =
+    anchor === 'news_update' ? `Report ${external[0]?.publisher ?? 'external source'}'s announcement; add internal collector context.` :
+    anchor === 'deep_dive'   ? `Deep dive into ${input.working_title} grounded in internal data + cited external context.` :
+    anchor === 'retrospective' ? `Retrospective on ${input.working_title}; dates and set names must trace to evidence.` :
+    anchor === 'market_commentary' ? `Observational market note on ${input.working_title} — no investment framing.` :
+    anchor === 'collector_perspective' ? `Collector-focused walk-through of ${input.working_title}.` :
+    `Evergreen explainer: ${input.working_title}.`;
+  return { anchor, one_line, must_cover, must_not_cover, dominant_tier: dominant };
 }
 
 export interface PersistPackInput {
@@ -356,10 +457,19 @@ function methodologyFor(template_id: ArticleTemplateId, days: number): string {
   switch (template_id) {
     case 'market_movers':
       return `Observed price movement across tracked Yu-Gi-Oh! card printings between ${days} days ago and today. Movers meet a minimum observation count, a minimum absolute change, and a maximum percentage-change cap to filter out thin-data outliers.`;
-    case 'card_guide':      return `Deterministic summary of tracked printings and price position for the subject card.`;
-    case 'set_guide':       return `Overview of a single set using the tracked printings in the YGOPrices catalogue.`;
-    case 'evergreen_guide': return `Reference piece written against the current YGO catalogue + 28-day search context.`;
-    case 'refresh':         return `Reconciled refresh of an existing article against the latest ${days}-day data.`;
+    case 'card_guide':
+    case 'card_deep_dive':      return `Deterministic summary of tracked printings and price position for the subject card.`;
+    case 'set_guide':
+    case 'set_deep_dive':       return `Overview of a single set using the tracked printings in the YGOPrices catalogue.`;
+    case 'archetype_guide':
+    case 'collector_guide':     return `Guide written against the current YGO catalogue and the external sources listed in the pack.`;
+    case 'news':
+    case 'trend_story':
+    case 'tournament_context':  return `Reports an external announcement/story using the attributed sources in the pack. Short quotations only; no reproduced article bodies.`;
+    case 'retrospective':       return `Historical retrospective anchored to dated external sources plus the current catalogue.`;
+    case 'evergreen_guide':
+    case 'search_led':          return `Reference piece written against the current YGO catalogue + 28-day search context.`;
+    case 'refresh':             return `Reconciled refresh of an existing article against the latest ${days}-day data.`;
   }
 }
 

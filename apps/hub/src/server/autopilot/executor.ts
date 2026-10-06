@@ -150,6 +150,7 @@ function sectionParagraphs(
   headliner: MarketObservation | null,
 ): string[] {
   const paras: string[] = [];
+  const extNewest = pack.external_sources[0] ?? null;
   switch (section.id) {
     case 'intro':
       if (headliner) {
@@ -159,6 +160,11 @@ function sectionParagraphs(
         paras.push(
           `${headliner.card_name} led the move, closing at ${formatMoney(headliner.end_price_minor, headliner.currency)} — a ${signed(headliner.percentage_change)}% shift from ${formatMoney(headliner.start_price_minor, headliner.currency)} at the start of the window.`,
         );
+      } else if (extNewest) {
+        paras.push(pack.article_angle.one_line);
+        paras.push(`Reported by ${extNewest.publisher}${extNewest.published_at ? ` on ${extNewest.published_at.slice(0, 10)}` : ''}.`);
+      } else {
+        paras.push(pack.article_angle.one_line);
       }
       break;
     case 'methodology':
@@ -180,9 +186,18 @@ function sectionParagraphs(
       }
       break;
     case 'context':
-      paras.push(
-        `Movement of this scale usually reflects a shift in tournament relevance, a reprint announcement, or a supply constraint. The data here does not explain the "why" — it only quantifies what moved.`,
-      );
+      if (pack.external_sources.length > 0) {
+        for (const src of pack.external_sources.slice(0, 2)) {
+          paras.push(
+            `${src.publisher} (${src.source_tier}) ${src.published_at ? `on ${src.published_at.slice(0, 10)} ` : ''}headline: "${src.headline}".`,
+          );
+          if (src.summary) paras.push(src.summary);
+        }
+      } else {
+        paras.push(
+          `Movement of this scale usually reflects a shift in tournament relevance, a reprint announcement, or a supply constraint. The data here does not explain the "why" — it only quantifies what moved.`,
+        );
+      }
       break;
     case 'what_to_watch':
       paras.push(

@@ -19,8 +19,17 @@ import type { AutopilotSiteSlug } from './config';
 export type ArticleTemplateId =
   | 'market_movers'
   | 'set_guide'
+  | 'set_deep_dive'       // historical / collectability focus; needs multiple sources
   | 'card_guide'
+  | 'card_deep_dive'      // same as card_guide but longer with historical context
+  | 'archetype_guide'     // theme / archetype guide
+  | 'collector_guide'
   | 'evergreen_guide'
+  | 'search_led'          // intent-matched to a specific query
+  | 'news'                // external announcement, requires strong sources
+  | 'trend_story'         // community buzz; requires source_agreement
+  | 'tournament_context'
+  | 'retrospective'
   | 'refresh';
 
 // Which evidence slots a section can reference. The prompt builder
@@ -37,7 +46,9 @@ export type EvidenceField =
   | 'commercial_links'
   | 'topic'
   | 'date_range'
-  | 'methodology';
+  | 'methodology'
+  | 'external_sources'
+  | 'article_angle';
 
 export interface TemplateSection {
   id: string;                       // 'intro', 'top_movers', ...
@@ -58,6 +69,8 @@ export interface ArticleTemplate {
     market_data?: number;
     search_data?: number;
     images?: number;
+    external_sources?: number;
+    official_source_count?: number;
   };
 }
 
@@ -149,8 +162,61 @@ export interface GenerationConstraints {
   banned_phrases: string[];
 }
 
+// ────────────────────── External sources ──────────────────────
+
+export type SourceTier = 'official' | 'secondary' | 'community';
+export type DiscoveryMethod = 'rss' | 'atom' | 'json_feed' | 'sitemap' | 'manual';
+
+export interface DiscoveredSignal {
+  id: string | null;                     // null when the signal isn't persisted yet
+  source_id: string;
+  source_name: string;
+  source_tier: SourceTier;
+  domain: string;
+  url: string;
+  title: string;
+  summary: string | null;
+  published_at: string | null;
+  retrieved_at: string;
+  topic_keywords: string[];
+  cluster_key: string | null;
+}
+
+// Shape used inside the research pack. Trimmed to just the facts
+// the writing model needs — never the full upstream article body.
+export interface ExternalSource {
+  url: string;
+  domain: string;
+  publisher: string;                     // human-friendly publisher name
+  source_tier: SourceTier;
+  trust_level: 1 | 2 | 3;                // mirrors tier numerically
+  official: boolean;
+  published_at: string | null;
+  retrieved_at: string;
+  headline: string;
+  summary: string | null;                // short excerpt, bounded for copyright reasons
+  og_image_url: string | null;
+  // Deterministically-extracted "facts": short noun-phrase style
+  // claims the AI may reference. The writing model is instructed
+  // never to copy source prose; it may only reference these facts.
+  facts: string[];
+}
+
+export interface ArticleAngle {
+  // What the article is actually going to say + why. Deterministic
+  // in Checkpoint B.1 (derived from the dominant source type +
+  // internal signals). A later checkpoint may let the LLM refine it,
+  // but the frozen version persisted in the pack is what the writer
+  // reads.
+  anchor: 'news_update' | 'deep_dive' | 'retrospective' | 'market_commentary' | 'explainer' | 'collector_perspective';
+  one_line: string;                      // operator-readable summary
+  must_cover: string[];                  // bullet points the draft must address
+  must_not_cover: string[];              // out-of-scope guardrails
+  dominant_tier: SourceTier | 'internal';
+}
+
 export interface EvidencePackPayload {
-  schema_version: '1';
+  schema_version: '2';
   site: { slug: AutopilotSiteSlug; name: string };
   topic: {
     kind: ArticleTemplateId;
@@ -161,6 +227,7 @@ export interface EvidencePackPayload {
   };
   date_range: { from: string; to: string };
   methodology: string;
+  // Internal evidence — unchanged shape from v1.
   market_data: MarketObservation[];
   search_data: SearchObservation[];
   related_pages: RelatedPage[];
@@ -168,6 +235,9 @@ export interface EvidencePackPayload {
   existing_content: ExistingContentRef[];
   images: EvidenceImage[];
   commercial_links: CommercialLink[];
+  // External evidence — new in v2.
+  external_sources: ExternalSource[];
+  article_angle: ArticleAngle;
   generation_constraints: GenerationConstraints;
   budget: {
     max_cost_usd: number;
@@ -186,17 +256,21 @@ export interface EvidenceQualityVerdict {
 // ────────────────────── Opportunity + scoring ──────────────────
 
 export interface OpportunityScoreComponents {
-  // Each component scored 0..its weight. Final score is the sum.
-  search_potential: number;         // 0..20
-  market_significance: number;      // 0..20
-  timeliness: number;               // 0..15
-  evidence_quality: number;         // 0..15
-  commercial_relevance: number;     // 0..10
+  // Rebalanced in Checkpoint B.1 to accommodate external signals.
+  // Positives sum to 100; penalties clamp the final score down.
+  search_potential:          number; // 0..15
+  market_significance:       number; // 0..15
+  timeliness:                number; // 0..10
+  evidence_quality:          number; // 0..10
+  commercial_relevance:      number; // 0..10
   internal_link_opportunity: number; // 0..10
-  existing_content_gap: number;     // 0..10
+  existing_content_gap:      number; // 0..10
+  newsworthiness:            number; // 0..10  (external-signal strength)
+  source_authority:          number; // 0..10  (weighted trust of supporting sources)
   // Adjustments (can be negative)
-  duplication_penalty: number;      // -20..0
-  effort_adjustment: number;        // -5..+5
+  duplication_penalty:       number; // -20..0
+  source_agreement_penalty:  number; // -10..0  (penalise single-source tier-3 stories)
+  effort_adjustment:         number; // -5..+5
 }
 
 export interface OpportunityScore {

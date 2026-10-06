@@ -81,6 +81,48 @@ export default async function AutopilotPreviewPage() {
         </ul>
       </Panel>
 
+      <Panel title="1b. Candidate pool" eyebrow="All candidates considered, highest score first">
+        <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
+          <strong>Discovery:</strong>{' '}
+          {preview.discovery.enabled_sources} enabled source(s); {preview.discovery.total_active_signals} active signal(s).
+          Last pass: {preview.discovery.cached
+            ? `cached (${preview.discovery.cache_age_minutes} min ago)`
+            : `fresh — scanned ${preview.discovery.sources_scanned} source(s), ${preview.discovery.signals_inserted} new signal(s)`}
+          {preview.discovery.errors.length > 0 && <>, {preview.discovery.errors.length} error(s)</>}.
+        </p>
+        {preview.candidates.length === 0 ? (
+          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No candidates. Enable sources at <Link href="/admin/content/autopilot/sources">/admin/content/autopilot/sources</Link> and refresh.</p>
+        ) : (
+          <Table
+            columns={[
+              { key: 'r',  header: '#',       className: 'num', render: (r: CandRow) => String(r.rank) },
+              { key: 'k',  header: 'Kind',    render: (r: CandRow) => r.kind === 'external_cluster'
+                ? <StatusBadge state="warning" label="external" />
+                : <StatusBadge state="info" label="internal" /> },
+              { key: 's',  header: 'Score',   className: 'num', render: (r: CandRow) => <strong>{r.score.toString()}</strong> },
+              { key: 't',  header: 'Template', render: (r: CandRow) => <code style={{ fontSize: 11 }}>{r.template_id}</code> },
+              { key: 'd',  header: 'Decision', render: (r: CandRow) => <code style={{ fontSize: 11 }}>{r.decision}</code> },
+              { key: 'tt', header: 'Working title', render: (r: CandRow) => <span style={{ fontSize: 13 }}>{r.working_title}</span> },
+              { key: 'tiers', header: 'Supporting tiers', render: (r: CandRow) =>
+                r.kind === 'external_cluster' && r.tiers.length > 0
+                  ? r.tiers.map((t, i) => <code key={i} style={{ marginRight: 4, fontSize: 10 }}>{t[0]}</code>)
+                  : <span className="col-dim">—</span> },
+            ]}
+            rows={preview.candidates.map((c, i) => ({
+              id: `${c.kind}:${c.key}`,
+              rank: i + 1,
+              kind: c.kind,
+              score: c.score,
+              template_id: c.template_id,
+              decision: c.decision,
+              working_title: c.working_title,
+              tiers: c.supporting_source_tiers,
+            }))}
+            empty=""
+          />
+        )}
+      </Panel>
+
       <Panel title="2. Evidence pack" eyebrow="Deterministic — the AI reads only this">
         <Notice tone={preview.evidence_quality.status === 'ready' ? 'success' : 'warning'}>
           <strong style={{ textTransform: 'uppercase' }}>Evidence quality: {preview.evidence_quality.status}</strong>
@@ -103,16 +145,55 @@ export default async function AutopilotPreviewPage() {
           <KV label="Date range" value={`${preview.pipeline.evidence_pack.date_range.from} → ${preview.pipeline.evidence_pack.date_range.to}`} />
         </div>
 
-        {preview.pipeline.evidence_pack.market_data.length === 0 && (
+        {preview.pipeline.evidence_pack.market_data.length === 0 && preview.pipeline.opportunity.template_id === 'market_movers' && (
           <Notice tone="info" >
-            <strong>YGO pricing not mirrored in the Collector Network Supabase yet.</strong> The MARKET_MOVERS template cannot run for YGO today;
-            evidence builder returns an empty <code>market_data</code> array, which the quality gate catches as <code>evidence_insufficient</code> for any price-dependent template.
-            Fixing this requires wiring a YGO pricing provider (equivalent to <code>server/pokeprices/pricing.ts</code>). Until then the pilot runs on EVERGREEN_GUIDE.
+            <strong>YGO pricing not mirrored in the Collector Network Supabase yet.</strong> MARKET_MOVERS cannot run for YGO today;
+            evidence builder returns an empty <code>market_data</code> array, which the quality gate catches as <code>evidence_insufficient</code>.
           </Notice>
         )}
 
         <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Methodology</h3>
         <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>{preview.pipeline.evidence_pack.methodology}</p>
+
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Article angle (deterministic)</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+          <KV label="Anchor" value={preview.pipeline.evidence_pack.article_angle.anchor} />
+          <KV label="Dominant source tier" value={preview.pipeline.evidence_pack.article_angle.dominant_tier} />
+        </div>
+        <p style={{ fontSize: 13, lineHeight: 1.6, margin: '10px 0 6px' }}><strong>One line:</strong> {preview.pipeline.evidence_pack.article_angle.one_line}</p>
+        {preview.pipeline.evidence_pack.article_angle.must_cover.length > 0 && (
+          <>
+            <div className="admin-eyebrow" style={{ marginBottom: 4 }}>Must cover</div>
+            <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+              {preview.pipeline.evidence_pack.article_angle.must_cover.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+          </>
+        )}
+        {preview.pipeline.evidence_pack.article_angle.must_not_cover.length > 0 && (
+          <>
+            <div className="admin-eyebrow" style={{ marginTop: 8, marginBottom: 4 }}>Must NOT cover</div>
+            <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20, color: 'var(--admin-text-muted)' }}>
+              {preview.pipeline.evidence_pack.article_angle.must_not_cover.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+          </>
+        )}
+
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>External sources</h3>
+        {preview.pipeline.evidence_pack.external_sources.length === 0 ? (
+          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No external sources — article is wholly internally-grounded.</p>
+        ) : (
+          <Table
+            columns={[
+              { key: 't',  header: 'Tier', render: (r: ExtSrcRow) => <StatusBadge state={r.tier === 'official' ? 'success' : r.tier === 'secondary' ? 'info' : 'warning'} label={r.tier} /> },
+              { key: 'p',  header: 'Publisher', render: (r: ExtSrcRow) => <strong>{r.publisher}</strong> },
+              { key: 'd',  header: 'Published', render: (r: ExtSrcRow) => <code style={{ fontSize: 11 }}>{r.published_at ?? '—'}</code> },
+              { key: 'h',  header: 'Headline', render: (r: ExtSrcRow) => <span style={{ fontSize: 12.5 }}>{r.headline}</span> },
+              { key: 'u',  header: 'URL', render: (r: ExtSrcRow) => <code style={{ fontSize: 10 }}>{r.url.length > 50 ? r.url.slice(0, 47) + '…' : r.url}</code> },
+            ]}
+            rows={preview.pipeline.evidence_pack.external_sources.map((s, i) => ({ id: i, tier: s.source_tier, publisher: s.publisher, published_at: s.published_at, headline: s.headline, url: s.url }))}
+            empty=""
+          />
+        )}
       </Panel>
 
       <Panel title="3. Images chosen" eyebrow="YGO card imagery only — no AI generation, no web scraping">
@@ -279,24 +360,30 @@ interface BreakdownRow { id: string; component: string; value: number; max: numb
 function scoreBreakdownRows(c: {
   search_potential: number; market_significance: number; timeliness: number; evidence_quality: number;
   commercial_relevance: number; internal_link_opportunity: number; existing_content_gap: number;
-  duplication_penalty: number; effort_adjustment: number;
+  newsworthiness: number; source_authority: number;
+  duplication_penalty: number; source_agreement_penalty: number; effort_adjustment: number;
 }): BreakdownRow[] {
   return [
-    { id: 'search',  component: 'Search potential',          value: c.search_potential,          max: 20 },
-    { id: 'market',  component: 'Market significance',       value: c.market_significance,       max: 20 },
-    { id: 'time',    component: 'Timeliness',                value: c.timeliness,                max: 15 },
-    { id: 'ev',      component: 'Evidence quality',          value: c.evidence_quality,          max: 15 },
-    { id: 'comm',    component: 'Commercial relevance',      value: c.commercial_relevance,      max: 10 },
-    { id: 'links',   component: 'Internal-link opportunity', value: c.internal_link_opportunity, max: 10 },
-    { id: 'gap',     component: 'Existing-content gap',      value: c.existing_content_gap,      max: 10 },
-    { id: 'dup',     component: 'Duplication penalty',       value: c.duplication_penalty,       max: 0 },
-    { id: 'effort',  component: 'Effort adjustment',         value: c.effort_adjustment,         max: 5 },
+    { id: 'search',   component: 'Search potential',          value: c.search_potential,          max: 15 },
+    { id: 'market',   component: 'Market significance',       value: c.market_significance,       max: 15 },
+    { id: 'time',     component: 'Timeliness',                value: c.timeliness,                max: 10 },
+    { id: 'ev',       component: 'Evidence quality',          value: c.evidence_quality,          max: 10 },
+    { id: 'comm',     component: 'Commercial relevance',      value: c.commercial_relevance,      max: 10 },
+    { id: 'links',    component: 'Internal-link opportunity', value: c.internal_link_opportunity, max: 10 },
+    { id: 'gap',      component: 'Existing-content gap',      value: c.existing_content_gap,      max: 10 },
+    { id: 'news',     component: 'Newsworthiness',            value: c.newsworthiness,            max: 10 },
+    { id: 'auth',     component: 'Source authority',          value: c.source_authority,          max: 10 },
+    { id: 'dup',      component: 'Duplication penalty',       value: c.duplication_penalty,       max: 0 },
+    { id: 'agree',    component: 'Source-agreement penalty',  value: c.source_agreement_penalty,  max: 0 },
+    { id: 'effort',   component: 'Effort adjustment',         value: c.effort_adjustment,         max: 5 },
   ];
 }
 
 interface ImgRow { id: number; role: string | null; alt: string; url: string }
 interface LinkRow { id: number; url: string; anchors: string[]; reason: string; priority: number }
 interface QARow { id: number; severity: string; check: string; message: string }
+interface CandRow { id: string; rank: number; kind: 'internal_idea' | 'external_cluster'; score: number; template_id: string; decision: string; working_title: string; tiers: string[] }
+interface ExtSrcRow { id: number; tier: string; publisher: string; published_at: string | null; headline: string; url: string }
 
 function KV({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (

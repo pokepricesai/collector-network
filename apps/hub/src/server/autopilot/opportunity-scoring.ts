@@ -30,37 +30,30 @@ import type {
 import type { AutopilotSiteSlug } from './config';
 
 export interface ScoringSignals {
-  // Search signals aggregated from GSC. Any missing field uses safe
-  // defaults so the scorer never crashes on sparse data.
+  // Internal — unchanged.
   search_impressions_28d: number;
   search_clicks_28d: number;
-  search_position_avg: number | null;      // -1 means absent
-  search_striking_distance_count: number;  // queries ranked 4..20 w/ impressions
-
-  // Market signals (zero today for YGO — the pricing table isn't
-  // mirrored for YGO yet; see audit).
+  search_position_avg: number | null;
+  search_striking_distance_count: number;
   market_observations: number;
   market_max_abs_percentage_change: number;
-
-  // Freshness: how recent the originating signal is (days).
   signal_age_days: number;
-
-  // Evidence depth: image, related-page, link candidate availability.
   images_available: number;
   internal_link_candidates: number;
   related_pages: number;
-
-  // Commercial: are affiliate links constructible for subject cards?
   affiliate_links_available: number;
-
-  // Content gap: how much editorial content already exists on the
-  // same topic surface.
-  existing_similar_articles: number;       // 0 is a strong gap
-  closest_existing_overlap: number;        // 0..1 (0 = no overlap)
+  existing_similar_articles: number;
+  closest_existing_overlap: number;
   closest_existing_age_days: number | null;
-
-  // Effort: template-defined complexity hint (lower = cheaper + safer).
   template_complexity: 'low' | 'medium' | 'high';
+
+  // External — new in Checkpoint B.1.
+  external_source_count: number;              // total external signals pointing at this topic
+  external_official_count: number;            // of those, how many are tier-1
+  external_secondary_count: number;           // tier-2
+  external_community_count: number;           // tier-3
+  external_distinct_domains: number;          // how many separate publishers agree
+  external_newest_age_days: number | null;    // freshness of the newest external signal
 }
 
 export interface ScoringInputs {
@@ -77,57 +70,55 @@ export function scoreOpportunity(inputs: ScoringInputs): OpportunityScore {
   const s = inputs.signals;
   const rationale: string[] = [];
 
-  // 1. Search potential ─ up to 20.
-  //    Impressions-weighted, with a bonus for striking-distance queries.
+  // Weights were rebalanced in Checkpoint B.1 to make room for
+  // external signals. Positives sum to 100.
+
+  // 1. Search potential ─ 0..15.
   const imp = s.search_impressions_28d;
   const impPts =
-    imp >= 20_000 ? 12 :
-    imp >= 5_000  ? 9  :
-    imp >= 1_000  ? 6  :
-    imp >= 100    ? 3  : 0;
-  const sdPts = clamp(Math.round(s.search_striking_distance_count / 2), 0, 8);
-  const search_potential = clamp(impPts + sdPts, 0, 20);
-  if (imp > 0) rationale.push(`Search: ${imp.toLocaleString()} impressions (28d) + ${s.search_striking_distance_count} striking-distance quer${s.search_striking_distance_count === 1 ? 'y' : 'ies'} → ${search_potential}/20`);
+    imp >= 20_000 ? 9 :
+    imp >= 5_000  ? 7 :
+    imp >= 1_000  ? 5 :
+    imp >= 100    ? 2 : 0;
+  const sdPts = clamp(Math.round(s.search_striking_distance_count / 2), 0, 6);
+  const search_potential = clamp(impPts + sdPts, 0, 15);
+  if (imp > 0) rationale.push(`Search: ${imp.toLocaleString()} impressions (28d) + ${s.search_striking_distance_count} striking-distance quer${s.search_striking_distance_count === 1 ? 'y' : 'ies'} → ${search_potential}/15`);
 
-  // 2. Market significance ─ up to 20.
-  //    Needs ≥3 observations to even register; percentage-change cap
-  //    at 150% to penalise suspicious extremes (matches
-  //    pokeprices/pricing.ts's `pctChangeCap`).
+  // 2. Market significance ─ 0..15. Needs ≥3 observations to register.
   const obs = s.market_observations;
   const pct = Math.min(150, Math.abs(s.market_max_abs_percentage_change));
-  const obsPts = obs >= 20 ? 8 : obs >= 10 ? 6 : obs >= 3 ? 4 : 0;
-  const pctPts = clamp(Math.round(pct / 15), 0, 12);
-  const market_significance = obs >= 3 ? clamp(obsPts + pctPts, 0, 20) : 0;
-  if (obs > 0) rationale.push(`Market: ${obs} observations, max |%Δ| = ${pct.toFixed(1)} → ${market_significance}/20${obs < 3 ? ' (below min 3 obs)' : ''}`);
+  const obsPts = obs >= 20 ? 6 : obs >= 10 ? 4 : obs >= 3 ? 2 : 0;
+  const pctPts = clamp(Math.round(pct / 18), 0, 9);
+  const market_significance = obs >= 3 ? clamp(obsPts + pctPts, 0, 15) : 0;
+  if (obs > 0) rationale.push(`Market: ${obs} observations, max |%Δ| = ${pct.toFixed(1)} → ${market_significance}/15`);
 
-  // 3. Timeliness ─ up to 15. Fresh signals win.
-  const age = Math.max(0, s.signal_age_days);
+  // 3. Timeliness ─ 0..10.
+  const age = Math.max(0, Math.min(s.signal_age_days, s.external_newest_age_days ?? s.signal_age_days));
   const timeliness =
-    age <= 1  ? 15 :
-    age <= 3  ? 12 :
-    age <= 7  ? 9  :
-    age <= 14 ? 6  :
-    age <= 30 ? 3  : 0;
-  rationale.push(`Timeliness: signal is ${age}d old → ${timeliness}/15`);
+    age <= 1  ? 10 :
+    age <= 3  ? 8  :
+    age <= 7  ? 6  :
+    age <= 14 ? 4  :
+    age <= 30 ? 2  : 0;
+  rationale.push(`Timeliness: freshest signal ${age}d old → ${timeliness}/10`);
 
-  // 4. Evidence quality ─ up to 15. Images + related + links depth.
+  // 4. Evidence quality ─ 0..10. Internal depth only.
   const evidence_quality = clamp(
-    Math.round(Math.min(5, s.images_available) * 1.5) +      // 0..7
-    Math.round(Math.min(10, s.internal_link_candidates) * 0.5) + // 0..5
-    Math.round(Math.min(10, s.related_pages) * 0.3),         // 0..3
-    0, 15,
+    Math.round(Math.min(5, s.images_available) * 1.0) +
+    Math.round(Math.min(10, s.internal_link_candidates) * 0.3) +
+    Math.round(Math.min(10, s.related_pages) * 0.2),
+    0, 10,
   );
-  rationale.push(`Evidence depth: ${s.images_available} image(s), ${s.internal_link_candidates} link candidate(s), ${s.related_pages} related → ${evidence_quality}/15`);
+  rationale.push(`Evidence depth: ${s.images_available} image(s), ${s.internal_link_candidates} link candidate(s), ${s.related_pages} related → ${evidence_quality}/10`);
 
-  // 5. Commercial relevance ─ up to 10.
+  // 5. Commercial ─ 0..10.
   const commercial_relevance = clamp(Math.round(Math.min(10, s.affiliate_links_available)), 0, 10);
-  if (s.affiliate_links_available > 0) rationale.push(`Commercial: ${s.affiliate_links_available} affiliate link(s) available → ${commercial_relevance}/10`);
+  if (s.affiliate_links_available > 0) rationale.push(`Commercial: ${s.affiliate_links_available} affiliate link(s) → ${commercial_relevance}/10`);
 
-  // 6. Internal-link opportunity ─ up to 10.
+  // 6. Internal-link opportunity ─ 0..10.
   const internal_link_opportunity = clamp(Math.round(Math.min(10, s.internal_link_candidates * 0.8)), 0, 10);
 
-  // 7. Existing-content gap ─ up to 10.
-  //    No competing article = full 10. Lots of recent coverage = 0.
+  // 7. Existing-content gap ─ 0..10.
   const gap =
     s.existing_similar_articles === 0 ? 10 :
     s.existing_similar_articles === 1 && s.closest_existing_overlap < 0.3 ? 8 :
@@ -137,17 +128,41 @@ export function scoreOpportunity(inputs: ScoringInputs): OpportunityScore {
   if (s.existing_similar_articles === 0) rationale.push(`No existing article covers this topic — strong editorial gap → 10/10`);
   else rationale.push(`${s.existing_similar_articles} similar article(s); closest overlap ${s.closest_existing_overlap.toFixed(2)} → ${existing_content_gap}/10`);
 
-  // 8. Duplication penalty ─ -20..0.
-  //    Explicit penalty applied in parallel to the gap bonus so the
-  //    rationale is visible: the article may still score well on
-  //    other axes, but we flag the risk clearly.
+  // 8. Newsworthiness ─ 0..10. External signal strength.
+  const newsworthiness = clamp(
+    Math.min(5, s.external_source_count) + Math.min(5, s.external_distinct_domains),
+    0, 10,
+  );
+  if (s.external_source_count > 0) {
+    rationale.push(`Newsworthiness: ${s.external_source_count} external signal(s) across ${s.external_distinct_domains} publisher(s) → ${newsworthiness}/10`);
+  }
+
+  // 9. Source authority ─ 0..10. Tier-weighted.
+  const source_authority = clamp(
+    Math.min(6, s.external_official_count * 6) +
+    Math.min(4, s.external_secondary_count * 2),
+    0, 10,
+  );
+  if (s.external_official_count + s.external_secondary_count > 0) {
+    rationale.push(`Source authority: ${s.external_official_count} official + ${s.external_secondary_count} secondary → ${source_authority}/10`);
+  }
+
+  // Penalties
   let duplication_penalty = 0;
   if (s.closest_existing_overlap >= 0.8) duplication_penalty = -20;
   else if (s.closest_existing_overlap >= 0.6) duplication_penalty = -10;
   else if (s.closest_existing_overlap >= 0.4) duplication_penalty = -4;
-  if (duplication_penalty !== 0) rationale.push(`Duplication risk: closest overlap ${s.closest_existing_overlap.toFixed(2)} → ${duplication_penalty}`);
+  if (duplication_penalty !== 0) rationale.push(`Duplication risk: overlap ${s.closest_existing_overlap.toFixed(2)} → ${duplication_penalty}`);
 
-  // 9. Effort adjustment ─ -5..+5.
+  // Single-source community penalty: a story backed only by one tier-3
+  // signal is a lead, not evidence. Flag it so community-only "news"
+  // candidates don't float to the top.
+  let source_agreement_penalty = 0;
+  if (s.external_source_count > 0 && s.external_official_count === 0 && s.external_secondary_count === 0) {
+    source_agreement_penalty = s.external_source_count === 1 ? -10 : -5;
+    rationale.push(`Source agreement: only community-tier signals (${s.external_source_count}) → ${source_agreement_penalty}`);
+  }
+
   const effort_adjustment =
     s.template_complexity === 'low'    ?  3 :
     s.template_complexity === 'medium' ?  0 :
@@ -162,13 +177,17 @@ export function scoreOpportunity(inputs: ScoringInputs): OpportunityScore {
     commercial_relevance,
     internal_link_opportunity,
     existing_content_gap,
+    newsworthiness,
+    source_authority,
     duplication_penalty,
+    source_agreement_penalty,
     effort_adjustment,
   };
   const total = clamp(
     search_potential + market_significance + timeliness + evidence_quality +
     commercial_relevance + internal_link_opportunity + existing_content_gap +
-    duplication_penalty + effort_adjustment,
+    newsworthiness + source_authority +
+    duplication_penalty + source_agreement_penalty + effort_adjustment,
     0, 100,
   );
   return { total, components, rationale };
