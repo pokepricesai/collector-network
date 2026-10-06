@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getCurrentUser } from '@collector-network/auth';
-import { getSetBundle } from '@/server/browse';
-import { getCardBundleByCardId } from '@/server/read';
+import {
+  getSetBundleStrict,
+  getCardBundleByCardIdStrict,
+  getGradedRowsForAnchorStrict,
+  getPrintingHistoryStrict,
+} from '@/server/strict';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug, candidatePrintingSplits, slugifyCardName } from '@/lib/lorcana/slug';
 import { pickCardImage } from '@/lib/lorcana/image';
@@ -11,70 +15,93 @@ import { LC_INK_LABEL } from '@/lib/lorcana/ink';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import PriceHistorySpark from '@/components/card/PriceHistorySpark';
-import { AddToCollection } from '@/components/AddToCollection';
-import { WatchButton } from '@/components/WatchButton';
-import { isPrintingOnWatchlist } from '@/server/watchlist';
-import EbayFindButton, { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
-import { resolveLorcanaMarketplace } from '@/lib/lorcana/ebay';
-import { getRequestCountry } from '@/lib/lorcana/request-country';
+import { ExactActionsClient } from '@/components/card/ExactActionsClient';
+import { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
 import { GradedPricesPanel } from '@/components/GradedPricesPanel';
-import { getPrintingHistory } from '@/server/history';
-import { getGradedRowsForAnchor, type TcgGradedRow } from '@/server/graded';
+import { type TcgGradedRow } from '@/server/graded';
 import type { LcCardView, LcPrintingView } from '@/server/read';
 import type { TcgCard } from '@collector-network/database';
-import { getLorcanaCurrency } from '@/lib/currency-server';
+import { DEFAULT_CURRENCY } from '@/lib/currency';
 import CardFaq from '@/components/card/CardFaq';
 import { buildExactCollectibleFaq } from '@/lib/card-faq';
 
-// Specific-printing page. URL: /set/{code}/card/{cn-slug}. Resolves to
-// a single tcg_cards row + all its treatment printings from that set,
-// plus a "other printings" band linking to every same-name row from
-// other sets.
+// Specific-printing page. URL: /set/{code}/card/{cn-slug}. Resolves
+// to a single tcg_cards row + all its treatment printings from that
+// set, plus a "other printings" band linking to every same-name row
+// from other sets.
+//
+// ISR (P1a):
+//   revalidate = 86_400 — 24h cache
+//   dynamicParams = true — unknown slugs resolve on-demand
+//   generateStaticParams() = [] — zero mass prerender at build; the
+//     ~5-8k URL universe fills the cache only when actually hit
+//
+// User / request-specific state (auth, watchlist, currency,
+// request country) is lifted out of this server render into the
+// client island at ExactActionsClient and the cookie-aware
+// TreatmentPrice. The cached HTML only carries globally cacheable
+// catalogue facts.
+//
+// All factual helpers go through src/server/strict.ts, which:
+//   - deduplicates generateMetadata + page body reads via
+//     React.cache (one Supabase hop per helper per request)
+//   - retries bounded (3 x, 100/200/400 ms) on infra failure
+//   - throws on persistent failure so the page errors out rather
+//     than caching a hollow 404 / empty data variant
 
-export const revalidate = 900;
-export const dynamic = 'force-dynamic';
+export const revalidate = 86_400;
+export const dynamicParams = true;
 
-async function resolveCard(
-  setSlug: string,
-  cardSlug: string,
-): Promise<
-  | {
-      cardId: string;
-      matched: TcgCard;
-      collectorSlug: string;
-      nameSlug: string;
+export function generateStaticParams(): { slug: string; cardSlug: string }[] {
+  // Intentionally empty — on-demand ISR only. Prerendering the ~5-8k
+  // URL universe at build time would both bloat the build and put
+  // large Supabase pressure on every deploy for marginal cache-warm
+  // benefit (card pages fill from real traffic in minutes).
+  return [];
+}
+
+interface ResolvedCard {
+  cardId: string;
+  matched: TcgCard;
+  collectorSlug: string;
+  nameSlug: string;
+}
+
+// React.cache keyed by (setSlug, cardSlug) so generateMetadata +
+// page body resolve the card exactly once per request. The inner
+// Supabase reads are already dedup'd per their own cache wrappers.
+const resolveCard = cache(
+  async (setSlug: string, cardSlug: string): Promise<ResolvedCard | null> => {
+    const setBundle = await getSetBundleStrict(setSlug);
+    if (!setBundle) return null;
+
+    const splits = candidatePrintingSplits(cardSlug);
+    const cardsByCn = new Map<string, TcgCard[]>();
+    for (const c of setBundle.cards) {
+      const key = normaliseSlug(c.collector_number ?? '');
+      const bucket = cardsByCn.get(key);
+      if (bucket) bucket.push(c);
+      else cardsByCn.set(key, [c]);
     }
-  | null
-> {
-  const setBundle = await getSetBundle(setSlug);
-  if (!setBundle) return null;
 
-  const splits = candidatePrintingSplits(cardSlug);
-  const cardsByCn = new Map<string, TcgCard[]>();
-  for (const c of setBundle.cards) {
-    const key = normaliseSlug(c.collector_number ?? '');
-    const bucket = cardsByCn.get(key);
-    if (bucket) bucket.push(c);
-    else cardsByCn.set(key, [c]);
-  }
-
-  for (const split of splits) {
-    const bucket = cardsByCn.get(split.collectorSlug);
-    if (!bucket) continue;
-    for (const cand of bucket) {
-      if (slugifyCardName(cand.name) === split.nameSlug) {
-        return {
-          cardId: cand.id,
-          matched: cand,
-          collectorSlug: split.collectorSlug,
-          nameSlug: split.nameSlug,
-        };
+    for (const split of splits) {
+      const bucket = cardsByCn.get(split.collectorSlug);
+      if (!bucket) continue;
+      for (const cand of bucket) {
+        if (slugifyCardName(cand.name) === split.nameSlug) {
+          return {
+            cardId: cand.id,
+            matched: cand,
+            collectorSlug: split.collectorSlug,
+            nameSlug: split.nameSlug,
+          };
+        }
       }
     }
-  }
 
-  return null;
-}
+    return null;
+  },
+);
 
 function normaliseSlug(cn: string): string {
   return cn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -88,7 +115,7 @@ export async function generateMetadata({
   const { slug, cardSlug } = await params;
   const resolved = await resolveCard(slug, cardSlug);
   if (!resolved) return { title: 'Card not found' };
-  const bundle = await getCardBundleByCardId(resolved.cardId);
+  const bundle = await getCardBundleByCardIdStrict(resolved.cardId);
   if (!bundle) return { title: 'Card not found' };
   return {
     title: `${bundle.name} · ${slug.toUpperCase()} #${resolved.matched.collector_number ?? '-'}, priced treatments`,
@@ -109,29 +136,21 @@ export default async function PrintingPage({
   const { slug, cardSlug } = await params;
   const resolved = await resolveCard(slug, cardSlug);
   if (!resolved) notFound();
-  const bundle = await getCardBundleByCardId(resolved.cardId);
+  const bundle = await getCardBundleByCardIdStrict(resolved.cardId);
   if (!bundle) notFound();
-  const currency = await getLorcanaCurrency();
 
   // Pin the anchor to the *exact* tcg_cards row the URL resolved to,
   // not the first printing that happens to sit in the set. Multiple
-  // tcg_cards rows can share both name AND set (e.g. Elsa - Ice Maker
-  // set 7 has cn=224 Super Rare Amethyst-ink alt-art AND cn=69 Super
-  // Rare) — using inThisSet[0] can otherwise flip the hero image and
-  // stat rail onto a sibling collectible.
+  // tcg_cards rows can share both name AND set — using inThisSet[0]
+  // can otherwise flip the hero image and stat rail onto a sibling.
   const anchorCardView =
     bundle.cards.find((c) => c.card.id === resolved.cardId) ?? bundle.cards[0]!;
 
-  // Split printings into: those attached to the anchor tcg_cards row
-  // (rendered as the hero + treatment list), the same-set siblings
-  // (linked from a "Other collectibles in this set" strip), and other
-  // sets (the pre-existing "Also printed in" strip).
   const inThisSet: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
   const sameSetSiblings: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
   const otherSets: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
   for (const c of bundle.cards) {
-    const inSet =
-      (c.set?.code ?? '').toLowerCase() === slug.toLowerCase();
+    const inSet = (c.set?.code ?? '').toLowerCase() === slug.toLowerCase();
     if (c.card.id === resolved.cardId) {
       for (const p of c.printings) inThisSet.push({ cardView: c, printingView: p });
     } else if (inSet) {
@@ -144,19 +163,15 @@ export default async function PrintingPage({
   const anchorPrinting = inThisSet[0]?.printingView;
   const heroImage = pickCardImage(anchorCardView.card.images);
 
-  // One graded fetch for both the FAQ count and the Graded panel. This
-  // keeps us honest on "no extra DB queries" — the panel used to run
-  // this itself.
+  // One graded fetch per request, strict (throws on infra failure
+  // so the page error-bubbles instead of caching an empty panel).
   const gradedRows: TcgGradedRow[] = anchorPrinting
-    ? await getGradedRowsForAnchor({
+    ? await getGradedRowsForAnchorStrict({
         printingId: anchorPrinting.printing.id,
         cardId: anchorCardView.card.id,
       })
     : [];
 
-  // Siblings for the FAQ "What other versions of {CardName} exist?"
-  // question. Both lists are built above as printing-level tuples; the
-  // FAQ wants card-view uniqueness so dedupe by card_id.
   const siblingSameSetCards = Array.from(
     new Map(sameSetSiblings.map((s) => [s.cardView.card.id, s.cardView])).values(),
   );
@@ -164,6 +179,12 @@ export default async function PrintingPage({
     new Map(otherSets.map((s) => [s.cardView.card.id, s.cardView])).values(),
   );
 
+  // FAQ is built with DEFAULT_CURRENCY at generation time; the main
+  // treatment-price panels on this page re-render in the user's
+  // chosen currency client-side. Baking a currency-specific FAQ
+  // string into the ISR cache would require per-currency variants.
+  // The FAQ price entry becomes a USD/TCGPlayer summary; the live
+  // panels above remain accurate.
   const exactFaqEntries = buildExactCollectibleFaq({
     cardName: bundle.name,
     anchorCard: anchorCardView,
@@ -171,7 +192,7 @@ export default async function PrintingPage({
     siblingSameSet: siblingSameSetCards,
     siblingOtherSets: siblingOtherSetCards,
     gradedRowCount: gradedRows.length,
-    currency,
+    currency: DEFAULT_CURRENCY,
   });
 
   const canonicalSetLabel =
@@ -293,7 +314,7 @@ export default async function PrintingPage({
             )}
 
             {anchorPrinting && (
-              <ExactActions
+              <ExactActionsClient
                 cardId={anchorCardView.card.id}
                 printingId={anchorPrinting.printing.id}
                 cardName={bundle.name}
@@ -302,7 +323,6 @@ export default async function PrintingPage({
                 collectorNumber={resolved.matched.collector_number ?? null}
                 rarityLabel={anchorCardView.rarity.label}
                 finish={anchorPrinting.printing.finish ?? null}
-                currency={currency}
               />
             )}
           </div>
@@ -356,7 +376,6 @@ export default async function PrintingPage({
                   cardView={cardView}
                   printingView={printingView}
                   linkToPrinting={false}
-                  currency={currency}
                 />
               ))
             )}
@@ -516,80 +535,10 @@ export default async function PrintingPage({
   );
 }
 
-//  Watch + Add + eBay action strip for the exact collectible page.
-//  Server component — reads auth session, request country and resolves
-//  the regional eBay marketplace before rendering so the <a> tag
-//  carries the correct host.
-async function ExactActions(props: {
-  cardId: string;
-  printingId: string;
-  cardName: string;
-  setName: string | null;
-  setCode: string | null;
-  collectorNumber: string | null;
-  rarityLabel: string | null;
-  finish: string | null;
-  currency: 'USD' | 'EUR';
-}) {
-  const [user, country, watchingResult] = await Promise.all([
-    getCurrentUser(),
-    getRequestCountry(),
-    isPrintingOnWatchlist(props.printingId),
-  ]);
-  const marketplace = resolveLorcanaMarketplace(country, props.currency);
-  const watching =
-    watchingResult.ok === true ? watchingResult.value : false;
-  const currentPathname =
-    props.setCode && props.collectorNumber
-      ? `/set/${props.setCode.toLowerCase()}/card/${encodeURIComponent(
-          `${props.collectorNumber}-${slugifyCardName(props.cardName)}`,
-        )}`
-      : '/';
-  //  Pass rarity to eBay only when the collectible genuinely has an
-  //  Enchanted / Iconic / Promo / Super rare label. Base-rarity
-  //  collectibles don't need the modifier — the collector number
-  //  disambiguates reprints better.
-  const narrowRarity =
-    props.rarityLabel && /enchanted|iconic|epic|promo|super rare/i.test(props.rarityLabel)
-      ? props.rarityLabel
-      : null;
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-      <AddToCollection
-        cardId={props.cardId}
-        printingId={props.printingId}
-        cardName={props.cardName}
-        isSignedIn={!!user}
-      />
-      <WatchButton
-        tcgCardId={props.cardId}
-        tcgPrintingId={props.printingId}
-        initialWatching={watching}
-        signedIn={!!user}
-        currentPathname={currentPathname}
-      />
-      <EbayFindButton
-        cardName={props.cardName}
-        setName={props.setName}
-        setCode={props.setCode}
-        collectorNumber={props.collectorNumber}
-        rarity={narrowRarity}
-        finish={props.finish}
-        marketplace={marketplace}
-        source="lorcana-card-exact"
-        size="md"
-      />
-    </div>
-  );
-}
-
 async function PriceHistoryBlock({ printingId }: { printingId: string }) {
-  let history;
-  try {
-    history = await getPrintingHistory(printingId);
-  } catch {
-    return null;
-  }
+  // Strict read: throws on infra failure so the page error-bubbles
+  // rather than caching an empty history pane.
+  const history = await getPrintingHistoryStrict(printingId);
   if (history.series.length === 0) return null;
   return (
     <section
