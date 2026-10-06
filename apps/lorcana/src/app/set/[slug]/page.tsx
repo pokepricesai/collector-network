@@ -1,14 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getCurrentUser } from '@collector-network/auth';
-import { getSetBundle } from '@/server/browse';
-import { getSetMarketForLorcana } from '@/server/set-market';
-import { getSetCompletionForCurrentUser } from '@/server/set-completion';
 import {
-  getRarityDistributionForSet,
-  getFinishSplitForSet,
-} from '@/server/discovery';
+  getSetBundleStrict,
+  getPrintingsBySetStrict,
+  getSetMarketForLorcanaStrict,
+  getFinishSplitForSetStrict,
+} from '@/server/strict';
+import { getRarityDistributionForSet } from '@/server/discovery';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug } from '@/lib/lorcana/slug';
 import { normaliseRarity } from '@/lib/lorcana/rarity';
@@ -23,13 +22,44 @@ import RarityDistribution from '@/components/set/RarityDistribution';
 import FinishSplitPanel from '@/components/set/FinishSplitPanel';
 import ChaseCounts from '@/components/set/ChaseCounts';
 import SetTaxonomyLinks from '@/components/set/SetTaxonomyLinks';
+import { SetCompletionClient } from '@/components/set/SetCompletionClient';
 import { summariseSetTaxonomy } from '@/server/internal-links';
-import { getPrintingsBySet, type TcgCard } from '@collector-network/database';
-import { getLorcanaClient } from '@/server/client';
-import { getLorcanaCurrency } from '@/lib/currency-server';
+import type { TcgCard } from '@collector-network/database';
+import { DEFAULT_CURRENCY } from '@/lib/currency';
 
-export const revalidate = 900;
-export const dynamic = 'force-dynamic';
+// Set-detail page. URL: /set/{code}.
+//
+// ISR (P1b):
+//   revalidate = 86_400 — 24h cache
+//   dynamicParams = true — unknown slugs resolve on-demand
+//   generateStaticParams() = [] — zero mass prerender at build; the
+//     ~20-30 set URL universe fills the cache from real traffic.
+//
+// User / request-specific state (auth, collection completion,
+// currency preference) is lifted out of this server render:
+//   - set completion: client via /api/set/[slug]/completion
+//   - currency: cached payload uses DEFAULT_CURRENCY (USD/TCGPlayer).
+//     Granular EUR views remain available on individual card pages
+//     where TreatmentPrice is cookie-aware (P1a). Pricing the entire
+//     set in EUR would require per-currency ISR variants, explicitly
+//     out of scope.
+//
+// All factual helpers go through src/server/strict.ts:
+//   - React.cache dedup across generateMetadata + page body
+//   - retry 3 x, 100/200/400 ms backoff
+//   - throw on persistent infra failure so transient Supabase
+//     outages bubble up as a 5xx and are NEVER written to the ISR
+//     cache (would otherwise poison it with a hollow set).
+
+export const revalidate = 86_400;
+export const dynamicParams = true;
+
+export function generateStaticParams(): { slug: string }[] {
+  // Intentionally empty — on-demand ISR only. The set universe is
+  // small (~20-30 URLs) but Supabase is under heavy load; sets warm
+  // from real traffic within the first visit and stay cached.
+  return [];
+}
 
 // Lorcana set codes fall into three families (see
 // docs/lorcana/data-audit.md §2):
@@ -87,7 +117,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const bundle = await getSetBundle(slug);
+  const bundle = await getSetBundleStrict(slug);
   if (!bundle) return { title: 'Set not found' };
   const setLabel = bundle.set.name;
   return {
@@ -99,101 +129,13 @@ export async function generateMetadata({
   };
 }
 
-function SetCompletionPanel({
-  signedIn,
-  completion,
-  setCode,
-  setName,
-}: {
-  signedIn: boolean;
-  completion: { owned: number; total: number; missingSample: unknown[] } | null;
-  setCode: string;
-  setName: string;
-}) {
-  const panelStyle: React.CSSProperties = {
-    padding: '14px 16px',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 14,
-    marginBottom: 20,
-    display: 'grid',
-    gap: 10,
-  };
-  if (!signedIn) {
-    return (
-      <div style={panelStyle}>
-        <div className="label-mono">Your collection</div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-            Sign in to track your collection on this set.
-          </span>
-          <Link
-            href={`/sign-in?returnTo=${encodeURIComponent(`/set/${setCode.toLowerCase()}`)}`}
-            className="btn btn-sm btn-primary"
-          >
-            Sign in
-          </Link>
-        </div>
-      </div>
-    );
-  }
-  if (!completion || completion.total === 0) return null;
-  const { owned, total, missingSample } = completion;
-  const pct = Math.round((owned / Math.max(total, 1)) * 100);
-  const missingCount = total - owned;
-  return (
-    <div style={panelStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <div className="label-mono">Your collection · {setName}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {missingCount > 0 ? `${missingCount} missing` : 'Complete'}
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 22, fontWeight: 800, color: 'var(--text-strong)' }}>
-          {owned.toLocaleString()} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>/ {total.toLocaleString()}</span>
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{pct}% complete</div>
-      </div>
-      <div
-        aria-hidden
-        style={{
-          height: 8,
-          borderRadius: 999,
-          background: 'var(--surface-inset, rgba(0,0,0,0.06))',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            height: '100%',
-            width: `${pct}%`,
-            background: 'var(--accent-2, #6A43BE)',
-            transition: 'width 200ms ease',
-          }}
-        />
-      </div>
-      {missingCount > 0 && missingSample.length > 0 && (
-        <div style={{ fontSize: 12 }}>
-          <Link
-            href={`/collection?set=${encodeURIComponent(setCode.toLowerCase())}&missing=1`}
-            style={{ color: 'var(--accent-2, #6A43BE)', textDecoration: 'none', fontWeight: 600 }}
-          >
-            See missing ({missingCount})
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default async function SetPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const bundle = await getSetBundle(slug);
+  const bundle = await getSetBundleStrict(slug);
   if (!bundle) notFound();
 
   const { set, cards } = bundle;
@@ -206,33 +148,26 @@ export default async function SetPage({
   }
   const uniqueNames = [...byName.keys()].sort((a, b) => a.localeCompare(b));
 
-  // Perf (2026-10-01): fetch user, currency, and ALL set printings in
-  // one parallel wave. The printings result then feeds BOTH
-  // getSetMarketForLorcana AND getFinishSplitForSet so we don't do
-  // two near-identical SELECTs over tcg_printings per set page load.
-  // getSetCompletionForCurrentUser is also handed the already-loaded
-  // cards so it skips its internal `SELECT ... from tcg_cards where
-  // set_id = ...` roundtrip.
-  const supabaseForPrintings = getLorcanaClient();
-  const [user, currency, setPrintings] = await Promise.all([
-    getCurrentUser(),
-    getLorcanaCurrency(),
-    getPrintingsBySet(supabaseForPrintings, set.id).catch(() => []),
-  ]);
-  const [market, rarityRows, finishSplit, completion] = await Promise.all([
-    getSetMarketForLorcana(set.id, cards, {
-      topN: 5,
-      currency,
+  // One parallel wave of strict reads. Any infra failure throws and
+  // bubbles up to Next.js (not caught) so Vercel's ISR cache
+  // doesn't persist a partial response. Currency is pinned to the
+  // DEFAULT so the cached HTML is globally valid; see the file
+  // header for the per-currency tradeoff.
+  const setPrintings = await getPrintingsBySetStrict(set.id);
+  const [market, rarityRows, finishSplit] = await Promise.all([
+    getSetMarketForLorcanaStrict({
+      setId: set.id,
+      cards,
+      currency: DEFAULT_CURRENCY,
       preloadedPrintings: setPrintings,
+      topN: 5,
     }),
     getRarityDistributionForSet(set.id, cards),
-    getFinishSplitForSet(cards, setPrintings),
-    user
-      ? getSetCompletionForCurrentUser({
-          setId: set.id,
-          preloadedCards: cards,
-        }).catch(() => null)
-      : Promise.resolve(null),
+    getFinishSplitForSetStrict({
+      setId: set.id,
+      cards,
+      preloadedPrintings: setPrintings,
+    }),
   ]);
 
   const rarityCounts: Record<string, number> = {};
@@ -241,16 +176,8 @@ export default async function SetPage({
     rarityCounts[r] = (rarityCounts[r] ?? 0) + 1;
   }
 
-  // In-memory taxonomy summary (characters / inks / rarities) — used
-  // by SetTaxonomyLinks for the crawlable "Explore this set" block.
   const taxonomy = summariseSetTaxonomy(cards);
 
-  // Build a per-card price lookup from EVERY priced hero tile returned
-  // by getSetMarketForLorcana, not just mostValuable + cheapest. The
-  // old code priced only the top 5 + bottom 5 cards (≤ 10 tiles) and
-  // every other card in the set fell through to `null` — so the live
-  // checklist displayed "no price" for 195+ cards per 215-tile set
-  // even though tcg_market_prices_current has quotes for ~100% of them.
   const priceLookup = new Map<string, number>();
   for (const t of market.allPriced) priceLookup.set(t.cardId, t.priceUsd);
 
@@ -344,9 +271,6 @@ export default async function SetPage({
             )}
             {set.released_at && <span>Released {formatReleased(set.released_at)}</span>}
           </div>
-          {/* Prominent sealed-product CTA. We do not carry sealed
-              market data ourselves, so this is deliberately framed
-              as marketplace discovery, not a tracked value. */}
           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <EbayFindButton
               sealedSearchTerm={`Disney Lorcana ${set.name} sealed`}
@@ -369,12 +293,7 @@ export default async function SetPage({
         </div>
       ) : (
         <>
-          <SetCompletionPanel
-            signedIn={!!user}
-            completion={completion}
-            setCode={set.code}
-            setName={set.name}
-          />
+          <SetCompletionClient setCode={set.code} setName={set.name} />
 
           <SetMarketOverview market={market} setCode={set.code} setName={set.name} />
 
