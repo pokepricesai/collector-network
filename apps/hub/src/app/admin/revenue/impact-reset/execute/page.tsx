@@ -5,7 +5,12 @@ import { listNetworkSites } from '@/server/admin/sites';
 import { auditCurrentEpnLedger, type CurrentLedgerAudit } from '@/server/impact/current-ledger-audit';
 import { runDryRun } from '@/server/impact/dry-run';
 import type { IngestResult } from '@/server/impact/ingest';
-import { executeImpactBackfillAction, executeImpactDailySyncAction } from './actions';
+import {
+  executeImpactBackfillAction,
+  executeImpactDailySyncAction,
+  executeImpactInvoiceSyncAction,
+  reconstructCanonicalBackfillJobAction,
+} from './actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -16,101 +21,160 @@ export default async function ImpactResetExecutorPage() {
   const { admin, sb } = await requireAdmin('/admin/revenue/impact-reset/execute');
   const sites = await listNetworkSites(sb);
 
-  // Pre-flight: current EPN event count + presence of archive backup tables.
+  // Current EPN event count + per-slug split (the status line).
   const { data: srcData } = await sb
     .from('network_revenue_sources')
     .select('id, slug, display_name')
     .eq('kind', 'ebay_epn');
   const sources = (srcData ?? []) as Array<{ id: string; slug: string; display_name: string }>;
   const sourceIds = sources.map((s) => s.id);
+  const slugById = new Map(sources.map((s) => [s.id, s.slug]));
 
   let currentEpnEvents = 0;
+  const perSlugCount: Record<string, number> = {};
   if (sourceIds.length > 0) {
     const { count } = await sb
       .from('network_revenue_events')
       .select('*', { count: 'exact', head: true })
       .in('source_id', sourceIds);
     currentEpnEvents = count ?? 0;
+
+    // Per-slug via one small aggregation — ~453 rows total.
+    const { data: rows } = await sb
+      .from('network_revenue_events')
+      .select('source_id')
+      .in('source_id', sourceIds)
+      .limit(2000);
+    for (const r of (rows ?? []) as Array<{ source_id: string }>) {
+      const slug = slugById.get(r.source_id) ?? '(unknown)';
+      perSlugCount[slug] = (perSlugCount[slug] ?? 0) + 1;
+    }
   }
 
-  // Previous backfill result (if any).
-  const { data: lastRow } = await sb
-    .from('network_settings')
-    .select('value, updated_at')
-    .eq('key', 'impact_last_backfill')
-    .maybeSingle();
-  const lastResult = (lastRow?.value ?? null) as IngestResult | null;
-  const lastUpdatedAt = (lastRow as { updated_at?: string } | null)?.updated_at ?? null;
+  // Latest completed sync + backfill from network_job_runs.
+  const { data: lastSyncRows } = await sb
+    .from('network_job_runs')
+    .select('job_name, status, started_at, finished_at')
+    .in('job_name', ['impact.epn.sync', 'impact.epn.backfill'])
+    .in('status', ['success', 'warning', 'partial'])
+    .order('finished_at', { ascending: false })
+    .limit(5);
+  const lastSync = ((lastSyncRows ?? []) as Array<{ job_name: string; status: string; started_at: string | null; finished_at: string | null }>)[0] ?? null;
 
-  const { data: lastDailyRow } = await sb
-    .from('network_settings')
-    .select('value, updated_at')
-    .eq('key', 'impact_last_daily_sync')
-    .maybeSingle();
-  const lastDaily = (lastDailyRow?.value ?? null) as IngestResult | null;
+  // Invoice-table presence check.
+  const { count: invoiceCount } = await sb
+    .from('network_affiliate_invoices')
+    .select('*', { count: 'exact', head: true });
 
   // Read-only diagnostic — runs on every page load. Fetches a fresh
-  // Impact dry run (parallel with the audit's non-API queries so the
-  // 30s API fetch doesn't double our render time) and then feeds the
-  // raw Action list into the audit for ledger↔API comparison.
+  // Impact dry run (so we can compare live-API vs ledger) and runs
+  // the ledger-shape audit.
   const dry = await runDryRun().catch((err) => {
     return { raw_actions: [], skipped_reason: err instanceof Error ? err.message : String(err) } as unknown as Awaited<ReturnType<typeof runDryRun>>;
   });
   const audit = await auditCurrentEpnLedger(sb, dry.raw_actions ?? null);
 
+  const apiMatchPct = audit.api_comparison && audit.api_comparison.ledger_action_count > 0
+    ? (audit.api_comparison.both / audit.api_comparison.ledger_action_count) * 100
+    : null;
+
+  const healthy = currentEpnEvents > 0
+    && (audit.shape.by_idempotency_prefix['impact:epn'] ?? 0) === currentEpnEvents
+    && (apiMatchPct ?? 0) >= 99;
+
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/revenue/impact-reset/execute">
       <SectionHeader
-        eyebrow="Revenue · Reset executor"
-        title="Impact EPN canonical rebuild"
-        description={
-          <>
-            Runs the 365-day Impact EPN backfill using the SharedId → source mapping documented on the reset gate.
-            Idempotent — safe to run again. Does NOT touch non-EPN data.
-          </>
-        }
+        eyebrow="Revenue · EPN API ingest"
+        title="EPN API ingest · Operations"
+        description={<>Canonical ledger is maintained by the daily cron and the on-demand actions below. Diagnostic + reset tooling is behind the Advanced disclosure.</>}
       />
 
-      <Panel title="Pre-flight" eyebrow="State before running">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-          <KV label="EPN sources resolved" value={sources.length.toLocaleString()} warn={sources.length === 0} />
+      <Panel title="EPN API status" eyebrow={healthy ? 'Canonical ledger active' : 'Attention'}>
+        <Notice tone={healthy ? 'success' : 'warning'}>
+          <strong style={{ textTransform: 'uppercase' }}>
+            {healthy ? 'Canonical ledger active' : 'Ledger ↔ API out of sync'}
+          </strong>
+          {' · '}
+          {currentEpnEvents.toLocaleString()} current Actions
+          {apiMatchPct != null && <> · ledger / API match {apiMatchPct.toFixed(0)}%</>}
+        </Notice>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginTop: 12 }}>
+          <KV label="Current Actions" value={currentEpnEvents.toLocaleString()} />
+          <KV label="US campaign (ebay_epn_us)" value={(perSlugCount['ebay_epn_us'] ?? 0).toLocaleString()} />
+          <KV label="UK campaign (ebay_epn_uk)" value={(perSlugCount['ebay_epn_uk'] ?? 0).toLocaleString()} />
           <KV
-            label="Current EPN events"
-            value={currentEpnEvents.toLocaleString()}
-            warn={currentEpnEvents > 0 && lastResult == null}
+            label="Last API sync"
+            value={lastSync?.finished_at ? new Date(lastSync.finished_at).toISOString() : '(none recorded)'}
           />
-          <KV label="Last backfill" value={lastUpdatedAt ? new Date(lastUpdatedAt).toISOString() : '(never)'} />
+          <KV label="Next scheduled sync" value="06:00 UTC daily (/api/sync/impact-epn)" />
+          <KV
+            label="Ledger ↔ API match"
+            value={apiMatchPct != null ? `${apiMatchPct.toFixed(1)}%` : '—'}
+            warn={apiMatchPct != null && apiMatchPct < 99}
+          />
+          <KV label="Invoice rows" value={(invoiceCount ?? 0).toLocaleString()} />
         </div>
-        <ul style={{ fontSize: 12.5, lineHeight: 1.65, margin: '12px 0 0', paddingLeft: 20, color: 'var(--admin-text-muted)' }}>
-          <li>Expect <code>Current EPN events = 0</code> after applying migration <code>20261006020000_epn_reset</code>.</li>
-          <li>If &gt; 0 and no previous backfill, the reset migration has not been applied yet — do not click Execute until it is.</li>
-          <li>If a previous backfill exists, Execute is safe: upserts are keyed by <code>impact:epn:&lt;Action.Id&gt;</code>.</li>
-        </ul>
       </Panel>
 
       <DiagnosticPanel audit={audit} />
 
-      <Panel title="Execute" eyebrow="Server action — admin only">
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <form action={executeImpactBackfillAction}>
-            <button type="submit" className="admin-btn admin-btn-primary" style={{ padding: '10px 18px', fontSize: 14 }}>
+      <details style={{ background: 'var(--admin-surface)', border: '1px solid var(--admin-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px' }}>
+        <summary style={{ fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--admin-text)' }}>
+          Advanced / Recovery
+        </summary>
+        <p className="col-dim" style={{ fontSize: 12.5, margin: '8px 0 16px' }}>
+          Manual operations. The daily cron handles routine sync — these are only needed to repair state, backfill history,
+          or trigger a one-off run. The 365-day backfill in particular rarely needs to run after the initial cutover.
+        </p>
+
+        <Panel title="Manual sync" eyebrow="Idempotent · writes to network_job_runs">
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <form action={executeImpactDailySyncAction}>
+              <button type="submit" className="admin-btn" style={{ padding: '8px 14px', fontSize: 13 }}>
+                Run 7-day sync now
+              </button>
+            </form>
+            <form action={executeImpactInvoiceSyncAction}>
+              <button type="submit" className="admin-btn" style={{ padding: '8px 14px', fontSize: 13 }}>
+                Sync invoices now
+              </button>
+            </form>
+          </div>
+          <p className="col-dim" style={{ fontSize: 12, margin: '8px 0 0' }}>
+            Both appear in <code>/admin/jobs</code> on completion.
+          </p>
+        </Panel>
+
+        <Panel title="365-day backfill" eyebrow="Requires confirmation — rarely needed">
+          <Notice tone="warning">
+            Re-fetches the entire Impact Action history. Idempotent (keyed by <code>impact:epn:&lt;Action.Id&gt;</code>),
+            so it will not duplicate data, but it takes ~1–3 min and consumes Impact API quota.
+          </Notice>
+          <form action={executeImpactBackfillAction} style={{ marginTop: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10 }}>
+              <input type="checkbox" name="confirm" required />
+              <span>I understand this re-fetches 365 days of Actions. The ledger is already canonical — this is a recovery operation.</span>
+            </label>
+            <button type="submit" className="admin-btn admin-btn-primary" style={{ padding: '8px 14px', fontSize: 13 }}>
               Execute 365-day backfill
             </button>
           </form>
-          <form action={executeImpactDailySyncAction}>
-            <button type="submit" className="admin-btn" style={{ padding: '10px 18px', fontSize: 14 }}>
-              Run 7-day daily sync (manual)
+        </Panel>
+
+        <Panel title="Metadata reconstruction (one-time)" eyebrow="For the pre-registry ingest that did not log a job_run">
+          <p style={{ fontSize: 13, lineHeight: 1.6, margin: '0 0 10px' }}>
+            Writes a <code>network_job_runs</code> row explicitly marked <code>trigger=reconstructed</code> whose
+            <code>started_at</code> is the min <code>first_seen_at</code> of canonical rows. Clearly a reconstruction,
+            not a fabrication. Safe to click once; subsequent clicks are no-ops (duplicate-check via metadata).
+          </p>
+          <form action={reconstructCanonicalBackfillJobAction}>
+            <button type="submit" className="admin-btn" style={{ padding: '8px 14px', fontSize: 13 }}>
+              Reconstruct job_run from ledger
             </button>
           </form>
-        </div>
-        <p className="col-dim" style={{ fontSize: 12.5, margin: '10px 0 0' }}>
-          Both are idempotent. The 365-day run may take 1–3 min on first run; the browser will wait.
-          Results are stashed in <code>network_settings</code> and shown below after the run completes.
-        </p>
-      </Panel>
-
-      {lastResult && <ResultPanel title="Latest 365-day backfill result" result={lastResult} />}
-      {lastDaily && <ResultPanel title="Latest manual daily-sync result" result={lastDaily} />}
+        </Panel>
+      </details>
     </AdminShell>
   );
 }

@@ -227,20 +227,26 @@ export async function windowBookedTotals(
   sb: SupabaseClient,
   sinceDate: string,
 ): Promise<WindowTotals[]> {
+  // Status source-of-truth is the `ledger_status` column (added by
+  // the Phase 6 reconciliation migration). We fall back to the legacy
+  // `source_detail.status` jsonb only when ledger_status is NULL, so
+  // CSV-era rows still classify correctly during cross-over.
   const { data, error } = await sb.from('network_revenue_events')
-    .select('amount_minor, currency, event_kind, source_detail')
+    .select('amount_minor, currency, event_kind, ledger_status, source_detail')
     .gte('occurred_on', sinceDate);
   if (error) throw new Error(`[revenue] windowBookedTotals: ${error.message}`);
-  const rows = (data ?? []) as Array<{ amount_minor: number; currency: string; event_kind: string; source_detail: Record<string, unknown> | null }>;
+  const rows = (data ?? []) as Array<{ amount_minor: number; currency: string; event_kind: string; ledger_status: string | null; source_detail: Record<string, unknown> | null }>;
   const b = new Map<string, WindowTotals>();
   for (const r of rows) {
     const bucket = b.get(r.currency) ?? { currency: r.currency, booked_minor: 0, pending_minor: 0, refunds_minor: 0, event_count: 0 };
     bucket.event_count += 1;
-    if (r.event_kind === 'refund' || r.event_kind === 'reversal') {
+    const status = r.ledger_status ?? (r.source_detail?.['status'] as string | undefined);
+    if (r.event_kind === 'refund' || r.event_kind === 'reversal' || status === 'reversed') {
       bucket.refunds_minor += r.amount_minor;
-    } else if ((r.source_detail?.status as string | undefined) === 'pending') {
+    } else if (status === 'pending') {
       bucket.pending_minor += r.amount_minor;
     } else {
+      // 'confirmed' | legacy '(null)' with no reversal → treat as booked.
       bucket.booked_minor += r.amount_minor;
     }
     b.set(r.currency, bucket);

@@ -31,6 +31,8 @@ import { runPokepricesBqAnalysis, bigqueryDiagnostic } from '../bigquery/analysi
 import { estimateBqCostUsd, formatBqBytes } from '../google/bigquery';
 import { buildBrief } from '../brief/engine';
 import { generateIdeasForSite } from '../content/ideas';
+import { ingestImpactEpn, type IngestResult } from '../impact/ingest';
+import { ingestImpactInvoices, type InvoiceIngestResult } from '../impact/invoice-ingest';
 
 // The five sites are hard-coded here to keep the allowlist static.
 // Resolution to real UUIDs happens inside each run().
@@ -261,6 +263,78 @@ export interface JobDefinition {
   }>;
 }
 
+// Lift an IngestResult into the shape runJobBySlug expects.
+function summariseImpactIngest(r: IngestResult): {
+  rowsInserted: number;
+  rowsUpdated: number;
+  rowsExamined: number;
+  rowsRejected: number;
+  metadata: Record<string, unknown>;
+  summary: Record<string, unknown>;
+} {
+  // Throw to flip the outer wrapper into fail-state when the ingest
+  // either skipped (missing creds) or hit a fatal error inside. The
+  // wrapper will record the exception in network_fail_job_run.
+  if (r.skipped_reason) throw new Error(`ingest skipped: ${r.skipped_reason}`);
+  if (r.errors.length > 0) throw new Error(r.errors[0] ?? 'ingest errors');
+  return {
+    rowsInserted: r.actions_inserted,
+    rowsUpdated:  r.actions_updated,
+    rowsExamined: r.actions_seen,
+    rowsRejected: r.actions_rejected_unknown_shared_id + r.actions_rejected_missing_critical_fields,
+    metadata: {
+      status_history_rows_inserted: r.status_history_rows_inserted,
+      rejected_unknown_shared_id: r.actions_rejected_unknown_shared_id,
+      rejected_missing_fields: r.actions_rejected_missing_critical_fields,
+      by_slug: r.by_slug,
+      window_days: r.window_days,
+      total_days: r.total_days,
+      windows_failed: r.windows.filter((w) => w.status === 'failed').length,
+      windows_partial: r.windows.filter((w) => w.status === 'partial').length,
+      action_updates_fetched: r.action_updates_fetched,
+      warnings: r.warnings.slice(0, 5),
+    },
+    summary: {
+      actions_seen: r.actions_seen,
+      actions_upserted: r.actions_upserted,
+      actions_inserted: r.actions_inserted,
+      actions_updated: r.actions_updated,
+      by_slug: r.by_slug,
+    },
+  };
+}
+
+function summariseInvoiceIngest(r: InvoiceIngestResult): {
+  rowsInserted: number;
+  rowsUpdated: number;
+  rowsExamined: number;
+  rowsRejected: number;
+  metadata: Record<string, unknown>;
+  summary: Record<string, unknown>;
+} {
+  if (r.skipped_reason) throw new Error(`invoice ingest skipped: ${r.skipped_reason}`);
+  if (r.errors.length > 0) throw new Error(r.errors[0] ?? 'invoice ingest errors');
+  return {
+    rowsInserted: r.invoices_inserted,
+    rowsUpdated:  r.invoices_updated,
+    rowsExamined: r.invoices_seen,
+    rowsRejected: r.invoices_rejected,
+    metadata: {
+      pages_fetched: r.pages_fetched,
+      totals_by_currency: r.totals_by_currency,
+      earliest_invoice_date: r.earliest_invoice_date,
+      latest_invoice_date: r.latest_invoice_date,
+      warnings: r.warnings.slice(0, 5),
+    },
+    summary: {
+      invoices_seen: r.invoices_seen,
+      invoices_upserted: r.invoices_upserted,
+      invoices_inserted: r.invoices_inserted,
+      totals_by_currency: r.totals_by_currency,
+    },
+  };
+}
+
 // --- JOB DEFINITIONS -----------------------------------------------
 export const JOBS: Record<string, JobDefinition> = {
   'gsc.sync': {
@@ -451,6 +525,43 @@ export const JOBS: Record<string, JobDefinition> = {
       };
     },
   },
+  // --- Impact Media Partner · EPN sync + backfill --------------
+  //
+  // Both manual-from-admin and the 06:00 UTC cron go through this
+  // registry so operator history is consistent. The ingest module is
+  // idempotent (idempotency key = impact:epn:<Action.Id>) and
+  // self-reports warnings/errors in the result — we lift its fields
+  // into the standard job_run metadata.
+
+  'impact.epn.sync_daily': {
+    slug: 'impact.epn.sync_daily',
+    jobName: 'impact.epn.sync',
+    group: 'ingest',
+    label: 'Impact EPN daily sync (7-day overlap)',
+    description: '/Actions + /ActionUpdates for the last 7 days. SharedId → source routing. Upserts via impact:epn:<Id>. Scheduled 06:00 UTC daily.',
+    wrapsOuter: true,
+    run: async (sb) => summariseImpactIngest(await ingestImpactEpn(sb, { totalDays: 7, windowDays: 7 })),
+  },
+  'impact.epn.backfill_365d': {
+    slug: 'impact.epn.backfill_365d',
+    jobName: 'impact.epn.backfill',
+    group: 'ingest',
+    label: 'Impact EPN full backfill (365 days)',
+    description: 'Re-fetches the entire available Impact Action history. Idempotent. Should rarely be needed after the initial cutover.',
+    requiresConfirmation: true,
+    wrapsOuter: true,
+    run: async (sb) => summariseImpactIngest(await ingestImpactEpn(sb, { totalDays: 365, windowDays: 45 })),
+  },
+  'impact.invoices.sync': {
+    slug: 'impact.invoices.sync',
+    jobName: 'impact.invoices.sync',
+    group: 'ingest',
+    label: 'Impact invoice sync',
+    description: 'Pulls /Invoices and upserts into network_affiliate_invoices. Invoices are settlement data — not counted as transaction revenue.',
+    wrapsOuter: true,
+    run: async (sb) => summariseInvoiceIngest(await ingestImpactInvoices(sb)),
+  },
+
   'brief.build': {
     slug: 'brief.build',
     jobName: 'brief.build',
