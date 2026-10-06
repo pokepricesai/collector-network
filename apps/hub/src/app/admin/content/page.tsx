@@ -64,6 +64,8 @@ export default async function ContentDashboard() {
             <Link className="status-badge status-active" href="/admin/content/briefs">Briefs →</Link>
             <Link className="status-badge status-active" href="/admin/content/articles">Articles →</Link>
             <Link className="status-badge status-active" href="/admin/content/calendar">Calendar →</Link>
+            <Link className="status-badge status-info" href="/admin/content/autopilot">Autopilot →</Link>
+            <Link className="status-badge status-warning" href="/admin/content/holds">Holds →</Link>
           </div>
         }
       />

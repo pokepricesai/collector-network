@@ -552,6 +552,39 @@ export const JOBS: Record<string, JobDefinition> = {
     wrapsOuter: true,
     run: async (sb) => summariseImpactIngest(await ingestImpactEpn(sb, { totalDays: 365, windowDays: 45 })),
   },
+  // ─── Content Autopilot (Checkpoint A: registered but inert) ───
+  // These slugs exist so /admin/jobs lists them and so a future
+  // scheduled trigger has a stable name. The real executors land
+  // in Checkpoint B. If invoked today they log a job_run row and
+  // return a `placeholder` summary — no AI, no publication.
+  'content.opportunity_refresh': {
+    slug: 'content.opportunity_refresh',
+    jobName: 'content.opportunity_refresh',
+    group: 'analysis',
+    label: 'Content opportunity refresh (placeholder)',
+    description: 'Rescores known content ideas against freshly-synced GSC + market data. Real executor lands in Checkpoint B.',
+    wrapsOuter: true,
+    run: async () => ({
+      rowsExamined: 0,
+      summary: { placeholder: true, note: 'Autopilot foundation only. Real opportunity-scoring executor lands in Checkpoint B.' },
+      metadata: { placeholder: true },
+    }),
+  },
+  'content.autopilot': {
+    slug: 'content.autopilot',
+    jobName: 'content.autopilot',
+    group: 'ingest',
+    label: 'Content autopilot run (placeholder)',
+    description: 'Top-of-funnel orchestrator: pick next opportunity, build evidence pack, reserve budget, generate, QA, publish. Real executor lands in Checkpoint B.',
+    requiresConfirmation: true,
+    wrapsOuter: true,
+    run: async () => ({
+      rowsExamined: 0,
+      summary: { placeholder: true, note: 'Autopilot foundation only. Real orchestrator lands in Checkpoint B.' },
+      metadata: { placeholder: true },
+    }),
+  },
+
   'impact.invoices.sync': {
     slug: 'impact.invoices.sync',
     jobName: 'impact.invoices.sync',
