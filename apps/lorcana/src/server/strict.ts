@@ -6,9 +6,14 @@ import {
   type TcgCard,
   type TcgPrinting,
 } from '@collector-network/database';
-import { getLorcanaClient } from './client';
+import { getLorcanaClient, getLorcanaGameId } from './client';
 import { getSetBundle, type LcSetBundle } from './browse';
-import { getCardBundleByCardId, type LcCardBundle } from './read';
+import {
+  getCardBundleByCardId,
+  getCardBundleByName,
+  type LcCardBundle,
+} from './read';
+import { searchCards } from './search';
 import { getPrintingHistory, type HistoryBundle } from './history';
 import {
   getSetMarketForLorcana,
@@ -18,7 +23,11 @@ import {
   getFinishSplitForSet,
   type FinishSplit,
 } from './discovery';
+import { slugifyCardName } from '../lib/lorcana/slug';
+import { characterKeyFromName } from './characters';
+import { toLcGamedata } from '../lib/lorcana/gamedata';
 import type { TcgGradedRow } from './graded';
+import type { InternalLinkTile } from './internal-links';
 import type { LorcanaCurrency } from '../lib/currency';
 
 // Strict + deduplicated factual helpers for ISR routes.
@@ -198,4 +207,218 @@ export const getFinishSplitForSetStrict = cache(
     withRetry(`getFinishSplitForSet(${opts.setId})`, () =>
       getFinishSplitForSet(opts.cards, opts.preloadedPrintings),
     ),
+);
+
+// ─────────────────────────────────────────────────────────────────
+// P1c: /card/[slug] (logical card) strict helpers
+// ─────────────────────────────────────────────────────────────────
+
+/** React.cache + retry wrapper around getCardBundleByName. The
+ *  underlying helper's inner reads already throw via
+ *  throwOnError-wrapped @collector-network/database queries. */
+export const getCardBundleByNameStrict = cache(
+  async (name: string): Promise<LcCardBundle | null> =>
+    withRetry(`getCardBundleByName(${name})`, () => getCardBundleByName(name)),
+);
+
+/** React.cache + retry wrapper around searchCards used by the
+ *  logical card page's slug-fallback name resolution. */
+export const searchCardsStrict = cache(
+  async (query: string, limit: number): Promise<TcgCard[]> =>
+    withRetry(`searchCards(${query},${limit})`, () => searchCards(query, limit)),
+);
+
+/** Resolve a URL slug to a canonical Lorcana card name. Dedup'd
+ *  across generateMetadata + page body via React.cache keyed on the
+ *  slug. Internally reuses getCardBundleByNameStrict (also cached)
+ *  for the fast path, falling back to a bounded searchCards scan
+ *  for slugs that do not translate cleanly to a name on the first
+ *  try (apostrophes, dashes, punctuation). */
+export const resolveCardNameStrict = cache(
+  async (slug: string): Promise<string | null> => {
+    const naive = slug.replace(/-/g, ' ');
+    const bundle = await getCardBundleByNameStrict(naive);
+    if (bundle) return bundle.name;
+    const candidates = await searchCardsStrict(naive.slice(0, 40), 40);
+    const hit = candidates.find((c) => slugifyCardName(c.name) === slug);
+    return hit?.name ?? null;
+  },
+);
+
+// ── Internal-link strict variants ────────────────────────────────
+//
+// The originals in internal-links.ts return [] when Supabase errors,
+// which would silently poison the ISR cache for 24h. Strict variants
+// re-check the error and throw so a transient blip surfaces as a
+// 5xx instead of a cached "no related cards" sidebar.
+
+const INTERNAL_COLUMNS =
+  'id, name, rarity, collector_number, images, gamedata, set_id, tcg_sets(code)';
+
+const INTERNAL_COLUMNS_WITH_RELEASED =
+  'id, name, rarity, collector_number, images, gamedata, set_id, tcg_sets(code, released_at)';
+
+interface InternalCardRow {
+  id: string;
+  name: string;
+  rarity: string | null;
+  collector_number: string | null;
+  images: unknown;
+  gamedata: unknown;
+  set_id: string;
+  tcg_sets?: { code: string | null; released_at?: string | null } | null;
+}
+
+function pickInternalImage(images: unknown): string | null {
+  if (!images || typeof images !== 'object') return null;
+  const o = images as Record<string, unknown>;
+  for (const k of ['normal', 'small', 'large']) {
+    const v = o[k];
+    if (typeof v === 'string' && v.length > 0) return v;
+  }
+  return null;
+}
+
+function toInternalTile(row: InternalCardRow): InternalLinkTile {
+  return {
+    cardId: row.id,
+    name: row.name,
+    slug: slugifyCardName(row.name),
+    imageUrl: pickInternalImage(row.images),
+    setCode: row.tcg_sets?.code ?? null,
+    rarity: row.rarity,
+    collectorNumber: row.collector_number,
+  };
+}
+
+export const getCardsInSameSetStrict = cache(
+  async (setId: string, excludeCardId: string, limit = 8): Promise<InternalLinkTile[]> =>
+    withRetry(`getCardsInSameSet(${setId})`, async () => {
+      const sb = getLorcanaClient();
+      const gameId = await getLorcanaGameId(sb);
+      const { data, error } = await sb
+        .from('tcg_cards')
+        .select(INTERNAL_COLUMNS)
+        .eq('game_id', gameId)
+        .eq('set_id', setId)
+        .neq('id', excludeCardId)
+        .limit(limit);
+      if (error) throw new Error(error.message);
+      return ((data as unknown as InternalCardRow[]) ?? []).map(toInternalTile);
+    }),
+);
+
+export const getOtherCharacterCardsStrict = cache(
+  async (
+    characterName: string,
+    excludeCardId: string,
+    limit = 8,
+  ): Promise<InternalLinkTile[]> =>
+    withRetry(`getOtherCharacterCards(${characterName})`, async () => {
+      const sb = getLorcanaClient();
+      const gameId = await getLorcanaGameId(sb);
+      const base = characterKeyFromName(characterName);
+      const targetSlug = slugifyCardName(base);
+      if (!targetSlug) return [];
+      const { data, error } = await sb
+        .from('tcg_cards')
+        .select(INTERNAL_COLUMNS)
+        .eq('game_id', gameId)
+        .ilike('name', `${base}%`)
+        .limit(80);
+      if (error) throw new Error(error.message);
+      const rows = (data as unknown as InternalCardRow[]) ?? [];
+      const out: InternalLinkTile[] = [];
+      const seenSlugs = new Set<string>();
+      for (const r of rows) {
+        if (r.id === excludeCardId) continue;
+        const gd = toLcGamedata(r.gamedata);
+        if (gd.cardType !== 'character') continue;
+        if (slugifyCardName(characterKeyFromName(r.name)) !== targetSlug) continue;
+        const nameSlug = slugifyCardName(r.name);
+        if (seenSlugs.has(nameSlug)) continue;
+        seenSlugs.add(nameSlug);
+        out.push(toInternalTile(r));
+        if (out.length >= limit) break;
+      }
+      return out;
+    }),
+);
+
+export const getCardsBySameRarityStrict = cache(
+  async (
+    rarity: string,
+    excludeCardId: string,
+    limit = 6,
+  ): Promise<InternalLinkTile[]> =>
+    withRetry(`getCardsBySameRarity(${rarity})`, async () => {
+      const sb = getLorcanaClient();
+      const gameId = await getLorcanaGameId(sb);
+      const { data, error } = await sb
+        .from('tcg_cards')
+        .select(INTERNAL_COLUMNS_WITH_RELEASED)
+        .eq('game_id', gameId)
+        .eq('rarity', rarity)
+        .neq('id', excludeCardId)
+        .limit(Math.max(limit * 4, 24));
+      if (error) throw new Error(error.message);
+      const rows = (data as unknown as InternalCardRow[]) ?? [];
+      rows.sort((a, b) => {
+        const ar = a.tcg_sets?.released_at ?? '';
+        const br = b.tcg_sets?.released_at ?? '';
+        if (ar !== br) return br.localeCompare(ar);
+        return a.name.localeCompare(b.name);
+      });
+      const seen = new Set<string>();
+      const out: InternalLinkTile[] = [];
+      for (const r of rows) {
+        const slug = slugifyCardName(r.name);
+        if (seen.has(slug)) continue;
+        seen.add(slug);
+        out.push(toInternalTile(r));
+        if (out.length >= limit) break;
+      }
+      return out;
+    }),
+);
+
+export const getCardsBySameInkStrict = cache(
+  async (
+    ink: string,
+    excludeCardId: string,
+    limit = 6,
+  ): Promise<InternalLinkTile[]> =>
+    withRetry(`getCardsBySameInk(${ink})`, async () => {
+      const sb = getLorcanaClient();
+      const gameId = await getLorcanaGameId(sb);
+      const inkLower = ink.toLowerCase();
+      const { data, error } = await sb
+        .from('tcg_cards')
+        .select(INTERNAL_COLUMNS_WITH_RELEASED)
+        .eq('game_id', gameId)
+        .neq('id', excludeCardId)
+        .limit(400);
+      if (error) throw new Error(error.message);
+      const rows = (data as unknown as InternalCardRow[]) ?? [];
+      const filtered = rows.filter((r) => {
+        const gd = toLcGamedata(r.gamedata);
+        return gd.inks.some((c) => c.toLowerCase() === inkLower);
+      });
+      filtered.sort((a, b) => {
+        const ar = a.tcg_sets?.released_at ?? '';
+        const br = b.tcg_sets?.released_at ?? '';
+        if (ar !== br) return br.localeCompare(ar);
+        return a.name.localeCompare(b.name);
+      });
+      const seen = new Set<string>();
+      const out: InternalLinkTile[] = [];
+      for (const r of filtered) {
+        const slug = slugifyCardName(r.name);
+        if (seen.has(slug)) continue;
+        seen.add(slug);
+        out.push(toInternalTile(r));
+        if (out.length >= limit) break;
+      }
+      return out;
+    }),
 );
