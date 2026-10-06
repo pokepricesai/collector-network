@@ -124,8 +124,22 @@ export interface ReversedValueByCurrency {
   currency: string;
   reversed_action_count: number;         // Actions currently in REVERSED state
   current_payout_minor: number;          // sum of current Payout on REVERSED (should be 0)
-  pre_reversal_payout_minor: number;     // sum of OldPayout from ActionUpdates that transitioned to REVERSED
+  pre_reversal_payout_minor: number | null;  // null = UNKNOWN (no OldPayout data). Only numeric when at least one update contributes.
   pre_reversal_source_update_count: number;
+}
+
+export interface ActionUpdateDiagnostic {
+  // Union of top-level keys ever seen in /ActionUpdates records.
+  // Lets us discover alternative payout field names Impact may use.
+  all_keys: string[];
+  // One raw sample per state transition observed (truncated for display).
+  samples: Array<{
+    action_id: string | null;
+    detected_new_state: string | null;
+    keys_populated: string[];
+    raw_excerpt: string;
+  }>;
+  reversed_targeted_count: number;        // updates whose new_state looks like REVERSED
 }
 
 export interface DryRunReport {
@@ -178,6 +192,10 @@ export interface DryRunReport {
   state_currency_payout: StateCurrencyPayout[];
   attribution_fields: AttributionField[];
   reversed_value_by_currency: ReversedValueByCurrency[];
+  // Diagnostic for the pre-reversal payout question — surfaces the
+  // raw shape of /ActionUpdates so we can see whether OldPayout (or
+  // another field) actually carries the lost commission.
+  action_update_diagnostic: ActionUpdateDiagnostic;
 }
 
 // ───────────────────────── helpers ─────────────────────────
@@ -607,22 +625,17 @@ export async function runDryRun(): Promise<DryRunReport> {
     return { field, populated, distinct_count: counts.size, top_values: top };
   });
 
-  // Reversed value — current Action.Payout is 0 on REVERSED, so the
-  // economic loss shows up only in ActionUpdates OldPayout where the
-  // transition is INTO the REVERSED state. Sum OldPayout per currency.
+  // Reversed value — current Action.Payout is 0 on REVERSED. The
+  // economic loss should show up in ActionUpdates on the transition
+  // INTO REVERSED. If we can't find it in a known field, we report
+  // UNKNOWN rather than silently claiming £0.
   const reversedActionIds = new Set<string>();
-  const revByCurrency = new Map<string, ReversedValueByCurrency>();
+  const revByCurrency = new Map<string, { currency: string; reversed_action_count: number; current_payout_minor: number; pre_sum: number; pre_updates: number; }>();
   for (const a of minimalActions) {
     if (a.state === 'REVERSED') {
       if (a.id) reversedActionIds.add(a.id);
       const cur = a.currency ?? '(none)';
-      const row = revByCurrency.get(cur) ?? {
-        currency: cur,
-        reversed_action_count: 0,
-        current_payout_minor: 0,
-        pre_reversal_payout_minor: 0,
-        pre_reversal_source_update_count: 0,
-      };
+      const row = revByCurrency.get(cur) ?? { currency: cur, reversed_action_count: 0, current_payout_minor: 0, pre_sum: 0, pre_updates: 0 };
       row.reversed_action_count += 1;
       if (a.payout_minor != null) row.current_payout_minor += a.payout_minor;
       revByCurrency.set(cur, row);
@@ -631,24 +644,54 @@ export async function runDryRun(): Promise<DryRunReport> {
   for (const u of minimalUpdates) {
     if (u.new_state !== 'REVERSED') continue;
     if (u.old_payout_minor == null) continue;
-    if (u.action_id && !reversedActionIds.has(u.action_id)) {
-      // Update targets a non-REVERSED action — skip (stale state).
-      continue;
-    }
+    if (u.action_id && !reversedActionIds.has(u.action_id)) continue;
     const cur = u.currency ?? '(none)';
-    const row = revByCurrency.get(cur) ?? {
-      currency: cur,
-      reversed_action_count: 0,
-      current_payout_minor: 0,
-      pre_reversal_payout_minor: 0,
-      pre_reversal_source_update_count: 0,
-    };
-    row.pre_reversal_payout_minor += u.old_payout_minor;
-    row.pre_reversal_source_update_count += 1;
+    const row = revByCurrency.get(cur) ?? { currency: cur, reversed_action_count: 0, current_payout_minor: 0, pre_sum: 0, pre_updates: 0 };
+    row.pre_sum += u.old_payout_minor;
+    row.pre_updates += 1;
     revByCurrency.set(cur, row);
   }
-  const reversedValueByCurrency = Array.from(revByCurrency.values())
+  const reversedValueByCurrency: ReversedValueByCurrency[] = Array.from(revByCurrency.values())
+    .map((r) => ({
+      currency: r.currency,
+      reversed_action_count: r.reversed_action_count,
+      current_payout_minor: r.current_payout_minor,
+      pre_reversal_payout_minor: r.pre_updates > 0 ? r.pre_sum : null,  // null = UNKNOWN
+      pre_reversal_source_update_count: r.pre_updates,
+    }))
     .sort((a, b) => b.reversed_action_count - a.reversed_action_count);
+
+  // ActionUpdate shape diagnostic — union of keys + raw samples for
+  // the first few updates (prioritise REVERSED transitions). Helps
+  // us discover alternative pre-reversal fields Impact may use.
+  const allUpdateKeys = new Set<string>();
+  for (const r of allActionUpdates) for (const k of Object.keys(r)) allUpdateKeys.add(k);
+
+  const updateSamples: ActionUpdateDiagnostic['samples'] = [];
+  let reversedTargeted = 0;
+  for (const r of allActionUpdates) {
+    const detected = (r['NewState'] ?? r['State'] ?? r['NewStatus']) as string | undefined;
+    const isReversed = typeof detected === 'string' && /revers/i.test(detected);
+    if (isReversed) reversedTargeted += 1;
+    if (updateSamples.length < 10 && (isReversed || updateSamples.length < 5)) {
+      const populated = Object.entries(r)
+        .filter(([, v]) => v != null && v !== '')
+        .map(([k]) => k)
+        .sort();
+      const raw = JSON.stringify(r);
+      updateSamples.push({
+        action_id: strOrNull(r['ActionId'] ?? r['Id']),
+        detected_new_state: typeof detected === 'string' ? detected : null,
+        keys_populated: populated,
+        raw_excerpt: raw.length > 600 ? raw.slice(0, 600) + '…' : raw,
+      });
+    }
+  }
+  const actionUpdateDiagnostic: ActionUpdateDiagnostic = {
+    all_keys: Array.from(allUpdateKeys).sort(),
+    samples: updateSamples,
+    reversed_targeted_count: reversedTargeted,
+  };
 
   // ── Verdict ──────────────────────────────────────────────────
   const anyFailed = windowResults.some((w) => w.status === 'failed');
@@ -712,6 +755,7 @@ export async function runDryRun(): Promise<DryRunReport> {
     state_currency_payout: stateCurrencyPayout,
     attribution_fields: attributionFields,
     reversed_value_by_currency: reversedValueByCurrency,
+    action_update_diagnostic: actionUpdateDiagnostic,
   };
 }
 
@@ -755,5 +799,6 @@ function emptyReport(ran_at: string, reason: string): DryRunReport {
     state_currency_payout: [],
     attribution_fields: [],
     reversed_value_by_currency: [],
+    action_update_diagnostic: { all_keys: [], samples: [], reversed_targeted_count: 0 },
   };
 }

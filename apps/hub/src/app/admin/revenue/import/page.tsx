@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { Panel, SectionHeader, StatusBadge, Table, EmptyState } from '@/components/admin/admin-ui';
+import { Notice, Panel, SectionHeader, StatusBadge, Table, EmptyState } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { previewEpnImportAction, commitEpnImportAction, cancelEpnPreviewAction, readPreviewForUi, readCampaignMapAudit } from '@/server/revenue/epn-import-actions';
@@ -26,11 +26,21 @@ export default async function RevenueImportPage({ searchParams }: Params) {
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/revenue/import">
       <SectionHeader
-        eyebrow="Revenue"
-        title="Import affiliate CSV"
-        description="Upload an eBay Partner Network transactions export. We parse, preview and require explicit confirmation before any DB write. Already-known transactions are reconciled: status changes (pending → confirmed, pending → reversed) and amount corrections are detected and recorded in the status history."
+        eyebrow="Revenue · LEGACY / Manual fallback"
+        title="Import affiliate CSV (legacy)"
+        description="Legacy CSV importer. The canonical eBay EPN feed now syncs automatically via the Impact Media Partner API — this page should only be used for deliberate recovery or reconciliation, not routine data loading."
         actions={<Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue">← Dashboard</Link>}
       />
+
+      <Notice tone="warning">
+        <strong>LEGACY — manual fallback only.</strong>{' '}
+        Normal eBay EPN data now synchronises automatically through the Impact API at 06:00 UTC daily
+        (see <Link href="/admin/revenue/impact-reset/execute">/admin/revenue/impact-reset/execute</Link>).
+        Do <strong>NOT</strong> import CSV data into the canonical EPN ledger unless performing a deliberate recovery or reconciliation operation.
+        CSV-imported rows and API-ingested rows share the same table but use different idempotency key prefixes
+        (<code>epn:</code> for CSV, <code>impact:epn:</code> for API), so a careless CSV import can produce two
+        representations of the same transaction.
+      </Notice>
 
       <Panel title="Integrations" eyebrow="Status">
         <ul style={{ fontSize: 13, lineHeight: 1.8, margin: 0, paddingLeft: 20 }}>

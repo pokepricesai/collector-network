@@ -12,7 +12,7 @@ import {
   type WindowResult,
 } from '@/server/impact/dry-run';
 import { runDeleteScopeAudit } from '@/server/impact/delete-scope';
-import { runCoverageAudit, type CoverageReport, type CurrencyEvidence, type MatchSample } from '@/server/impact/coverage-audit';
+import { runCoverageAudit, type CoverageReport, SHARED_ID_TO_SLUG } from '@/server/impact/coverage-audit';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -109,8 +109,8 @@ export default async function ImpactResetPage() {
         </div>
       </Panel>
 
-      {/* ───── Section 1b · UK/US coverage audit ───────────────── */}
-      <Panel title="UK + US coverage audit" eyebrow="Does the API account cover BOTH legacy populations, or only one?">
+      {/* ───── Section 1b · UK/US coverage audit (SharedId-based) ─ */}
+      <Panel title="UK + US coverage audit" eyebrow="Primary signal: SharedId → campaign mapping (not external_ref)">
         <Notice tone={coverageTone}>
           <strong style={{ textTransform: 'uppercase' }}>
             {coverage.verdict === 'full_epn_account_coverage' ? 'FULL EPN ACCOUNT COVERAGE' :
@@ -126,59 +126,52 @@ export default async function ImpactResetPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginTop: 12 }}>
           <KV label="API Actions examined" value={coverage.api_actions_examined.toLocaleString()} />
           <KV label="API date floor" value={coverage.api_date_floor ?? '—'} />
-          <KV label="API → UK matches" value={(coverage.api_matched_to_slug['ebay_epn_uk'] ?? 0).toLocaleString()} />
+          <KV label="SharedId → UK" value={(coverage.api_by_mapped_slug['ebay_epn_uk'] ?? 0).toLocaleString()} />
           <KV
-            label="API → US matches"
-            value={(coverage.api_matched_to_slug['ebay_epn_us'] ?? 0).toLocaleString()}
-            warn={(coverage.api_matched_to_slug['ebay_epn_us'] ?? 0) === 0}
+            label="SharedId → US"
+            value={(coverage.api_by_mapped_slug['ebay_epn_us'] ?? 0).toLocaleString()}
+            warn={(coverage.api_by_mapped_slug['ebay_epn_us'] ?? 0) === 0}
           />
-          <KV label="API unmatched" value={coverage.api_unmatched.toLocaleString()} warn={coverage.api_unmatched > 0} />
-          <KV label="Cross-source collisions" value={coverage.api_matched_to_multiple.toLocaleString()} warn={coverage.api_matched_to_multiple > 0} />
+          <KV label="Unknown SharedId" value={coverage.api_shared_id_unknown.toLocaleString()} warn={coverage.api_shared_id_unknown > 0} />
+          <KV label="Missing SharedId" value={coverage.api_shared_id_missing.toLocaleString()} warn={coverage.api_shared_id_missing > 0} />
         </div>
 
-        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Legacy-side coverage (events in API date range)</h3>
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Known SharedId mapping</h3>
         <Table
           columns={[
-            { key: 'sl', header: 'Legacy slug', render: (r: LegacyRow) => <code>{r.slug}</code> },
-            { key: 'ir', header: 'In-range legacy events', className: 'col-num', render: (r: LegacyRow) => (coverage.legacy_in_range_by_slug[r.slug] ?? 0).toLocaleString() },
-            { key: 'to', header: 'Total legacy events', className: 'col-num', render: (r: LegacyRow) => (coverage.legacy_total_by_slug[r.slug] ?? 0).toLocaleString() },
-            { key: 'ma', header: 'Matched by API', className: 'col-num', render: (r: LegacyRow) => (coverage.legacy_matched_by_slug[r.slug] ?? 0).toLocaleString() },
-            { key: 'un', header: 'In-range NOT in API', className: 'col-num', render: (r: LegacyRow) => {
-              const n = coverage.legacy_unmatched_in_range_by_slug[r.slug] ?? 0;
-              return n > 0 ? <strong style={{ color: 'var(--warning)' }}>{n.toLocaleString()}</strong> : <span className="col-dim">0</span>;
-            } },
-            { key: 'co', header: 'Coverage', className: 'col-num', render: (r: LegacyRow) => {
-              const ir = coverage.legacy_in_range_by_slug[r.slug] ?? 0;
-              const ma = coverage.legacy_matched_by_slug[r.slug] ?? 0;
-              return ir > 0 ? `${((ma / ir) * 100).toFixed(0)}%` : '—';
-            } },
+            { key: 'sid',  header: 'SharedId',       render: (r: SidMapRow) => <code>{r.shared_id}</code> },
+            { key: 'slug', header: 'Mapped slug',    render: (r: SidMapRow) => <code>{r.slug}</code> },
+            { key: 'uuid', header: 'Resolved source UUID', render: (r: SidMapRow) => <code style={{ fontSize: 11 }}>{coverage.mapped_source_ids[r.slug] ?? '(not found)'}</code> },
+            { key: 'n',    header: 'API Actions',    className: 'col-num', render: (r: SidMapRow) => (coverage.api_by_shared_id[r.shared_id] ?? 0).toLocaleString() },
           ]}
-          rows={coverage.legacy_sources.map((s) => ({ id: s.id, slug: s.slug }))}
-          empty="No EPN sources."
+          rows={Object.entries(SHARED_ID_TO_SLUG).map(([shared_id, slug]) => ({ id: shared_id, shared_id, slug }))}
+          empty=""
         />
 
-        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Currency semantics evidence</h3>
-        <Table
-          columns={[
-            { key: 'sl', header: 'Legacy slug', render: (r: CurrencyEvidence) => <code>{r.slug}</code> },
-            { key: 'cc', header: 'Legacy ccy',  render: (r: CurrencyEvidence) => <code>{r.currency}</code> },
-            { key: 'ma', header: 'Matched',     className: 'col-num', render: (r: CurrencyEvidence) => r.matched.toLocaleString() },
-            { key: 'ex', header: 'api.payout_minor == legacy.amount_minor', className: 'col-num', render: (r: CurrencyEvidence) => r.exact_minor_match.toLocaleString() },
-            { key: 'di', header: 'Differed', className: 'col-num', render: (r: CurrencyEvidence) => r.diff_minor_match.toLocaleString() },
-            { key: 'fx', header: 'Mean api/legacy ratio', className: 'col-num', render: (r: CurrencyEvidence) => r.mean_implied_fx != null ? r.mean_implied_fx.toFixed(4) : '—' },
-          ]}
-          rows={coverage.currency_evidence_by_slug.map((e, i) => ({ ...e, id: `${i}` }))}
-          empty="No currency evidence."
-        />
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Legacy EPN counts (snapshot — reset migration re-checks at execution time)</h3>
+        <ul style={{ fontSize: 13, lineHeight: 1.7, margin: 0, paddingLeft: 20 }}>
+          {coverage.legacy_sources.map((s) => (
+            <li key={s.slug}>
+              <code>{s.slug}</code>: {(coverage.legacy_total_by_slug[s.slug] ?? 0).toLocaleString()} legacy events
+            </li>
+          ))}
+        </ul>
 
-        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Sample matched pairs (redacted)</h3>
-        <MatchTable rows={[...coverage.samples_matched_uk, ...coverage.samples_matched_us]} empty="No matched samples." />
-        {coverage.samples_api_unmatched.length > 0 && (
-          <>
-            <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Sample unmatched API Actions (first 5)</h3>
-            <MatchTable rows={coverage.samples_api_unmatched} empty="No unmatched samples." />
-          </>
-        )}
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Currency semantics</h3>
+        <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0, color: 'var(--admin-text-muted)' }}>{coverage.currency_semantics_note}</p>
+
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>external_ref overlap (DIAGNOSTIC — not a coverage signal)</h3>
+        <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 8px' }}>
+          CSV used eBay-side Transaction IDs; Impact uses its own Action.Id. Overlap is interesting but low
+          overlap is expected and does <em>not</em> indicate missing coverage.
+        </p>
+        <ul style={{ fontSize: 13, lineHeight: 1.7, margin: 0, paddingLeft: 20 }}>
+          {coverage.legacy_sources.map((s) => (
+            <li key={s.slug}>
+              <code>{s.slug}</code>: {(coverage.external_ref_overlap_by_slug[s.slug] ?? 0).toLocaleString()} overlap(s)
+            </li>
+          ))}
+        </ul>
 
         {coverage.warnings.length > 0 && (
           <ul style={{ fontSize: 12.5, lineHeight: 1.6, margin: '12px 0 0', paddingLeft: 20, color: 'var(--admin-text-muted)' }}>
@@ -233,23 +226,59 @@ export default async function ImpactResetPage() {
           empty="No state/currency rows."
         />
 
-        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Reversed value (from ActionUpdates OldPayout)</h3>
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Reversed Actions (current state)</h3>
         <Table
           columns={[
             { key: 'c', header: 'Currency', render: (r: RvRow) => <code>{r.currency}</code> },
             { key: 'rc',header: 'REVERSED Actions', className: 'col-num', render: (r: RvRow) => r.reversed_action_count.toLocaleString() },
             { key: 'cp',header: 'Current Payout (should be 0)', className: 'col-num', render: (r: RvRow) => formatMajor(r.current_payout_minor, r.currency) },
-            { key: 'pp',header: 'Pre-reversal Payout (OldPayout sum)', className: 'col-num', render: (r: RvRow) => formatMajor(r.pre_reversal_payout_minor, r.currency) },
+            { key: 'pp',header: 'Historical commission lost (pre-reversal)', className: 'col-num', render: (r: RvRow) =>
+              r.pre_reversal_payout_minor == null
+                ? <strong style={{ color: 'var(--warning)' }}>UNKNOWN</strong>
+                : formatMajor(r.pre_reversal_payout_minor, r.currency)
+            },
             { key: 'us',header: '# update rows contributing', className: 'col-num', render: (r: RvRow) => r.pre_reversal_source_update_count.toLocaleString() },
           ]}
           rows={dry.reversed_value_by_currency.map((r, i) => ({ ...r, id: `${i}` }))}
           empty="No REVERSED Actions in sample."
         />
         <p className="col-dim" style={{ fontSize: 12, margin: '10px 0 0' }}>
-          Pre-reversal value is NEVER summed into "confirmed revenue" — it is a loss metric and must be presented alongside confirmed, not within it.
-          Do not double-invert the sign: current <code>Payout</code> is already 0 on REVERSED, and the <code>OldPayout</code> field in ActionUpdates
-          is the positive pre-reversal commission.
+          When "# update rows contributing" is 0, we treat the historical loss as <strong>UNKNOWN</strong> — not £0.
+          The ActionUpdates payload may not carry <code>OldPayout</code> on REVERSED transitions in this account tier.
+          The ingest module preserves the raw <code>/ActionUpdates</code> JSON so we can revisit this later.
         </p>
+
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>ActionUpdate shape diagnostic</h3>
+        <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 8px' }}>
+          Union of top-level keys actually returned by <code>/ActionUpdates</code> in this sample. If the pre-reversal
+          commission lives under a field we haven't checked, it will appear here.
+        </p>
+        <div style={{ fontSize: 12.5, marginBottom: 10 }}>
+          <strong>All keys observed:</strong>{' '}
+          {dry.action_update_diagnostic.all_keys.length === 0
+            ? <span className="col-dim">none</span>
+            : dry.action_update_diagnostic.all_keys.map((k) => <code key={k} style={{ marginRight: 6 }}>{k}</code>)}
+        </div>
+        <div style={{ fontSize: 12.5, marginBottom: 10 }}>
+          <strong>Updates whose new state matches /revers/i:</strong> {dry.action_update_diagnostic.reversed_targeted_count.toLocaleString()}
+        </div>
+        {dry.action_update_diagnostic.samples.length > 0 && (
+          <>
+            <h4 className="admin-eyebrow" style={{ marginBottom: 6 }}>Raw samples (JSON, truncated)</h4>
+            {dry.action_update_diagnostic.samples.map((s, i) => (
+              <div key={i} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12 }}>
+                  <code>ActionId={s.action_id ?? '—'}</code>
+                  {' · '}
+                  <code>NewState={s.detected_new_state ?? '—'}</code>
+                </div>
+                <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, fontSize: 11, fontFamily: 'var(--admin-font-mono)', maxHeight: 160, overflow: 'auto' }}>
+                  {s.raw_excerpt}
+                </pre>
+              </div>
+            ))}
+          </>
+        )}
       </Panel>
 
       {/* ───── Section 3 · State breakdown ─────────────────────── */}
@@ -346,19 +375,21 @@ export default async function ImpactResetPage() {
           empty="No attribution fields observed."
         />
 
-        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Future outbound-link spec (RECOMMENDATION — not applied)</h3>
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Future outbound-link convention (LOCKED — not applied in this phase)</h3>
         <p className="col-dim" style={{ fontSize: 12.5, margin: '0 0 8px' }}>
-          Impact outbound deep links accept five SubId slots and one SharedId. Recommended schema:
+          <strong style={{ color: 'var(--warning)' }}>SharedId is NOT a session slot.</strong> It already carries the EPN
+          campaign / tracking identifier with 100% historical coverage (<code>5339152105</code> = UK, <code>5339152106</code> = US)
+          and the ingest module uses it as the source-of-origin signal. Future outbound links must preserve it.
         </p>
         <ul style={{ fontSize: 12.5, lineHeight: 1.65, margin: 0, paddingLeft: 20 }}>
-          <li><code>SubId1</code> = site slug (<code>pokemon</code> / <code>mtg</code> / <code>ygo</code> / <code>onepiece</code> / <code>lorcana</code>) — stable, used for site-level attribution.</li>
+          <li><code>SharedId</code> = <strong>existing EPN campaign / tracking ID</strong> — preserved, never overwritten.</li>
+          <li><code>SubId1</code> = Collector Network site slug (<code>pokemon</code> / <code>mtg</code> / <code>ygo</code> / <code>onepiece</code> / <code>lorcana</code>).</li>
           <li><code>SubId2</code> = page type (<code>card</code>, <code>set</code>, <code>price_chart</code>, <code>home</code>). Keep vocabulary short.</li>
           <li><code>SubId3</code> = placement identifier (<code>buy_now_hero</code>, <code>inline_price</code>, etc.).</li>
-          <li><code>SubId4</code> = card/set slug (free-form, bounded length).</li>
-          <li><code>SharedId</code> = session id when available (optional, non-PII, truncated).</li>
+          <li><code>SubId4</code> = card / set / content identifier (free-form, bounded length).</li>
         </ul>
         <p className="col-dim" style={{ fontSize: 12.5, margin: '10px 0 0' }}>
-          <strong>Not implemented in this change.</strong> Historical attribution before this spec is applied remains unknown — we will not invent it.
+          <strong>Not implemented in this change.</strong> Historical SubId1 values are mixed — do NOT treat them as reliable site attribution. Future attribution starts clean once outbound links are updated.
         </p>
       </Panel>
 
@@ -518,27 +549,8 @@ type CascadeNoteRow = { table: string; fk: string; delete_action: string };
 type ScpRow = StateCurrencyPayout & { id?: string };
 type RvRow = ReversedValueByCurrency & { id?: string };
 type AttrRow = AttributionField & { id?: string };
-type LegacyRow = { id: string; slug: string };
+type SidMapRow = { id: string; shared_id: string; slug: string };
 type FinalGate = { label: string; pass: boolean; detail: string };
-
-function MatchTable({ rows, empty }: { rows: MatchSample[]; empty: string }) {
-  return (
-    <Table
-      columns={[
-        { key: 'id',  header: 'API Id',      render: (r: MatchSample) => <code style={{ fontSize: 11 }}>{r.api_action_id}</code> },
-        { key: 'd',   header: 'API date',    render: (r: MatchSample) => r.api_event_date ?? '—' },
-        { key: 'st',  header: 'API state',   render: (r: MatchSample) => <code>{r.api_state ?? '—'}</code> },
-        { key: 'p',   header: 'API payout',  className: 'col-num', render: (r: MatchSample) => r.api_payout_minor != null && r.api_currency ? formatMajor(r.api_payout_minor, r.api_currency) : '—' },
-        { key: 'sl',  header: 'Legacy slug', render: (r: MatchSample) => <code>{r.legacy_source_slug}</code> },
-        { key: 'ld',  header: 'Legacy date', render: (r: MatchSample) => r.legacy_occurred_on ?? '—' },
-        { key: 'la',  header: 'Legacy amount', className: 'col-num', render: (r: MatchSample) => r.legacy_amount_minor != null && r.legacy_currency ? formatMajor(r.legacy_amount_minor, r.legacy_currency) : '—' },
-        { key: 'fx',  header: 'Implied FX',  className: 'col-num', render: (r: MatchSample) => r.implied_fx != null ? r.implied_fx.toFixed(4) : '—' },
-      ]}
-      rows={rows.map((r, i) => ({ ...r, id: `${i}` }))}
-      empty={empty}
-    />
-  );
-}
 
 interface FinalVerdictResult {
   verdict: 'SAFE_TO_RESET' | 'NEEDS_REVIEW' | 'BLOCKED';
@@ -566,10 +578,10 @@ function computeFinalVerdict(inputs: {
     'UK + US coverage proven',
     coverage.verdict === 'full_epn_account_coverage',
     coverage.verdict === 'full_epn_account_coverage'
-      ? 'Both legacy populations match API Actions by external_ref = Action.Id.'
+      ? `SharedId → source mapping accounts for all ${coverage.api_actions_examined} API Actions (UK ${coverage.api_by_mapped_slug['ebay_epn_uk'] ?? 0} + US ${coverage.api_by_mapped_slug['ebay_epn_us'] ?? 0}).`
       : coverage.verdict === 'uk_only'
-      ? 'API account exposes UK activity only. Resetting ebay_epn_us would lose data the API cannot restore.'
-      : 'Not enough evidence to prove or disprove US coverage.',
+      ? 'No API Action maps to the US EPN SharedId (5339152106). Resetting ebay_epn_us would lose data the API cannot restore.'
+      : 'SharedId coverage does not cleanly map 100% to the known campaigns.',
   );
   push(
     'Delete-scope audit complete (no table errored)',

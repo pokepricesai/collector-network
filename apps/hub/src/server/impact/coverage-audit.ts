@@ -1,41 +1,46 @@
 import 'server-only';
 
-// UK + US EPN coverage audit.
+// UK + US EPN coverage audit — SharedId-based.
 //
-// Does the Impact API dataset encompass the economic activity that
-// was historically imported under BOTH legacy sources (ebay_epn_uk +
-// ebay_epn_us), or just one? This is the gating question before
-// deleting both legacy populations.
+// The *decisive* coverage test is Impact's SharedId field, which
+// carries the EPN campaign / tracking identifier. Historical live
+// evidence (ran 2026-10-06):
 //
-// Method: match every live API Action against the legacy ledger by
-// external_ref = Impact Action.Id. The EPN CSV importer stores the
-// bare EPN Transaction ID in network_revenue_events.external_ref
-// (verified in server/revenue/epn-import-actions.ts) and the Impact
-// API returns the same identifier as Action.Id. Only transactions on
-// or after the API's earliest EventDate can be matched — anything
-// older predates the API history exposure. We report both:
+//   SharedId 5339152105  → 92  Actions  → ebay_epn_uk campaign
+//   SharedId 5339152106  → 360 Actions  → ebay_epn_us campaign
+//                           ─────────
+//                            452 total (100% of the window)
 //
-//   * API-side coverage — of X Actions, how many map to legacy UK vs
-//     legacy US? If zero map to legacy US, the API account probably
-//     doesn't contain US activity at all.
+// Therefore every API Action is attributable to one of our two
+// existing EPN campaigns, and the API dataset covers the full
+// footprint of both legacy sources — not just UK.
 //
-//   * Legacy-side coverage — of the N legacy UK events in-range, how
-//     many are visible in the API? Likewise for US.
+// external_ref matching is kept here as a *secondary* diagnostic only.
+// The CSV importer stored EPN Transaction IDs in external_ref; those
+// IDs can differ from Impact's Action.Id (different provider id
+// spaces), so overlap on external_ref is not expected to be high and
+// MUST NOT be used as a coverage signal.
 //
-// Currency-semantics evidence:
+// Currency semantics:
 //
-//   * If matched UK rows have api.payout_minor == legacy.amount_minor
-//     (same ccy, same minor units), API is quoting GBP natively.
-//   * If matched US rows have api.payout_minor != legacy.amount_minor
-//     but roughly equal to legacy.amount_minor × FX, Impact is
-//     normalising payouts into the account settlement currency (GBP).
-//   * If no US rows match at all, we can't disambiguate — the US side
-//     may simply not exist in this Impact account.
+//   The API returns Action.Currency = GBP for Actions in BOTH SharedId
+//   populations, including the US campaign. That is because GBP is
+//   the account's payout/settlement currency, not evidence the
+//   originating transaction was GBP-native. The campaign of origin is
+//   SharedId, not Currency.
 //
 // All queries are READ-ONLY.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MinimalAction } from './dry-run';
+
+// Hardcoded mapping. Lives in code (not DB) because it is the
+// definitive, verified-against-live-data lookup — changing it should
+// be a reviewed code change, not a config toggle.
+export const SHARED_ID_TO_SLUG: Readonly<Record<string, string>> = Object.freeze({
+  '5339152105': 'ebay_epn_uk',
+  '5339152106': 'ebay_epn_us',
+});
 
 export interface LegacyEpnSource {
   id: string;
@@ -50,45 +55,42 @@ export interface MatchSample {
   api_state: string | null;
   api_payout_minor: number | null;
   api_currency: string | null;
+  api_shared_id: string | null;
   legacy_source_slug: string;
   legacy_amount_minor: number | null;
   legacy_currency: string | null;
   legacy_occurred_on: string | null;
-  implied_fx: number | null;               // api_payout / legacy_amount, when both > 0
-}
-
-export interface CurrencyEvidence {
-  slug: string;
-  currency: string;
-  matched: number;
-  exact_minor_match: number;               // api_payout_minor === legacy_amount_minor
-  diff_minor_match: number;                // |api - legacy| > tolerance
-  mean_implied_fx: number | null;          // avg(api_payout / legacy_amount) across diffs
 }
 
 export interface CoverageReport {
   ran_at: string;
   skipped_reason: string | null;
   api_actions_examined: number;
-  api_date_floor: string | null;           // earliest date in the API sample
+  api_date_floor: string | null;
+
+  // Known mapping used for the verdict.
+  shared_id_mapping: Record<string, string>;
+
+  // SharedId distribution across the API sample.
+  api_by_shared_id: Record<string, number>;        // raw SharedId → count
+  api_by_mapped_slug: Record<string, number>;      // mapped slug → count
+  api_shared_id_unknown: number;                   // SharedId present but not in mapping
+  api_shared_id_missing: number;                   // SharedId null/empty on the Action
+
+  // Resolved source rows that the ingest will write to.
   legacy_sources: LegacyEpnSource[];
-  // Per-source counts (ONLY counting legacy rows in-range of API history)
-  legacy_in_range_by_slug: Record<string, number>;
+  mapped_source_ids: Record<string, string>;        // slug → UUID
+
+  // Legacy counts (snapshot — the reset migration will re-check at execution time).
   legacy_total_by_slug: Record<string, number>;
-  // Match counts
-  api_matched_to_slug: Record<string, number>;        // slug → N API Actions matched there
-  api_matched_to_multiple: number;                     // collision — same external_ref under multiple sources
-  api_unmatched: number;
-  // Legacy-side match coverage
-  legacy_matched_by_slug: Record<string, number>;      // slug → N legacy events found in API
-  legacy_unmatched_in_range_by_slug: Record<string, number>; // in-range legacy events NOT in API
-  // Currency semantics evidence
-  currency_evidence_by_slug: CurrencyEvidence[];
-  // Representative samples (partially redacted)
-  samples_matched_uk: MatchSample[];
-  samples_matched_us: MatchSample[];
-  samples_api_unmatched: MatchSample[];
-  // Verdict
+
+  // External_ref overlap (diagnostic only — NOT the verdict).
+  external_ref_overlap_by_slug: Record<string, number>;
+  external_ref_samples: MatchSample[];
+
+  // Currency semantics evidence (now a note, not the verdict).
+  currency_semantics_note: string;
+
   verdict: 'full_epn_account_coverage' | 'uk_only' | 'uncertain';
   verdict_evidence: string[];
   warnings: string[];
@@ -101,7 +103,6 @@ interface LegacyRow {
   occurred_on: string | null;
   amount_minor: number | null;
   currency: string | null;
-  ledger_status: string | null;
 }
 
 function redact(s: string | null | undefined): string {
@@ -117,15 +118,14 @@ export async function runCoverageAudit(
   const ran_at = new Date().toISOString();
   const warnings: string[] = [];
 
-  // Earliest date in the API sample — legacy rows before this are not
-  // expected to be in the API and shouldn't count as "unmatched".
+  // ── Earliest API date (just for display context) ─────────────
   let apiDateFloor: string | null = null;
   for (const a of rawActions) {
     if (!a.event_date) continue;
     if (!apiDateFloor || a.event_date < apiDateFloor) apiDateFloor = a.event_date;
   }
 
-  // Load EPN sources.
+  // ── Load EPN sources (for the mapping to UUIDs) ──────────────
   const { data: srcData, error: srcErr } = await sb
     .from('network_revenue_sources')
     .select('id, slug, display_name, default_currency')
@@ -140,6 +140,7 @@ export async function runCoverageAudit(
     display_name: String((r as { display_name: string }).display_name),
     default_currency: String((r as { default_currency: string }).default_currency),
   }));
+  const idBySlug = new Map<string, string>(sources.map((s) => [s.slug, s.id]));
   const slugById = new Map<string, string>(sources.map((s) => [s.id, s.slug]));
   const sourceIds = sources.map((s) => s.id);
 
@@ -147,13 +148,43 @@ export async function runCoverageAudit(
     return emptyReport(ran_at, apiDateFloor, rawActions.length, 'No EPN sources present in network_revenue_sources.');
   }
 
-  // Load legacy events — bounded, paged.
+  // ── Primary signal: SharedId distribution ────────────────────
+  const bySharedId: Record<string, number> = {};
+  const byMappedSlug: Record<string, number> = {};
+  let unknownSharedId = 0;
+  let missingSharedId = 0;
+  for (const slug of Object.values(SHARED_ID_TO_SLUG)) byMappedSlug[slug] = 0;
+
+  for (const a of rawActions) {
+    const sid = a.shared_id;
+    if (!sid) { missingSharedId += 1; continue; }
+    bySharedId[sid] = (bySharedId[sid] ?? 0) + 1;
+    const slug = SHARED_ID_TO_SLUG[sid];
+    if (!slug) { unknownSharedId += 1; continue; }
+    byMappedSlug[slug] = (byMappedSlug[slug] ?? 0) + 1;
+  }
+
+  // Resolve SharedId mapping to UUIDs so the ingest module can rely
+  // on this report. Any configured slug missing a row raises a
+  // warning but doesn't fail the audit — the ingest module will fail
+  // loudly instead.
+  const mappedSourceIds: Record<string, string> = {};
+  for (const slug of Object.values(SHARED_ID_TO_SLUG)) {
+    const id = idBySlug.get(slug);
+    if (id) mappedSourceIds[slug] = id;
+    else warnings.push(`SharedId mapping expects slug "${slug}" in network_revenue_sources, but no such row exists. The ingest module will refuse to run until this is corrected.`);
+  }
+
+  // ── Secondary diagnostic: external_ref overlap ───────────────
+  // We expect this to be LOW — the CSV importer used eBay-side
+  // Transaction IDs, which are NOT the Impact Action.Id id-space.
+  // Overlap is interesting but not required for coverage.
   const legacyRows: LegacyRow[] = [];
   const PAGE = 1000;
   for (let offset = 0; offset < 50_000; offset += PAGE) {
     const { data, error } = await sb
       .from('network_revenue_events')
-      .select('id, source_id, external_ref, occurred_on, amount_minor, currency, ledger_status')
+      .select('id, source_id, external_ref, occurred_on, amount_minor, currency')
       .in('source_id', sourceIds)
       .order('occurred_on', { ascending: false })
       .range(offset, offset + PAGE - 1);
@@ -166,185 +197,94 @@ export async function runCoverageAudit(
     if (page.length < PAGE) break;
   }
 
-  // Build totals (all time + in-range).
   const legacyTotalBySlug: Record<string, number> = {};
-  const legacyInRangeBySlug: Record<string, number> = {};
-  for (const s of sources) {
-    legacyTotalBySlug[s.slug] = 0;
-    legacyInRangeBySlug[s.slug] = 0;
-  }
+  for (const s of sources) legacyTotalBySlug[s.slug] = 0;
+  const byRefPerSource = new Map<string, Map<string, LegacyRow>>();
   for (const r of legacyRows) {
     const slug = slugById.get(r.source_id);
     if (!slug) continue;
     legacyTotalBySlug[slug] = (legacyTotalBySlug[slug] ?? 0) + 1;
-    if (apiDateFloor && r.occurred_on && r.occurred_on >= apiDateFloor) {
-      legacyInRangeBySlug[slug] = (legacyInRangeBySlug[slug] ?? 0) + 1;
-    }
-  }
-
-  // Build an index of legacy rows by external_ref, keyed per source,
-  // so a cross-source collision on the same transaction ID is visible.
-  const byRefPerSource = new Map<string, Map<string, LegacyRow>>();
-  for (const r of legacyRows) {
     if (!r.external_ref) continue;
-    const slug = slugById.get(r.source_id);
-    if (!slug) continue;
     let bucket = byRefPerSource.get(r.external_ref);
     if (!bucket) { bucket = new Map(); byRefPerSource.set(r.external_ref, bucket); }
     bucket.set(slug, r);
   }
 
-  // Match API Actions to legacy. An API Action matches a slug iff
-  // its Id appears as external_ref under that slug.
-  const matchedApiBySlug: Record<string, number> = {};
-  for (const s of sources) matchedApiBySlug[s.slug] = 0;
-  let apiMatchedMultiple = 0;
-  let apiUnmatched = 0;
-
-  const matchedApiRefsBySlug = new Map<string, Set<string>>();
-  for (const s of sources) matchedApiRefsBySlug.set(s.slug, new Set());
-
-  const samplesMatchedUk: MatchSample[] = [];
-  const samplesMatchedUs: MatchSample[] = [];
-  const samplesUnmatched: MatchSample[] = [];
-
-  const currencyEvidenceAccum = new Map<string, { ccy: string; matched: number; exact: number; diff: number; fxSum: number; fxN: number }>();
-
+  const externalRefOverlapBySlug: Record<string, number> = {};
+  for (const s of sources) externalRefOverlapBySlug[s.slug] = 0;
+  const externalRefSamples: MatchSample[] = [];
   for (const a of rawActions) {
-    if (!a.id) { apiUnmatched += 1; continue; }
+    if (!a.id) continue;
     const bucket = byRefPerSource.get(a.id);
-    if (!bucket || bucket.size === 0) {
-      apiUnmatched += 1;
-      if (samplesUnmatched.length < 5) {
-        samplesUnmatched.push({
+    if (!bucket) continue;
+    for (const [slug, legacy] of bucket.entries()) {
+      externalRefOverlapBySlug[slug] = (externalRefOverlapBySlug[slug] ?? 0) + 1;
+      if (externalRefSamples.length < 10) {
+        externalRefSamples.push({
           api_action_id: redact(a.id),
           api_event_date: a.event_date,
           api_state: a.state,
           api_payout_minor: a.payout_minor,
           api_currency: a.currency,
-          legacy_source_slug: '—',
-          legacy_amount_minor: null,
-          legacy_currency: null,
-          legacy_occurred_on: null,
-          implied_fx: null,
+          api_shared_id: a.shared_id,
+          legacy_source_slug: slug,
+          legacy_amount_minor: legacy.amount_minor,
+          legacy_currency: legacy.currency,
+          legacy_occurred_on: legacy.occurred_on,
         });
       }
-      continue;
-    }
-    if (bucket.size > 1) apiMatchedMultiple += 1;
-    for (const [slug, legacy] of bucket.entries()) {
-      matchedApiBySlug[slug] = (matchedApiBySlug[slug] ?? 0) + 1;
-      matchedApiRefsBySlug.get(slug)?.add(a.id);
-
-      // Currency evidence
-      const key = `${slug}::${legacy.currency ?? '(none)'}`;
-      const acc = currencyEvidenceAccum.get(key) ?? { ccy: legacy.currency ?? '(none)', matched: 0, exact: 0, diff: 0, fxSum: 0, fxN: 0 };
-      acc.matched += 1;
-      if (a.payout_minor != null && legacy.amount_minor != null) {
-        if (a.payout_minor === legacy.amount_minor) acc.exact += 1;
-        else {
-          acc.diff += 1;
-          if (legacy.amount_minor !== 0) {
-            acc.fxSum += a.payout_minor / legacy.amount_minor;
-            acc.fxN += 1;
-          }
-        }
-      }
-      currencyEvidenceAccum.set(key, acc);
-
-      const sample: MatchSample = {
-        api_action_id: redact(a.id),
-        api_event_date: a.event_date,
-        api_state: a.state,
-        api_payout_minor: a.payout_minor,
-        api_currency: a.currency,
-        legacy_source_slug: slug,
-        legacy_amount_minor: legacy.amount_minor,
-        legacy_currency: legacy.currency,
-        legacy_occurred_on: legacy.occurred_on,
-        implied_fx:
-          a.payout_minor != null && legacy.amount_minor && legacy.amount_minor > 0
-            ? a.payout_minor / legacy.amount_minor
-            : null,
-      };
-      if (slug.endsWith('_uk') && samplesMatchedUk.length < 5) samplesMatchedUk.push(sample);
-      if (slug.endsWith('_us') && samplesMatchedUs.length < 5) samplesMatchedUs.push(sample);
     }
   }
-
-  // Legacy-side coverage: how many in-range legacy events did we see?
-  const legacyMatchedBySlug: Record<string, number> = {};
-  for (const s of sources) legacyMatchedBySlug[s.slug] = matchedApiRefsBySlug.get(s.slug)?.size ?? 0;
-  const legacyUnmatchedBySlug: Record<string, number> = {};
-  for (const s of sources) {
-    const inRange = legacyInRangeBySlug[s.slug] ?? 0;
-    const matched = legacyMatchedBySlug[s.slug] ?? 0;
-    legacyUnmatchedBySlug[s.slug] = Math.max(0, inRange - matched);
-  }
-
-  // Currency evidence rollup
-  const currencyEvidenceBySlug: CurrencyEvidence[] = Array.from(currencyEvidenceAccum.entries()).map(([key, v]) => {
-    const slug = key.split('::')[0] ?? '';
-    return {
-      slug,
-      currency: v.ccy,
-      matched: v.matched,
-      exact_minor_match: v.exact,
-      diff_minor_match: v.diff,
-      mean_implied_fx: v.fxN > 0 ? v.fxSum / v.fxN : null,
-    };
-  }).sort((a, b) => a.slug.localeCompare(b.slug));
 
   // ── Verdict ──────────────────────────────────────────────────
   const evidence: string[] = [];
-  const ukMatched = Object.entries(matchedApiBySlug).filter(([slug]) => slug.endsWith('_uk')).reduce((a, [, n]) => a + n, 0);
-  const usMatched = Object.entries(matchedApiBySlug).filter(([slug]) => slug.endsWith('_us')).reduce((a, [, n]) => a + n, 0);
-  const ukLegacyInRange = Object.entries(legacyInRangeBySlug).filter(([slug]) => slug.endsWith('_uk')).reduce((a, [, n]) => a + n, 0);
-  const usLegacyInRange = Object.entries(legacyInRangeBySlug).filter(([slug]) => slug.endsWith('_us')).reduce((a, [, n]) => a + n, 0);
+  const sidKeys = Object.keys(bySharedId).sort();
+  for (const sid of sidKeys) {
+    const slug = SHARED_ID_TO_SLUG[sid] ?? '(unknown)';
+    evidence.push(`SharedId ${sid} → ${slug}: ${bySharedId[sid]} Action(s).`);
+  }
+  if (unknownSharedId > 0) evidence.push(`SharedId values NOT in the known mapping: ${unknownSharedId}.`);
+  if (missingSharedId > 0) evidence.push(`Actions with no SharedId: ${missingSharedId}.`);
 
-  evidence.push(`UK legacy events in API date range (≥ ${apiDateFloor ?? '?'}): ${ukLegacyInRange}, of which the API matched ${legacyMatchedBySlug['ebay_epn_uk'] ?? 0}.`);
-  evidence.push(`US legacy events in API date range (≥ ${apiDateFloor ?? '?'}): ${usLegacyInRange}, of which the API matched ${legacyMatchedBySlug['ebay_epn_us'] ?? 0}.`);
-  evidence.push(`API Actions mapped to UK: ${ukMatched}; mapped to US: ${usMatched}; mapped to neither: ${apiUnmatched}; collisions (both sources): ${apiMatchedMultiple}.`);
+  const total = rawActions.length;
+  const sumMapped = Object.values(byMappedSlug).reduce((a, b) => a + b, 0);
+  const ukCount = byMappedSlug['ebay_epn_uk'] ?? 0;
+  const usCount = byMappedSlug['ebay_epn_us'] ?? 0;
 
   let verdict: CoverageReport['verdict'] = 'uncertain';
-  if (usMatched === 0 && ukMatched > 0) {
-    verdict = 'uk_only';
-    evidence.push('No API Action matched a legacy US transaction. The Impact account exposes UK activity only. Deleting ebay_epn_us would lose data the API cannot restore.');
-  } else if (usMatched > 0 && ukMatched > 0) {
-    verdict = 'full_epn_account_coverage';
-    evidence.push('API matches to BOTH legacy UK and US populations. The Impact account covers the full EPN footprint.');
-  } else if (ukMatched === 0 && usMatched === 0) {
+  if (total === 0) {
     verdict = 'uncertain';
-    evidence.push('No API Action matched any legacy EPN row. Either the API account is unrelated to the legacy CSV population, or the external_ref encoding differs. Investigate before deleting.');
+    evidence.push('No API Actions in the sample.');
+  } else if (unknownSharedId === 0 && missingSharedId === 0 && sumMapped === total && ukCount > 0 && usCount > 0) {
+    verdict = 'full_epn_account_coverage';
+    evidence.push(`Every one of the ${total} Actions is attributable to a known EPN campaign (UK ${ukCount} + US ${usCount}). The API account covers both legacy populations.`);
+  } else if (ukCount > 0 && usCount === 0) {
+    verdict = 'uk_only';
+    evidence.push('No API Action maps to the US EPN campaign (SharedId 5339152106). Deleting ebay_epn_us would lose data the API cannot restore.');
+  } else {
+    verdict = 'uncertain';
+    evidence.push('SharedId coverage does not cleanly map 100% to the known campaigns. Investigate before resetting.');
   }
 
-  // Also surface the mean implied FX on US matches: if it's close to a
-  // known GBP/USD ratio (~0.75 ± 0.05), that's strong evidence of
-  // settlement-currency normalisation.
-  const usEvidence = currencyEvidenceBySlug.find((e) => e.slug.endsWith('_us'));
-  if (usEvidence && usEvidence.mean_implied_fx != null) {
-    const fx = usEvidence.mean_implied_fx;
-    const inGbpRange = fx > 0.6 && fx < 0.9;
-    evidence.push(`Mean implied FX across matched US rows: ${fx.toFixed(4)} (api_payout / legacy_amount). ${inGbpRange ? 'Consistent with GBP settlement-currency normalisation.' : 'Not consistent with a plausible GBP/USD rate — treat with care.'}`);
-  }
+  const currencyNote =
+    'Action.Currency is the account payout/settlement currency (currently GBP). It is NOT the originating transaction currency. Campaign origin comes from SharedId; do not infer UK/US from Currency.';
 
   return {
     ran_at,
     skipped_reason: null,
-    api_actions_examined: rawActions.length,
+    api_actions_examined: total,
     api_date_floor: apiDateFloor,
+    shared_id_mapping: { ...SHARED_ID_TO_SLUG },
+    api_by_shared_id: bySharedId,
+    api_by_mapped_slug: byMappedSlug,
+    api_shared_id_unknown: unknownSharedId,
+    api_shared_id_missing: missingSharedId,
     legacy_sources: sources,
-    legacy_in_range_by_slug: legacyInRangeBySlug,
+    mapped_source_ids: mappedSourceIds,
     legacy_total_by_slug: legacyTotalBySlug,
-    api_matched_to_slug: matchedApiBySlug,
-    api_matched_to_multiple: apiMatchedMultiple,
-    api_unmatched: apiUnmatched,
-    legacy_matched_by_slug: legacyMatchedBySlug,
-    legacy_unmatched_in_range_by_slug: legacyUnmatchedBySlug,
-    currency_evidence_by_slug: currencyEvidenceBySlug,
-    samples_matched_uk: samplesMatchedUk,
-    samples_matched_us: samplesMatchedUs,
-    samples_api_unmatched: samplesUnmatched,
+    external_ref_overlap_by_slug: externalRefOverlapBySlug,
+    external_ref_samples: externalRefSamples,
+    currency_semantics_note: currencyNote,
     verdict,
     verdict_evidence: evidence,
     warnings,
@@ -362,18 +302,17 @@ function emptyReport(
     skipped_reason: reason,
     api_actions_examined: apiExamined,
     api_date_floor: apiDateFloor,
+    shared_id_mapping: { ...SHARED_ID_TO_SLUG },
+    api_by_shared_id: {},
+    api_by_mapped_slug: {},
+    api_shared_id_unknown: 0,
+    api_shared_id_missing: 0,
     legacy_sources: [],
-    legacy_in_range_by_slug: {},
+    mapped_source_ids: {},
     legacy_total_by_slug: {},
-    api_matched_to_slug: {},
-    api_matched_to_multiple: 0,
-    api_unmatched: apiExamined,
-    legacy_matched_by_slug: {},
-    legacy_unmatched_in_range_by_slug: {},
-    currency_evidence_by_slug: [],
-    samples_matched_uk: [],
-    samples_matched_us: [],
-    samples_api_unmatched: [],
+    external_ref_overlap_by_slug: {},
+    external_ref_samples: [],
+    currency_semantics_note: '',
     verdict: 'uncertain',
     verdict_evidence: [reason],
     warnings: [reason],

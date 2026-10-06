@@ -7,6 +7,7 @@
     { "path": "/api/sync/inspection",     "schedule": "30 3 * * *" },
     { "path": "/api/sync/internal-links", "schedule": "45 3 * * *" },
     { "path": "/api/sync/bigquery",       "schedule": "0 4 * * *" },
-    { "path": "/api/sync/brief",          "schedule": "30 4 * * *" }
+    { "path": "/api/sync/brief",          "schedule": "30 4 * * *" },
+    { "path": "/api/sync/impact-epn",     "schedule": "0 6 * * *" }
   ]
 }
