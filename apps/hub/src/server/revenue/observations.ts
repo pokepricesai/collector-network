@@ -217,8 +217,8 @@ export async function monthlyObservations(sb: SupabaseClient): Promise<Observati
       id: `attribution-${ccy}`,
       tone: 'neutral',
       metric_scope: 'concentration',
-      headline: `Historical ${ccy} EPN activity is not yet attributable to individual sites`,
-      evidence: `${share.toFixed(0)}% of attributed commission has no site tag because outbound links did not carry SubId1 at the time of the click. Future SubId1 tagging will fix this going forward; historical rows will remain unattributed.`,
+      headline: `Historical ${ccy} EPN Actions cannot be reliably attributed to an individual Collector Network site`,
+      evidence: `${share.toFixed(0)}% of attributed commission rolls up as "Site not attributable" — SubId1 coverage on outbound links was partial and mixed, so historical rows cannot be assigned to a specific site after the fact. Future outbound links will tag SubId1 consistently and attribution improves from that point forward only.`,
     });
   }
 

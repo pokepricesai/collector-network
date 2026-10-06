@@ -428,8 +428,9 @@ export default async function RevenuePage() {
           empty={<span className="col-dim">No per-site revenue in the window.</span>}
         />
         <p className="col-dim" style={{ fontSize: 11, marginTop: 8 }}>
-          Historical EPN Actions did not carry SubId1 attribution, so they roll up as "Site not attributable" — this is expected, not a data error.
-          Future outbound links will tag SubId1 with the originating site; attribution improves from that point forward only.
+          Historical EPN Actions cannot be reliably attributed to an individual Collector Network site — SubId1 coverage was partial and mixed across outbound links,
+          so these rows roll up as "Site not attributable". This is expected, not a data error.
+          Future outbound links will tag SubId1 with the originating site consistently; attribution improves from that point forward only.
         </p>
       </Panel>
 
