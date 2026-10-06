@@ -34,6 +34,11 @@ const KNOWN_STATES = ['APPROVED', 'PENDING', 'LOCKED', 'PAID', 'REVERSED'] as co
 type KnownState = (typeof KNOWN_STATES)[number];
 const KNOWN_STATE_SET = new Set<string>(KNOWN_STATES);
 
+// Raw records are capped to keep the server-component serialization
+// under control. 10k ≈ 2–3 MB JSON — enough for the current 452-row
+// account and plenty of headroom for the coverage + attribution audits.
+const RAW_CAP = 10_000;
+
 export interface WindowResult {
   index: number;                            // 0 = newest
   start_date: string;                       // YYYY-MM-DD inclusive
@@ -69,6 +74,58 @@ export interface CurrencyRow {
   count: number;
   payout_minor: number;
   amount_minor: number;
+}
+
+export interface MinimalAction {
+  id: string | null;
+  event_date: string | null;
+  state: string | null;
+  payout_minor: number | null;
+  amount_minor: number | null;
+  currency: string | null;
+  campaign_id: string | null;
+  sub_id_1: string | null;
+  sub_id_2: string | null;
+  sub_id_3: string | null;
+  sub_id_4: string | null;
+  shared_id: string | null;
+  oid: string | null;
+  order_id: string | null;
+}
+
+export interface MinimalActionUpdate {
+  action_id: string | null;              // links back to Action.Id
+  old_state: string | null;
+  new_state: string | null;
+  old_payout_minor: number | null;
+  new_payout_minor: number | null;
+  old_amount_minor: number | null;
+  new_amount_minor: number | null;
+  update_date: string | null;
+  currency: string | null;
+}
+
+export interface StateCurrencyPayout {
+  state: string;                         // PENDING / APPROVED / LOCKED / PAID / REVERSED / other
+  currency: string;
+  count: number;
+  payout_minor: number;                  // current Payout from live Actions
+  amount_minor: number;                  // current gross sale Amount
+}
+
+export interface AttributionField {
+  field: 'SubId1' | 'SubId2' | 'SubId3' | 'SubId4' | 'SharedId';
+  populated: number;
+  distinct_count: number;
+  top_values: Array<{ value: string; count: number }>;
+}
+
+export interface ReversedValueByCurrency {
+  currency: string;
+  reversed_action_count: number;         // Actions currently in REVERSED state
+  current_payout_minor: number;          // sum of current Payout on REVERSED (should be 0)
+  pre_reversal_payout_minor: number;     // sum of OldPayout from ActionUpdates that transitioned to REVERSED
+  pre_reversal_source_update_count: number;
 }
 
 export interface DryRunReport {
@@ -112,6 +169,15 @@ export interface DryRunReport {
   verdict: 'ready' | 'partial' | 'blocked';
   blocking_reasons: string[];
   warnings: string[];
+  // Raw access for downstream audits (coverage, attribution, reversal)
+  raw_cap: number;
+  raw_truncated: boolean;
+  raw_actions: MinimalAction[];
+  raw_action_updates: MinimalActionUpdate[];
+  // Richer accounting breakdowns computed from the raw data
+  state_currency_payout: StateCurrencyPayout[];
+  attribution_fields: AttributionField[];
+  reversed_value_by_currency: ReversedValueByCurrency[];
 }
 
 // ───────────────────────── helpers ─────────────────────────
@@ -180,6 +246,48 @@ function dateOnly(iso: string | null | undefined): string | null {
 function monthOf(ymd: string | null): string | null {
   if (!ymd) return null;
   return ymd.slice(0, 7);
+}
+
+function strOrNull(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  return String(v);
+}
+
+function extractMinimalAction(r: Record<string, unknown>): MinimalAction {
+  const dt = (r['EventDate'] ?? r['ActionDate']) as string | null;
+  return {
+    id:            strOrNull(r['Id']),
+    event_date:    dateOnly(dt ?? null),
+    state:         strOrNull(r['State']),
+    payout_minor:  toMinor(r['Payout']),
+    amount_minor:  toMinor(r['Amount']),
+    currency:      strOrNull(r['Currency']),
+    campaign_id:   strOrNull(r['CampaignId']),
+    sub_id_1:      strOrNull(r['SubId1']),
+    sub_id_2:      strOrNull(r['SubId2']),
+    sub_id_3:      strOrNull(r['SubId3']),
+    sub_id_4:      strOrNull(r['SubId4']),
+    shared_id:     strOrNull(r['SharedId']),
+    oid:           strOrNull(r['Oid']),
+    order_id:      strOrNull(r['OrderId']),
+  };
+}
+
+function extractMinimalUpdate(r: Record<string, unknown>): MinimalActionUpdate {
+  // Impact ActionUpdate fields vary slightly by endpoint. We accept
+  // either ActionId or Id as the link back to the parent Action.
+  const dt = (r['UpdateDate'] ?? r['CreationDate'] ?? r['Date']) as string | null;
+  return {
+    action_id:         strOrNull(r['ActionId'] ?? r['Id']),
+    old_state:         strOrNull(r['OldState'] ?? r['OldStatus']),
+    new_state:         strOrNull(r['NewState'] ?? r['State'] ?? r['NewStatus']),
+    old_payout_minor:  toMinor(r['OldPayout']),
+    new_payout_minor:  toMinor(r['NewPayout'] ?? r['Payout']),
+    old_amount_minor:  toMinor(r['OldAmount']),
+    new_amount_minor:  toMinor(r['NewAmount'] ?? r['Amount']),
+    update_date:       dateOnly(dt ?? null),
+    currency:          strOrNull(r['Currency']),
+  };
 }
 
 // ───────────────────────── core fetchers ─────────────────────────
@@ -275,9 +383,11 @@ export async function runDryRun(): Promise<DryRunReport> {
   // Collect
   const windowResults: WindowResult[] = [];
   const allActions: Array<Record<string, unknown>> = [];
+  const allActionUpdates: Array<Record<string, unknown>> = [];
   let actionUpdatesTotal = 0;
   let totalApiCalls = 0;
   let overallSafetyCapHit = false;
+  let rawTruncated = false;
 
   for (let i = 0; i < windows.length; i++) {
     const win = windows[i];
@@ -312,6 +422,10 @@ export async function runDryRun(): Promise<DryRunReport> {
         break;
       }
       allActions.push(r);
+    }
+    for (const r of updatesP.records) {
+      if (allActionUpdates.length >= OVERALL_SAFETY_CAP) break;
+      allActionUpdates.push(r);
     }
     actionUpdatesTotal += updatesP.records.length;
 
@@ -439,6 +553,103 @@ export async function runDryRun(): Promise<DryRunReport> {
 
   const byMonthSorted = Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
 
+  // ── Raw record capture + enriched breakdowns ─────────────────
+  const minimalActions: MinimalAction[] = [];
+  for (const r of allActions) {
+    if (minimalActions.length >= RAW_CAP) { rawTruncated = true; break; }
+    minimalActions.push(extractMinimalAction(r));
+  }
+  const minimalUpdates: MinimalActionUpdate[] = [];
+  for (const r of allActionUpdates) {
+    if (minimalUpdates.length >= RAW_CAP) { rawTruncated = true; break; }
+    minimalUpdates.push(extractMinimalUpdate(r));
+  }
+
+  // State × currency × payout breakdown — the accounting view.
+  // Pending / approved / locked / paid / reversed must stay separate
+  // in all downstream aggregations.
+  const scpMap = new Map<string, StateCurrencyPayout>();
+  for (const a of minimalActions) {
+    const state = a.state ?? '(none)';
+    const currency = a.currency ?? '(none)';
+    const key = `${state}::${currency}`;
+    const row = scpMap.get(key) ?? { state, currency, count: 0, payout_minor: 0, amount_minor: 0 };
+    row.count += 1;
+    if (a.payout_minor != null) row.payout_minor += a.payout_minor;
+    if (a.amount_minor != null) row.amount_minor += a.amount_minor;
+    scpMap.set(key, row);
+  }
+  const stateCurrencyPayout = Array.from(scpMap.values()).sort((x, y) => {
+    const order = (s: string) => ['PENDING', 'APPROVED', 'LOCKED', 'PAID', 'REVERSED'].indexOf(s);
+    const d = order(y.state) - order(x.state);
+    return d !== 0 ? d : x.currency.localeCompare(y.currency);
+  });
+
+  // Attribution — frequency of each SubId / SharedId field with top values.
+  const attributionFields: AttributionField[] = (['SubId1', 'SubId2', 'SubId3', 'SubId4', 'SharedId'] as const).map((field) => {
+    const counts = new Map<string, number>();
+    let populated = 0;
+    for (const a of minimalActions) {
+      const v =
+        field === 'SubId1' ? a.sub_id_1 :
+        field === 'SubId2' ? a.sub_id_2 :
+        field === 'SubId3' ? a.sub_id_3 :
+        field === 'SubId4' ? a.sub_id_4 :
+        a.shared_id;
+      if (!v) continue;
+      populated += 1;
+      counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    const top = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([value, count]) => ({ value, count }));
+    return { field, populated, distinct_count: counts.size, top_values: top };
+  });
+
+  // Reversed value — current Action.Payout is 0 on REVERSED, so the
+  // economic loss shows up only in ActionUpdates OldPayout where the
+  // transition is INTO the REVERSED state. Sum OldPayout per currency.
+  const reversedActionIds = new Set<string>();
+  const revByCurrency = new Map<string, ReversedValueByCurrency>();
+  for (const a of minimalActions) {
+    if (a.state === 'REVERSED') {
+      if (a.id) reversedActionIds.add(a.id);
+      const cur = a.currency ?? '(none)';
+      const row = revByCurrency.get(cur) ?? {
+        currency: cur,
+        reversed_action_count: 0,
+        current_payout_minor: 0,
+        pre_reversal_payout_minor: 0,
+        pre_reversal_source_update_count: 0,
+      };
+      row.reversed_action_count += 1;
+      if (a.payout_minor != null) row.current_payout_minor += a.payout_minor;
+      revByCurrency.set(cur, row);
+    }
+  }
+  for (const u of minimalUpdates) {
+    if (u.new_state !== 'REVERSED') continue;
+    if (u.old_payout_minor == null) continue;
+    if (u.action_id && !reversedActionIds.has(u.action_id)) {
+      // Update targets a non-REVERSED action — skip (stale state).
+      continue;
+    }
+    const cur = u.currency ?? '(none)';
+    const row = revByCurrency.get(cur) ?? {
+      currency: cur,
+      reversed_action_count: 0,
+      current_payout_minor: 0,
+      pre_reversal_payout_minor: 0,
+      pre_reversal_source_update_count: 0,
+    };
+    row.pre_reversal_payout_minor += u.old_payout_minor;
+    row.pre_reversal_source_update_count += 1;
+    revByCurrency.set(cur, row);
+  }
+  const reversedValueByCurrency = Array.from(revByCurrency.values())
+    .sort((a, b) => b.reversed_action_count - a.reversed_action_count);
+
   // ── Verdict ──────────────────────────────────────────────────
   const anyFailed = windowResults.some((w) => w.status === 'failed');
   const anyPartial = windowResults.some((w) => w.status === 'partial');
@@ -494,6 +705,13 @@ export async function runDryRun(): Promise<DryRunReport> {
     verdict,
     blocking_reasons: blockingReasons,
     warnings,
+    raw_cap: RAW_CAP,
+    raw_truncated: rawTruncated,
+    raw_actions: minimalActions,
+    raw_action_updates: minimalUpdates,
+    state_currency_payout: stateCurrencyPayout,
+    attribution_fields: attributionFields,
+    reversed_value_by_currency: reversedValueByCurrency,
   };
 }
 
@@ -530,5 +748,12 @@ function emptyReport(ran_at: string, reason: string): DryRunReport {
     verdict: 'blocked',
     blocking_reasons: [reason],
     warnings: [reason],
+    raw_cap: RAW_CAP,
+    raw_truncated: false,
+    raw_actions: [],
+    raw_action_updates: [],
+    state_currency_payout: [],
+    attribution_fields: [],
+    reversed_value_by_currency: [],
   };
 }

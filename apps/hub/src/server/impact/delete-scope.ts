@@ -105,37 +105,48 @@ export async function runDeleteScopeAudit(sb: SupabaseClient): Promise<DeleteSco
     perSource[src.slug] = await countEq(sb, 'network_revenue_events', 'source_id', src.id);
   }
 
-  // Status history piggybacks on revenue_event ids. Count them explicitly
-  // so the UI can show the exact row volume that will cascade-delete.
+  // Status history piggybacks on revenue_event ids. Count them in two
+  // steps: page the event ids in chunks of 1000, then for each chunk
+  // further sub-chunk the IN list for the history count to 100 ids —
+  // PostgREST passes the IN list as a URL query parameter, and a
+  // single-shot `.in('revenue_event_id', 767_uuids)` produces a URL
+  // too long for the proxy (fails with "fetch failed" or 414 and
+  // Supabase surfaces it as a generic PostgrestError). 100 UUIDs
+  // keeps the URL comfortably under 8 KB.
   let historyTotal = 0;
   if (epnSourceIds.length > 0) {
-    // Supabase doesn't support `in` on a subquery; batch event ids and
-    // count history rows in chunks. Keep this bounded.
-    const BATCH = 1000;
+    const EVENT_PAGE = 1000;
+    const COUNT_CHUNK = 100;
     let offset = 0;
-    while (offset < 100_000) {
+    while (offset < 200_000) {
       const { data: eventIds, error } = await sb
         .from('network_revenue_events')
         .select('id')
         .in('source_id', epnSourceIds)
-        .range(offset, offset + BATCH - 1);
+        .range(offset, offset + EVENT_PAGE - 1);
       if (error) {
-        warnings.push(`Error paging event ids for history count: ${error.message}`);
+        warnings.push(`Status-history count: event paging failed at offset=${offset}: ${error.code ?? 'err'} ${error.message}`);
         break;
       }
       const ids = (eventIds ?? []).map((r: { id: string }) => r.id);
       if (ids.length === 0) break;
-      const { count, error: histErr } = await sb
-        .from('network_affiliate_status_history')
-        .select('*', { count: 'exact', head: true })
-        .in('revenue_event_id', ids);
-      if (histErr) {
-        warnings.push(`Error counting status history: ${histErr.message}`);
-        break;
+      let chunkErr = false;
+      for (let i = 0; i < ids.length; i += COUNT_CHUNK) {
+        const slice = ids.slice(i, i + COUNT_CHUNK);
+        const { count, error: histErr } = await sb
+          .from('network_affiliate_status_history')
+          .select('*', { count: 'exact', head: true })
+          .in('revenue_event_id', slice);
+        if (histErr) {
+          warnings.push(`Status-history count: in(${slice.length} ids) failed — ${histErr.code ?? 'err'} ${histErr.message}`);
+          chunkErr = true;
+          break;
+        }
+        historyTotal += count ?? 0;
       }
-      historyTotal += count ?? 0;
-      if (ids.length < BATCH) break;
-      offset += BATCH;
+      if (chunkErr) break;
+      if (ids.length < EVENT_PAGE) break;
+      offset += EVENT_PAGE;
     }
   }
 
