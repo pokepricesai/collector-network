@@ -2,6 +2,8 @@ import { AdminShell } from '@/components/admin/AdminShell';
 import { Notice, Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
+import { auditCurrentEpnLedger, type CurrentLedgerAudit } from '@/server/impact/current-ledger-audit';
+import { runDryRun } from '@/server/impact/dry-run';
 import type { IngestResult } from '@/server/impact/ingest';
 import { executeImpactBackfillAction, executeImpactDailySyncAction } from './actions';
 
@@ -47,6 +49,15 @@ export default async function ImpactResetExecutorPage() {
     .maybeSingle();
   const lastDaily = (lastDailyRow?.value ?? null) as IngestResult | null;
 
+  // Read-only diagnostic — runs on every page load. Fetches a fresh
+  // Impact dry run (parallel with the audit's non-API queries so the
+  // 30s API fetch doesn't double our render time) and then feeds the
+  // raw Action list into the audit for ledger↔API comparison.
+  const dry = await runDryRun().catch((err) => {
+    return { raw_actions: [], skipped_reason: err instanceof Error ? err.message : String(err) } as unknown as Awaited<ReturnType<typeof runDryRun>>;
+  });
+  const audit = await auditCurrentEpnLedger(sb, dry.raw_actions ?? null);
+
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/revenue/impact-reset/execute">
       <SectionHeader
@@ -76,6 +87,8 @@ export default async function ImpactResetExecutorPage() {
           <li>If a previous backfill exists, Execute is safe: upserts are keyed by <code>impact:epn:&lt;Action.Id&gt;</code>.</li>
         </ul>
       </Panel>
+
+      <DiagnosticPanel audit={audit} />
 
       <Panel title="Execute" eyebrow="Server action — admin only">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -186,6 +199,194 @@ function ResultPanel({ title, result }: { title: string; result: IngestResult })
 
 type BySlugRow = IngestResult['by_slug'][string] & { slug: string; id?: string };
 type WinRow = IngestResult['windows'][number] & { id?: string };
+
+function DiagnosticPanel({ audit }: { audit: CurrentLedgerAudit }) {
+  const s = audit.shape;
+  const canonical = s.by_idempotency_prefix['impact:epn'] ?? 0;
+  const other = s.total - canonical;
+  const cmp = audit.api_comparison;
+
+  const diagnosisLines: string[] = [];
+  if (s.total === 0) {
+    diagnosisLines.push('Public EPN slice is empty. The reset migration deleted cleanly and no backfill has run yet.');
+  } else {
+    diagnosisLines.push(`Public EPN slice holds ${s.total} rows.`);
+    if (canonical > 0 && other === 0) {
+      diagnosisLines.push(`All ${canonical} rows carry idempotency_key starting "impact:epn:" → canonical ingest shape. Rows were written by the API ingest module, not by CSV import.`);
+    } else if (canonical > 0 && other > 0) {
+      diagnosisLines.push(`${canonical} rows are canonical (impact:epn:*); ${other} are not. Mixed state — investigate the non-canonical rows below.`);
+    } else {
+      diagnosisLines.push(`None of the ${s.total} rows carry the "impact:epn:" prefix. These are NOT from the canonical ingest.`);
+    }
+    if (cmp) {
+      if (cmp.only_ledger === 0 && cmp.only_api === 0) {
+        diagnosisLines.push(`Ledger ↔ API Action.Id sets match exactly (${cmp.both} on each side). Canonical backfill has effectively already occurred.`);
+      } else {
+        diagnosisLines.push(`Ledger ↔ API comparison: ${cmp.both} in both, ${cmp.only_api} only in API (unseen), ${cmp.only_ledger} only in ledger. Investigate the gaps.`);
+      }
+    }
+    if (audit.impact_settings_rows.length === 0) {
+      diagnosisLines.push('No network_settings row exists for impact_last_backfill / impact_last_daily_sync — the "Last backfill: (never)" display is literally true even though canonical rows exist. Most likely explanation: a previous server action ran the ingest but failed to upsert the settings row (RLS or write error that the action did not surface).');
+    }
+    if (audit.recent_impact_job_runs.length === 0) {
+      diagnosisLines.push('No rows in network_job_runs with job_name matching impact/epn — nothing scheduled or manual has been logged. Confirms the daily cron has not yet fired (first fire is tonight at 06:00 UTC) AND the ingest that populated the current rows did not create a job_run record.');
+    }
+  }
+
+  return (
+    <Panel title={`Diagnostic — current ${s.total} EPN rows (read-only)`} eyebrow="Scoped to kind='ebay_epn'. All queries are SELECT-only.">
+      <Notice tone={s.total === 0 ? 'info' : (canonical === s.total ? 'success' : 'warning')}>
+        <strong>Shape:</strong> {s.total.toLocaleString()} rows · idempotency "impact:epn:" × {canonical.toLocaleString()} · other × {other.toLocaleString()}
+        {cmp && <> · API Action.Id overlap {cmp.both}/{cmp.ledger_action_count} ledger, {cmp.both}/{cmp.api_action_count} API</>}
+      </Notice>
+
+      <h3 className="admin-eyebrow" style={{ marginTop: 12, marginBottom: 6 }}>Diagnosis</h3>
+      <ul style={{ fontSize: 13, lineHeight: 1.7, margin: 0, paddingLeft: 20 }}>
+        {diagnosisLines.map((l, i) => <li key={i}>{l}</li>)}
+      </ul>
+
+      <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Ledger shape</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+        <Bucket title="By source slug"              data={s.by_source_slug} />
+        <Bucket title="By ledger_status"            data={s.by_ledger_status} />
+        <Bucket title="By event_kind"               data={s.by_event_kind} />
+        <Bucket title="By currency"                 data={s.by_currency} />
+        <Bucket title="By idempotency prefix"       data={s.by_idempotency_prefix} />
+        <Bucket title="By source_detail.shared_id"  data={s.by_shared_id_in_source_detail} />
+      </div>
+
+      <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Date ranges</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+        <KV label="occurred_on" value={s.occurred_on_min && s.occurred_on_max ? `${s.occurred_on_min} → ${s.occurred_on_max}` : '—'} />
+        <KV label="first_seen_at" value={s.first_seen_min && s.first_seen_max ? `${s.first_seen_min} → ${s.first_seen_max}` : '—'} />
+        <KV label="recorded_at" value={s.recorded_at_min && s.recorded_at_max ? `${s.recorded_at_min} → ${s.recorded_at_max}` : '—'} />
+        <KV label="Distinct external_ref" value={s.distinct_external_refs.toLocaleString()} />
+        <KV label="Duplicate external_ref" value={s.duplicate_external_refs.toLocaleString()} warn={s.duplicate_external_refs > 0} />
+        <KV label="provider_payload present (in source_detail)" value={`${s.provider_payload_present_count.toLocaleString()} / ${s.total.toLocaleString()}`} />
+      </div>
+
+      <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Payout totals by status (minor units)</h3>
+      <Table
+        columns={[
+          { key: 'st', header: 'ledger_status', render: (r: StateCurrencyBucket) => <code>{r.state}</code> },
+          { key: 'cc', header: 'Currency',      render: (r: StateCurrencyBucket) => <code>{r.currency}</code> },
+          { key: 'am', header: 'Sum amount_minor', className: 'col-num', render: (r: StateCurrencyBucket) => r.sum.toLocaleString() },
+        ]}
+        rows={toStateCurrencyRows(s.payout_total_minor_by_status)}
+        empty="No payout totals."
+      />
+
+      {cmp && (
+        <>
+          <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Ledger ↔ live-API comparison (by Action.Id = external_ref)</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+            <KV label="API Action count" value={cmp.api_action_count.toLocaleString()} />
+            <KV label="Ledger Action count" value={cmp.ledger_action_count.toLocaleString()} />
+            <KV label="Both (overlap)" value={cmp.both.toLocaleString()} />
+            <KV label="Only in API" value={cmp.only_api.toLocaleString()} warn={cmp.only_api > 0} />
+            <KV label="Only in ledger" value={cmp.only_ledger.toLocaleString()} warn={cmp.only_ledger > 0} />
+          </div>
+        </>
+      )}
+
+      <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>network_job_runs (last 20 matching impact/epn)</h3>
+      {audit.recent_impact_job_runs.length === 0 ? (
+        <p className="col-dim" style={{ fontSize: 12.5, margin: 0 }}>No rows.</p>
+      ) : (
+        <Table
+          columns={[
+            { key: 'n',  header: 'job_name', render: (r: JobRunDisplay) => <code style={{ fontSize: 11 }}>{r.job_name}</code> },
+            { key: 's',  header: 'status',   render: (r: JobRunDisplay) => <code>{r.status}</code> },
+            { key: 'st', header: 'started_at', render: (r: JobRunDisplay) => <code style={{ fontSize: 11 }}>{r.started_at ?? '—'}</code> },
+            { key: 'f',  header: 'finished_at', render: (r: JobRunDisplay) => <code style={{ fontSize: 11 }}>{r.finished_at ?? '—'}</code> },
+            { key: 'ex', header: 'examined',   className: 'col-num', render: (r: JobRunDisplay) => (r.rows_examined ?? 0).toLocaleString() },
+            { key: 'in', header: 'inserted',   className: 'col-num', render: (r: JobRunDisplay) => (r.rows_inserted ?? 0).toLocaleString() },
+            { key: 'up', header: 'updated',    className: 'col-num', render: (r: JobRunDisplay) => (r.rows_updated ?? 0).toLocaleString() },
+            { key: 'rj', header: 'rejected',   className: 'col-num', render: (r: JobRunDisplay) => (r.rows_rejected ?? 0).toLocaleString() },
+            { key: 'er', header: 'error',      render: (r: JobRunDisplay) => r.error_summary ? <code style={{ fontSize: 11 }}>{r.error_summary}</code> : <span className="col-dim">—</span> },
+          ]}
+          rows={audit.recent_impact_job_runs.map((r) => ({ ...r }))}
+          empty=""
+        />
+      )}
+
+      <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>network_settings (impact/epn keys)</h3>
+      {audit.impact_settings_rows.length === 0 ? (
+        <p className="col-dim" style={{ fontSize: 12.5, margin: 0 }}>
+          No row. The server action&apos;s <code>upsert</code> on <code>impact_last_backfill</code> never succeeded.
+        </p>
+      ) : (
+        <Table
+          columns={[
+            { key: 'k', header: 'key',        render: (r: SettingsDisplay) => <code>{r.key}</code> },
+            { key: 'u', header: 'updated_at', render: (r: SettingsDisplay) => <code style={{ fontSize: 11 }}>{r.updated_at ?? '—'}</code> },
+            { key: 'v', header: 'value (summary)', render: (r: SettingsDisplay) => <code style={{ fontSize: 11 }}>{r.value_summary}</code> },
+          ]}
+          rows={audit.impact_settings_rows.map((r, i) => ({ ...r, id: `${i}` }))}
+          empty=""
+        />
+      )}
+
+      <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>network_audit_log (last 15 matching impact/epn)</h3>
+      {audit.recent_impact_audit_log.length === 0 ? (
+        <p className="col-dim" style={{ fontSize: 12.5, margin: 0 }}>No matching entries.</p>
+      ) : (
+        <Table
+          columns={[
+            { key: 't', header: 'occurred_at', render: (r: AuditLogDisplay) => <code style={{ fontSize: 11 }}>{r.occurred_at ?? '—'}</code> },
+            { key: 'a', header: 'actor', render: (r: AuditLogDisplay) => <code style={{ fontSize: 11 }}>{r.actor ?? '—'}</code> },
+            { key: 'c', header: 'action', render: (r: AuditLogDisplay) => <code style={{ fontSize: 11 }}>{r.action ?? '—'}</code> },
+            { key: 'g', header: 'target', render: (r: AuditLogDisplay) => <code style={{ fontSize: 11 }}>{r.target ?? '—'}</code> },
+            { key: 's', header: 'summary', render: (r: AuditLogDisplay) => <code style={{ fontSize: 11 }}>{r.summary}</code> },
+          ]}
+          rows={audit.recent_impact_audit_log.map((r) => ({ ...r }))}
+          empty=""
+        />
+      )}
+
+      {audit.warnings.length > 0 && (
+        <ul style={{ fontSize: 12.5, lineHeight: 1.6, margin: '12px 0 0', paddingLeft: 20, color: 'var(--admin-text-muted)' }}>
+          {audit.warnings.map((w, i) => <li key={i}>{w}</li>)}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+function Bucket({ title, data }: { title: string; data: Record<string, number> }) {
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  return (
+    <div style={{ border: '1px solid var(--admin-border)', borderRadius: 'var(--radius-md)', padding: 10, background: 'var(--admin-surface)' }}>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--admin-text-subtle)', fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      {entries.length === 0 ? (
+        <span className="col-dim" style={{ fontSize: 12 }}>empty</span>
+      ) : (
+        <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 16, lineHeight: 1.6 }}>
+          {entries.map(([k, n]) => (
+            <li key={k}><code>{k}</code> × {n.toLocaleString()}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+interface StateCurrencyBucket { state: string; currency: string; sum: number; id: string }
+function toStateCurrencyRows(data: Record<string, Record<string, number>>): StateCurrencyBucket[] {
+  const rows: StateCurrencyBucket[] = [];
+  let i = 0;
+  for (const state of Object.keys(data).sort()) {
+    const ccyMap = data[state] ?? {};
+    for (const ccy of Object.keys(ccyMap).sort()) {
+      rows.push({ state, currency: ccy, sum: ccyMap[ccy] ?? 0, id: `${i++}` });
+    }
+  }
+  return rows;
+}
+
+type JobRunDisplay = CurrentLedgerAudit['recent_impact_job_runs'][number] & { id?: string };
+type SettingsDisplay = CurrentLedgerAudit['impact_settings_rows'][number] & { id?: string };
+type AuditLogDisplay = CurrentLedgerAudit['recent_impact_audit_log'][number] & { id?: string };
 
 function KV({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
