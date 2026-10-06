@@ -1,8 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getCardBundleByName } from '@/server/read';
-import { searchCards } from '@/server/search';
+import {
+  getCardBundleByNameStrict,
+  resolveCardNameStrict,
+  getCardsInSameSetStrict,
+  getOtherCharacterCardsStrict,
+  getCardsBySameRarityStrict,
+  getCardsBySameInkStrict,
+} from '@/server/strict';
 import { canonicalFor } from '@/lib/seo';
 import { slugifyCardName } from '@/lib/lorcana/slug';
 import { pickCardImage } from '@/lib/lorcana/image';
@@ -11,41 +17,51 @@ import { TREATMENT_DISPLAY_ORDER } from '@/lib/lorcana/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
 import EffectText from '@/components/card/EffectText';
-import EbayFindButton, { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
-import { resolveLorcanaMarketplace } from '@/lib/lorcana/ebay';
-import { getRequestCountry } from '@/lib/lorcana/request-country';
-import LogicalAddToCollection, {
-  type PrintingPick,
-} from '@/components/card/LogicalAddToCollection';
+import { EbayAffiliateDisclosure } from '@/components/EbayFindButton';
+import { LogicalCardActionsClient } from '@/components/card/LogicalCardActionsClient';
+import { type PrintingPick } from '@/components/card/LogicalAddToCollection';
 import AskLorcanaPanel from '@/components/card/AskLorcanaPanel';
 import CardFaq from '@/components/card/CardFaq';
 import { buildLogicalCardFaq } from '@/lib/card-faq';
-import { getCurrentUser } from '@collector-network/auth';
-import LogicalWatch, { type WatchablePrinting } from '@/components/card/LogicalWatch';
-import { watchedPrintingIdsFor } from '@/server/watchlist';
 import CardInternalLinks from '@/components/card/CardInternalLinks';
-import {
-  getCardsInSameSet,
-  getOtherCharacterCards,
-  getCardsBySameRarity,
-  getCardsBySameInk,
-} from '@/server/internal-links';
 import type { LcCardView, LcPrintingView } from '@/server/read';
-import { getLorcanaCurrency } from '@/lib/currency-server';
+import { DEFAULT_CURRENCY } from '@/lib/currency';
 
-// Logical / gameplay card page. Shows every printing across every set
-// grouped by treatment.
+// Logical / gameplay card page. Shows every printing across every
+// set grouped by treatment.
+//
+// ISR (P1c):
+//   revalidate = 86_400 — 24h cache
+//   dynamicParams = true — unknown slugs resolve on-demand
+//   generateStaticParams() = [] — zero mass prerender at build; the
+//     ~2-3k logical-card URL universe fills the cache from real
+//     traffic.
+//
+// User / request-specific state (auth, watchlist, currency,
+// request country) is lifted out into LogicalCardActionsClient so
+// the cached HTML only carries globally cacheable catalogue facts.
+// TreatmentPanel forwards currency as-is to TreatmentPrice, which
+// is cookie-aware (P1a) and listens to the
+// lorcana:currency-changed event.
+//
+// All factual helpers go through src/server/strict.ts:
+//   - React.cache dedup across generateMetadata + page body
+//     (resolveCardName + getCardBundleByName are called twice in
+//     the current Dynamic implementation)
+//   - 3 retries, 100 / 200 / 400 ms backoff
+//   - throw on persistent infra failure so a transient Supabase
+//     blip surfaces as a 5xx and NEVER poisons the ISR cache with
+//     a hollow page / cached false 404 / empty related-cards block
 
-export const revalidate = 900;
-export const dynamic = 'force-dynamic';
+export const revalidate = 86_400;
+export const dynamicParams = true;
 
-async function resolveCardName(slug: string): Promise<string | null> {
-  const naive = slug.replace(/-/g, ' ');
-  const bundle = await getCardBundleByName(naive);
-  if (bundle) return bundle.name;
-  const candidates = await searchCards(naive.slice(0, 40), 40);
-  const hit = candidates.find((c) => slugifyCardName(c.name) === slug);
-  return hit?.name ?? null;
+export function generateStaticParams(): { slug: string }[] {
+  // Intentionally empty — on-demand ISR only. The logical-card
+  // universe (~2-3k URLs) is large enough to make build-time
+  // prerendering a sustained Supabase load with marginal payoff
+  // over natural traffic warming.
+  return [];
 }
 
 export async function generateMetadata({
@@ -54,9 +70,9 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const resolvedName = await resolveCardName(slug);
+  const resolvedName = await resolveCardNameStrict(slug);
   if (!resolvedName) return { title: 'Card not found' };
-  const bundle = await getCardBundleByName(resolvedName);
+  const bundle = await getCardBundleByNameStrict(resolvedName);
   const heroCard = bundle ? pickHero(bundle.cards) : null;
   const rarityLabel = heroCard?.rarity.label ?? '';
   const setLabel = heroCard?.set?.name ?? '';
@@ -73,9 +89,9 @@ export default async function LogicalCardPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const resolvedName = await resolveCardName(slug);
+  const resolvedName = await resolveCardNameStrict(slug);
   if (!resolvedName) notFound();
-  const bundle = await getCardBundleByName(resolvedName);
+  const bundle = await getCardBundleByNameStrict(resolvedName);
   if (!bundle) notFound();
 
   const flat: Array<{ cardView: LcCardView; printingView: LcPrintingView }> = [];
@@ -99,19 +115,9 @@ export default async function LogicalCardPage({
     treatmentOrder.push({ label: entries[0]!.printingView.treatment.label, code, entries });
   }
 
-  // Read the auth session + currency preference once. Currency drives
-  // which native retail feed the per-treatment price row displays.
-  const currentUser = await getCurrentUser();
-  const currency = await getLorcanaCurrency();
-  //  Pick the eBay marketplace once, server-side, from the request
-  //  country header + currency hint. See lib/lorcana/ebay.ts for the
-  //  conservative resolution policy.
-  const country = await getRequestCountry();
-  const marketplace = resolveLorcanaMarketplace(country, currency);
-
-  // Materialise a flat list of every real printing the user could
-  // legitimately add to their collection. The LogicalAddToCollection
-  // picker uses this list — no default/fallback printing.
+  // Flat list of every real printing — the LogicalAddToCollection
+  // picker and the LogicalWatch picker share this shape. No default
+  // / fallback printing; the user always picks a real tcg_printing_id.
   const printingPicks: PrintingPick[] = flat.map(({ cardView, printingView }) => ({
     cardId: cardView.card.id,
     printingId: printingView.printing.id,
@@ -122,47 +128,35 @@ export default async function LogicalCardPage({
     collectorNumber: cardView.card.collector_number ?? null,
   }));
 
-  //  Watchlist identity mirrors the collection flow: single-printing
-  //  cards auto-select the one and only tcg_printing_id; multi-
-  //  printing cards force a picker where the user chooses the exact
-  //  treatment × finish × set combination they want to watch. The
-  //  initial "Watching" state per printing is computed in one round
-  //  trip via watchedPrintingIdsFor().
-  const watchedIds = currentUser
-    ? await watchedPrintingIdsFor(printingPicks.map((p) => p.printingId))
-    : new Set<string>();
-  const watchablePrintings: WatchablePrinting[] = printingPicks.map((p) => ({
-    ...p,
-    initialWatching: watchedIds.has(p.printingId),
-  }));
-
-  // Internal-linking data. Every query is capped + skipped-when-empty
-  // inside the component. We fan them out in parallel so the page
-  // stays snappy.
+  // Internal-linking data (strict). Each query is capped +
+  // skipped-when-empty inside the component. Fan out in parallel so
+  // the page stays snappy; strict wrappers mean a transient
+  // Supabase blip bubbles up as a 5xx rather than being cached as
+  // "no related cards" for 24 h.
   const isCharacter = heroCard.gamedata.cardType === 'character';
   const primaryInk = heroCard.gamedata.inks[0] ?? null;
   const [moreFromSet, otherCharacterCards, sameRarityCards, sameInkCards] =
     await Promise.all([
       heroCard.set?.id
-        ? getCardsInSameSet(heroCard.set.id, heroCard.card.id, 8)
+        ? getCardsInSameSetStrict(heroCard.set.id, heroCard.card.id, 8)
         : Promise.resolve([]),
       isCharacter
-        ? getOtherCharacterCards(bundle.name, heroCard.card.id, 8)
+        ? getOtherCharacterCardsStrict(bundle.name, heroCard.card.id, 8)
         : Promise.resolve([]),
       heroCard.card.rarity
-        ? getCardsBySameRarity(heroCard.card.rarity, heroCard.card.id, 6)
+        ? getCardsBySameRarityStrict(heroCard.card.rarity, heroCard.card.id, 6)
         : Promise.resolve([]),
       primaryInk
-        ? getCardsBySameInk(primaryInk, heroCard.card.id, 6)
+        ? getCardsBySameInkStrict(primaryInk, heroCard.card.id, 6)
         : Promise.resolve([]),
     ]);
 
-  // Compute deterministic FAQ from the bundle. All inputs come from
-  // data already loaded above — never a fresh DB round trip.
-  //
-  // Price band is still used by AskLorcana's context summary and the
-  // product JSON-LD. We derive it strictly within the dominant currency
-  // so we never mix USD + EUR into one headline.
+  // Deterministic FAQ from already-loaded bundle. Zero fresh DB
+  // round-trips. Built with DEFAULT_CURRENCY so the cached HTML
+  // and the FAQPage JSON-LD are both globally valid; the live
+  // treatment panels on this page re-render in the user's chosen
+  // currency via TreatmentPrice (cookie + lorcana:currency-changed
+  // event).
   const allPrices: Array<{ amount: number; currency: string }> = [];
   for (const { printingView } of flat) {
     const p = printingView.pricing?.market;
@@ -181,9 +175,6 @@ export default async function LogicalCardPage({
   const dearestPrice = inCurrency.length
     ? { amount: Math.max(...inCurrency.map((p) => p.amount)), currency: dominant! } : null;
 
-  // Graded row count derived from already-loaded printing pricing —
-  // printing-attributed only (the only graded data on the bundle). The
-  // logical FAQ labels these honestly as card-family level.
   let bundleGradedCount = 0;
   for (const { printingView } of flat) {
     bundleGradedCount += printingView.pricing?.graded?.length ?? 0;
@@ -195,7 +186,7 @@ export default async function LogicalCardPage({
     flatPrintings: flat,
     hero: heroCard,
     gradedRowCount: bundleGradedCount,
-    currency,
+    currency: DEFAULT_CURRENCY,
   });
 
   const canonical = canonicalFor(`/card/${slugifyCardName(bundle.name)}`);
@@ -218,6 +209,8 @@ export default async function LogicalCardPage({
     description: `${bundle.name}, a Disney Lorcana card${heroCard.set ? ` from ${heroCard.set.name}` : ''}${heroCard.rarity.label ? ` at ${heroCard.rarity.label} rarity` : ''}. Every printing and treatment priced individually.`,
   } as const;
 
+  const returnPath = `/card/${slugifyCardName(bundle.name)}`;
+
   return (
     <div className="lc-container lc-section">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
@@ -229,10 +222,6 @@ export default async function LogicalCardPage({
         setName={heroCard.set?.name}
       />
       {isCharacter && (() => {
-        //  "View all [Character] cards" — pulls the base-character
-        //  slug by stripping the " - Subtitle" tail off bundle.name.
-        //  Only emitted for cardType='character' bundles so Items,
-        //  Actions, Songs and Locations never see a stray link.
         const sep = bundle.name.indexOf(' - ');
         const baseName = sep > 0 ? bundle.name.slice(0, sep).trim() : bundle.name.trim();
         const charSlug = slugifyCardName(baseName);
@@ -304,68 +293,14 @@ export default async function LogicalCardPage({
             </div>
           </div>
 
-          {/* Primary action bar: Add-to-Collection (per-printing) +
-              Watch (per-card convenience). The Watch button toggles
-              watchlist state for the DEFAULT/first printing in the
-              bundle; users who need to watch a specific treatment can
-              open the exact printing page. Labelled "Watch this card"
-              so the scope is unambiguous. Signed-out state falls
-              through to /sign-in with a returnTo. */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}
-          >
-            <LogicalAddToCollection
-              cardName={bundle.name}
-              isSignedIn={Boolean(currentUser)}
-              returnPath={`/card/${slugifyCardName(bundle.name)}`}
-              printings={printingPicks}
-            />
-            {watchablePrintings.length > 0 ? (
-              <LogicalWatch
-                cardName={bundle.name}
-                isSignedIn={Boolean(currentUser)}
-                returnPath={`/card/${slugifyCardName(bundle.name)}`}
-                printings={watchablePrintings}
-              />
-            ) : null}
-          </div>
-          {!currentUser && (
-            <p
-              style={{
-                margin: '-4px 0 0',
-                fontSize: 12,
-                color: 'var(--text-muted)',
-              }}
-            >
-              <Link
-                href={`/sign-in?returnTo=${encodeURIComponent(`/card/${slugifyCardName(bundle.name)}`)}`}
-                style={{ color: 'var(--text-muted)' }}
-              >
-                Sign in
-              </Link>{' '}
-              to add to collection or watchlist.
-            </p>
-          )}
-
-          {/* Secondary affiliate CTA. Small size; long disclosure lives
-              at the bottom of the page (EbayAffiliateDisclosure). */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <EbayFindButton
-              cardName={bundle.name}
-              setName={heroCard.set?.name ?? null}
-              setCode={heroCard.set?.code ?? null}
-              collectorNumber={heroCard.card.collector_number ?? null}
-              marketplace={marketplace}
-              source="lorcana-card"
-              size="sm"
-              label={`Find ${bundle.name} on eBay`}
-            />
-          </div>
+          <LogicalCardActionsClient
+            cardName={bundle.name}
+            returnPath={returnPath}
+            heroSetName={heroCard.set?.name ?? null}
+            heroSetCode={heroCard.set?.code ?? null}
+            heroCollectorNumber={heroCard.card.collector_number ?? null}
+            printings={printingPicks}
+          />
 
           <CardStatGrid gamedata={heroCard.gamedata} classifications={heroCard.gamedata.classifications} />
 
@@ -413,7 +348,6 @@ export default async function LogicalCardPage({
                   cardView={cardView}
                   printingView={printingView}
                   linkToPrinting
-                  currency={currency}
                 />
               ))}
             </div>
