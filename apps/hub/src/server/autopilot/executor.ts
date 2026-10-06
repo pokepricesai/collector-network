@@ -25,6 +25,7 @@ import type {
   TemplateSection,
 } from './types';
 import { getTemplate } from './templates';
+import { parseDraftJson } from './output-parser';
 
 export interface ExecuteParams {
   mode: ExecutionMode;
@@ -46,14 +47,20 @@ export async function executeDraft(sb: SupabaseClient, params: ExecuteParams): P
 function executeFixture(model: SelectedModel, pack: EvidencePackPayload): ModelExecutionResult {
   const t0 = Date.now();
   const template = getTemplate(pack.topic.kind);
-  const draft = buildFixtureDraft(template.sections, pack);
+  const rawDraft = buildFixtureDraft(template.sections, pack);
 
-  // Fake-but-plausible token counts so the budget-preview display can
-  // show representative numbers. Based on a ~1500-word article:
-  //  * input ~ 5000 (evidence pack + voice + system)
-  //  * output ~ 2500
-  // Cache write happens the first time per voice; cache read on reuse.
-  // We don't reserve budget in fixture mode so these are display-only.
+  // Both FIXTURE and REAL paths go through the SAME parser so there
+  // is no fixture-only shortcut. If the deterministic fixture ever
+  // produces something that doesn't validate against the DraftOutput
+  // schema, we fail loudly rather than silently diverging from what
+  // the real path would do.
+  const parsed = parseDraftJson(JSON.stringify(rawDraft));
+  if (!parsed.ok) {
+    throw new Error(`Fixture draft failed schema validation: ${parsed.errors.map((e) => `${e.path}: ${e.message}`).join('; ')}`);
+  }
+
+  // Representative token counts for the budget-preview display. We
+  // don't reserve budget in fixture mode so these are display-only.
   const tokens = { input: 5000, output: 2500, cache_read: 0, cache_write: 1200 };
 
   return {
@@ -61,8 +68,8 @@ function executeFixture(model: SelectedModel, pack: EvidencePackPayload): ModelE
     model: model.model,
     provider: model.provider,
     tokens,
-    cost_usd: 0,                                 // fixture is free; the real cost is in cost-estimator
-    draft,
+    cost_usd: 0,
+    draft: parsed.draft,
     latency_ms: Date.now() - t0,
   };
 }

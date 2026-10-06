@@ -238,6 +238,61 @@ export default async function AutopilotPreviewPage() {
         </div>
       </Panel>
 
+      <Panel title="5b. Prompt (deterministic)" eyebrow="What Checkpoint C would send to the model">
+        {preview.prompt ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+              <KV label="Prompt version" value={preview.prompt.prompt_version} />
+              <KV label="Prompt hash (sha256 prefix)" value={preview.prompt.prompt_hash.slice(0, 16) + '…'} />
+              <KV label="Estimated input tokens" value={preview.prompt.estimated_input_tokens.toLocaleString()} />
+              <KV label="Output limit" value={preview.prompt.max_output_tokens.toString()} />
+              <KV label="Approved internal links" value={preview.prompt.approved_link_count.toString()} />
+            </div>
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Full assembled prompt (system + user)</summary>
+              <h4 className="admin-eyebrow" style={{ marginTop: 10 }}>System</h4>
+              <pre style={{ background: 'var(--admin-surface-strong)', padding: 10, borderRadius: 6, fontSize: 11, maxHeight: 260, overflow: 'auto' }}>{preview.prompt.system}</pre>
+              <h4 className="admin-eyebrow" style={{ marginTop: 10 }}>User</h4>
+              <pre style={{ background: 'var(--admin-surface-strong)', padding: 10, borderRadius: 6, fontSize: 11, maxHeight: 260, overflow: 'auto' }}>{preview.prompt.user}</pre>
+            </details>
+          </>
+        ) : (
+          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>Prompt not assembled — pipeline stopped before this stage.</p>
+        )}
+      </Panel>
+
+      <Panel title="5c. External extraction" eyebrow="Fetched source text (research only, not reproduced)">
+        {preview.extraction.length === 0 ? (
+          <p className="col-dim" style={{ fontSize: 13, margin: 0 }}>No external extraction run (selected candidate had no external signals).</p>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
+              <KV label="Signals extracted" value={String(preview.extraction.filter((e) => e.success).length)} />
+              <KV label="Signals failed" value={String(preview.extraction.filter((e) => !e.success).length)} warn={preview.extraction.some((e) => !e.success)} />
+            </div>
+            <Table
+              columns={[
+                { key: 's', header: 'Status',   render: (r: ExtRow) => r.success ? <StatusBadge state="success" label="ok" /> : <StatusBadge state="failed" label="failed" /> },
+                { key: 'u', header: 'URL',      render: (r: ExtRow) => <code style={{ fontSize: 10 }}>{r.url.length > 60 ? r.url.slice(0, 57) + '…' : r.url}</code> },
+                { key: 'h', header: 'Hash',     render: (r: ExtRow) => r.content_hash ? <code style={{ fontSize: 10 }}>{r.content_hash.slice(0, 12)}…</code> : <span className="col-dim">—</span> },
+                { key: 'p', header: 'Preview',  render: (r: ExtRow) => r.extracted_text
+                  ? <span style={{ fontSize: 11 }}>{r.extracted_text.slice(0, 180)}…</span>
+                  : <span className="col-dim">{r.reason ?? '—'}</span> },
+              ]}
+              rows={preview.extraction.map((e, i) => ({
+                id: i,
+                success: e.success,
+                url: e.url,
+                content_hash: e.content_hash,
+                extracted_text: e.extracted_text,
+                reason: e.reason,
+              }))}
+              empty=""
+            />
+          </>
+        )}
+      </Panel>
+
       <Panel title="6. Generation plan" eyebrow="What the paid run would do">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
           <KV label="Template" value={preview.pipeline.opportunity.template_id} />
@@ -384,6 +439,7 @@ interface LinkRow { id: number; url: string; anchors: string[]; reason: string; 
 interface QARow { id: number; severity: string; check: string; message: string }
 interface CandRow { id: string; rank: number; kind: 'internal_idea' | 'external_cluster'; score: number; template_id: string; decision: string; working_title: string; tiers: string[] }
 interface ExtSrcRow { id: number; tier: string; publisher: string; published_at: string | null; headline: string; url: string }
+interface ExtRow { id: number; success: boolean; url: string; content_hash?: string; extracted_text?: string; reason?: string }
 
 function KV({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (

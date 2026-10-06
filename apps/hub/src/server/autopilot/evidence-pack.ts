@@ -52,9 +52,15 @@ export interface BuildPackInput {
   date_range_days: number;
   // Caller may inject already-discovered external signals; the pack
   // builder promotes them into the ExternalSource shape the AI reads.
-  // In Checkpoint B.1 the discovery engine populates this on behalf
-  // of the orchestrator.
   external_signals?: DiscoveredSignal[];
+  // Facts extracted per signal URL — populated by external-extraction.
+  // Keyed by signal URL so the signalToSource conversion can enrich
+  // the ExternalSource with extracted summary + og_image.
+  extracted_by_url?: Map<string, { extracted_text: string; og_image_url: string | null; published_at: string | null }>;
+  // Approved internal-link candidates from the internal-link engine.
+  // When provided, the pack's `internal_links` is populated from
+  // these instead of the fetcher's placeholder [].
+  approved_internal_links?: EvidenceInternalLink[];
   budget: {
     max_cost_usd: number;
     projected_draft_cost_usd: number;
@@ -76,8 +82,13 @@ export async function buildEvidencePack(sb: SupabaseClient, input: BuildPackInpu
     fetchInternalLinks(sb, input),
     fetchCommercialLinks(sb, input),
   ]);
-  const external_sources: ExternalSource[] = (input.external_signals ?? []).map(signalToSource);
+  const external_sources: ExternalSource[] = (input.external_signals ?? []).map((s) => signalToSource(s, input.extracted_by_url));
   const article_angle = deriveArticleAngle(input, external_sources, market_data.length > 0);
+  // If the orchestrator supplied real internal-link candidates, use
+  // them in place of the fetcher's placeholder.
+  const final_internal_links: EvidenceInternalLink[] = input.approved_internal_links && input.approved_internal_links.length > 0
+    ? input.approved_internal_links
+    : internal_links;
 
   const template = getTemplate(input.template_id);
   const payload: EvidencePackPayload = {
@@ -95,7 +106,7 @@ export async function buildEvidencePack(sb: SupabaseClient, input: BuildPackInpu
     market_data,
     search_data,
     related_pages,
-    internal_links,
+    internal_links: final_internal_links,
     existing_content,
     images,
     commercial_links,
@@ -160,12 +171,19 @@ export function evaluateEvidenceQuality(payload: EvidencePackPayload): EvidenceQ
   return { status, hold_reasons, warnings };
 }
 
-// Convert a discovered signal to an external source. Facts are left
-// empty in Checkpoint B.1 — the fetch step for the full page body
-// lands in Checkpoint C. For now we persist title + optional summary.
-function signalToSource(s: DiscoveredSignal): ExternalSource {
+// Convert a discovered signal to an external source. If the
+// extraction pass has already populated extracted_text for this URL,
+// use it as the summary and expose a few extracted "facts"
+// (deterministic sentence snippets) the writer may reference.
+function signalToSource(
+  s: DiscoveredSignal,
+  extracted: BuildPackInput['extracted_by_url'] | undefined,
+): ExternalSource {
   const tier: SourceTier = s.source_tier;
   const trust: 1 | 2 | 3 = tier === 'official' ? 1 : tier === 'secondary' ? 2 : 3;
+  const ext = extracted?.get(s.url);
+  const summary = ext?.extracted_text?.slice(0, 500) ?? s.summary;
+  const facts = ext?.extracted_text ? extractFacts(ext.extracted_text) : [];
   return {
     url: s.url,
     domain: s.domain,
@@ -173,13 +191,30 @@ function signalToSource(s: DiscoveredSignal): ExternalSource {
     source_tier: tier,
     trust_level: trust,
     official: tier === 'official',
-    published_at: s.published_at,
+    published_at: ext?.published_at ?? s.published_at,
     retrieved_at: s.retrieved_at,
     headline: s.title,
-    summary: s.summary,
-    og_image_url: null,
-    facts: [],
+    summary: summary ?? null,
+    og_image_url: ext?.og_image_url ?? null,
+    facts,
   };
+}
+
+// Deterministic fact-extractor: break extracted text into sentences
+// and pick the shortest substantive ones. Returns up to 6 facts.
+// Length-bounded so the pack doesn't balloon.
+function extractFacts(text: string): string[] {
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 40 && s.length <= 220);
+  // Prefer sentences containing dates / numbers / proper nouns.
+  const scored = sentences.map((s) => ({
+    s,
+    score: (/\d/.test(s) ? 2 : 0) + (/[A-Z][a-z]+/.test(s) ? 1 : 0),
+  }));
+  scored.sort((a, b) => b.score - a.score || a.s.length - b.s.length);
+  return scored.slice(0, 6).map((x) => x.s);
 }
 
 // Deterministic article angle derivation. The angle is what the

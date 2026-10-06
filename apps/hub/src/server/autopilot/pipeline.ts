@@ -27,6 +27,9 @@ import { executeDraft } from './executor';
 import { runDeterministicQA } from './qa';
 import { draftToBodyRich, type TiptapDoc } from './body-rich';
 import { runDiscovery, loadActiveSignals } from './discovery';
+import { buildInternalLinks } from './internal-links';
+import { assemblePrompt, loadVoiceSnapshot, type AssembledPrompt } from './prompt';
+import { extractSignalsForPack, type ExtractionResult } from './external-extraction';
 
 export interface PreviewParams {
   sb: SupabaseClient;
@@ -64,6 +67,14 @@ export interface PreviewResult {
     total_active_signals: number;
     enabled_sources: number;
   };
+  internal_links: {
+    outbound_count: number;
+    inbound_opportunity_count: number;
+    validation: Array<{ url: string; status: 'ok' | 'warning'; message: string }>;
+    outbound: Array<{ target_url: string; anchor_concepts: string[]; reason: string; priority: number }>;
+  };
+  prompt: AssembledPrompt | null;
+  extraction: ExtractionResult[];
 }
 
 const CHECKPOINT_B_MODE = 'fixture' as const;
@@ -86,6 +97,9 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
       stop_reason: stub.stop_reason,
       candidates: [],
       discovery: { cached: false, cache_age_minutes: null, sources_scanned: 0, signals_found: 0, signals_inserted: 0, errors: [], total_active_signals: 0, enabled_sources: 0 },
+      internal_links: { outbound_count: 0, inbound_opportunity_count: 0, validation: [], outbound: [] },
+      prompt: null,
+      extraction: [],
     };
   }
   const site = siteRow as { id: string; slug: string; name: string };
@@ -224,6 +238,9 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
       stop_reason: stub.stop_reason,
       candidates: [],
       discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
+      internal_links: { outbound_count: 0, inbound_opportunity_count: 0, validation: [], outbound: [] },
+      prompt: null,
+      extraction: [],
     };
   }
 
@@ -245,7 +262,35 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
       stop_reason: `Top candidate score ${chosen.opp.score.total} is below min_opportunity_score ${snap.global.min_opportunity_score}.`,
       candidates,
       discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
+      internal_links: { outbound_count: 0, inbound_opportunity_count: 0, validation: [], outbound: [] },
+      prompt: null,
+      extraction: [],
     };
+  }
+
+  // ─── Internal link engine ────────────────────────────────────
+  const linkEngine = await buildInternalLinks({
+    sb: params.sb,
+    site_slug: params.site_slug,
+    site_id: site.id,
+    working_title: chosen.opp.working_title,
+    primary_query: chosen.kind === 'internal_idea' ? ((chosen as { idea?: { primary_query: string | null } }).idea?.primary_query ?? null) : null,
+    candidate_url: null,
+  });
+
+  // ─── External extraction for the top signals of the chosen candidate ─
+  const extractionResults = chosen.kind === 'external_cluster'
+    ? await extractSignalsForPack(params.sb, chosen.signals_for_pack, params.site_slug, 3)
+    : [] as ExtractionResult[];
+  const extractedByUrl = new Map<string, { extracted_text: string; og_image_url: string | null; published_at: string | null }>();
+  for (const e of extractionResults) {
+    if (e.success && e.extracted_text) {
+      extractedByUrl.set(e.url, {
+        extracted_text: e.extracted_text,
+        og_image_url: e.og_image_url ?? null,
+        published_at: e.published_at ?? null,
+      });
+    }
   }
 
   // ─── Build evidence pack ─────────────────────────────────────
@@ -261,6 +306,8 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
     summary: chosen.kind === 'internal_idea' ? (chosen as { idea?: { summary: string | null } }).idea?.summary ?? null : chosen.signals_for_pack[0]?.summary ?? null,
     date_range_days: 30,
     external_signals: chosen.signals_for_pack,
+    extracted_by_url: extractedByUrl,
+    approved_internal_links: linkEngine.outbound,
     budget: {
       max_cost_usd: snap.global.max_cost_per_article_usd,
       projected_draft_cost_usd: 0,
@@ -301,8 +348,24 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
       stop_reason: `Evidence quality: held. Reasons: ${quality.hold_reasons.join(', ')}.`,
       candidates,
       discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
+      internal_links: {
+        outbound_count: linkEngine.outbound.length,
+        inbound_opportunity_count: linkEngine.inbound_opportunities.length,
+        validation: linkEngine.validation,
+        outbound: linkEngine.outbound.map((l) => ({ target_url: l.target_url, anchor_concepts: l.anchor_concepts, reason: l.reason, priority: l.priority })),
+      },
+      prompt: null,  // not assembled on held path
+      extraction: extractionResults,
     };
   }
+
+  // ─── Prompt assembly (deterministic, no AI call) ─────────────
+  const voice = await loadVoiceSnapshot(params.sb, site.id);
+  const prompt = assemblePrompt({
+    pack: packBuilt.payload,
+    voice,
+    approved_internal_links: linkEngine.outbound,
+  });
 
   const exec = await executeDraft(params.sb, { mode: CHECKPOINT_B_MODE, pack: packBuilt.payload });
   const bodyRich = draftToBodyRich(exec.draft);
@@ -349,6 +412,14 @@ export async function previewPipeline(params: PreviewParams): Promise<PreviewRes
     stop_reason: hold_reasons.length > 0 ? `Pipeline held. Reasons: ${hold_reasons.join(', ')}.` : null,
     candidates,
     discovery: { ...discoveryToSummary(discovery), total_active_signals: signals.length, enabled_sources: enabledSources },
+    internal_links: {
+      outbound_count: linkEngine.outbound.length,
+      inbound_opportunity_count: linkEngine.inbound_opportunities.length,
+      validation: linkEngine.validation,
+      outbound: linkEngine.outbound.map((l) => ({ target_url: l.target_url, anchor_concepts: l.anchor_concepts, reason: l.reason, priority: l.priority })),
+    },
+    prompt,
+    extraction: extractionResults,
   };
 }
 
@@ -418,7 +489,7 @@ function lexicalOverlap(a: string, b: string): number {
   return union === 0 ? 0 : inter / union;
 }
 
-function emptyPreview(reason: string, cap: number): Omit<PreviewResult, 'candidates' | 'discovery'> {
+function emptyPreview(reason: string, cap: number): Omit<PreviewResult, 'candidates' | 'discovery' | 'internal_links' | 'prompt' | 'extraction'> {
   const stub: PipelineResult = {
     mode: CHECKPOINT_B_MODE,
     outcome: 'held',
