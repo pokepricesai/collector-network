@@ -29,6 +29,14 @@ export function CurrencyToggle({ initial }: { initial: LorcanaCurrency }) {
         setCurrent(initial);
         return;
       }
+      // Fan out to currency-aware client islands on ISR pages
+      // (TreatmentPrice, FAQ, etc.) where router.refresh() just
+      // hits the cached RSC payload and would not re-render them.
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('lorcana:currency-changed', { detail: { currency: c } }),
+        );
+      }
       router.refresh();
     });
   }

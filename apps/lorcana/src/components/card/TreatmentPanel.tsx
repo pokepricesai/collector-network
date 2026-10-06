@@ -3,18 +3,24 @@ import type { LcPrintingView, LcCardView } from '@/server/read';
 import { buildEbaySearchUrl } from '@/lib/lorcana/ebay';
 import { buildPrintingSlug } from '@/lib/lorcana/slug';
 import TreatmentPrice from './TreatmentPrice';
-import { DEFAULT_CURRENCY, type LorcanaCurrency } from '@/lib/currency';
+import type { LorcanaCurrency } from '@/lib/currency';
 
 // A single treatment block — headline + price bucket + fingerprint +
 // eBay affiliate CTA. On the logical card page we render several of
 // these stacked; on the printing page we render only the current one
 // (larger).
+//
+// `currency` is forwarded verbatim: Dynamic routes (where the server
+// read the cookie) pass the resolved value; ISR routes pass
+// `undefined` so TreatmentPrice falls back to DEFAULT_CURRENCY on
+// first render and reads the cookie after mount, avoiding a
+// hydration mismatch on EUR-cookie visitors.
 
 export default function TreatmentPanel({
   cardView,
   printingView,
   linkToPrinting,
-  currency = DEFAULT_CURRENCY,
+  currency,
 }: {
   cardView: LcCardView;
   printingView: LcPrintingView;

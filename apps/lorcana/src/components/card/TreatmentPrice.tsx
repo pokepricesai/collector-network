@@ -1,32 +1,78 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import type { PrintingPricing } from '@collector-network/market-data';
 import { formatPrice } from '@/lib/lorcana/format-price';
 import { formatPrice as formatSelected } from '@/lib/currency';
 import { selectPreferredRetailQuote } from '@collector-network/market-data';
 import {
+  CURRENCY_COOKIE,
   CURRENCY_SOURCE_KEY,
   DEFAULT_CURRENCY,
+  isLorcanaCurrency,
   type LorcanaCurrency,
 } from '@/lib/currency';
 
 // Price summary for a single priced printing. Reads the caller's
 // PrintingPricing (retail + attribution='printing' graded) and renders
-// only the buckets that have data. Never mixes currencies. When
-// `currency` is supplied we ONLY consider retail rows in that currency's
-// native source (USD → TCGplayer, EUR → Cardmarket) — missing = show
-// "No current price", never silently fall back to the other market.
+// only the buckets that have data. Never mixes currencies.
+//
+// Client component so pages served from the ISR edge cache can swap
+// the display currency without baking it into the HTML. First render
+// matches the server HTML (DEFAULT_CURRENCY — no document.cookie
+// access on the server). Subsequent render reflects the real
+// lorcana_currency cookie read on mount.
+//
+// When `currency` is supplied we ONLY consider retail rows in that
+// currency's native source (USD → TCGplayer, EUR → Cardmarket) —
+// missing = show "No current price", never silently fall back to
+// the other market.
+
+function readCurrencyCookie(): LorcanaCurrency {
+  if (typeof document === 'undefined') return DEFAULT_CURRENCY;
+  const prefix = `${CURRENCY_COOKIE}=`;
+  const parts = document.cookie ? document.cookie.split(';') : [];
+  for (const raw of parts) {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith(prefix)) {
+      const value = decodeURIComponent(trimmed.slice(prefix.length));
+      if (isLorcanaCurrency(value)) return value;
+      return DEFAULT_CURRENCY;
+    }
+  }
+  return DEFAULT_CURRENCY;
+}
 
 export default function TreatmentPrice({
   pricing,
-  currency = DEFAULT_CURRENCY,
+  currency,
 }: {
   pricing: PrintingPricing;
+  /** Starting currency. Omit (or pass undefined) on ISR'd pages so
+   *  the component falls back to DEFAULT_CURRENCY on first render
+   *  and reads the cookie after mount. Pass a value on Dynamic
+   *  routes where the server already read the cookie. */
   currency?: LorcanaCurrency;
 }) {
-  const nativeSource = CURRENCY_SOURCE_KEY[currency];
+  const serverCurrency = currency ?? DEFAULT_CURRENCY;
+  const [resolved, setResolved] = useState<LorcanaCurrency>(serverCurrency);
+
+  useEffect(() => {
+    // Only override from the cookie when the caller did NOT already
+    // pass a currency (ISR mode). On Dynamic routes the server read
+    // the cookie itself and knows better than we do here.
+    if (currency !== undefined) return;
+    setResolved(readCurrencyCookie());
+    const onChange = () => setResolved(readCurrencyCookie());
+    window.addEventListener('lorcana:currency-changed', onChange);
+    return () => window.removeEventListener('lorcana:currency-changed', onChange);
+  }, [currency]);
+
+  const nativeSource = CURRENCY_SOURCE_KEY[resolved];
   const currencyScopedRetail = pricing.market.filter(
-    (q) => q.currency === currency && q.source === nativeSource,
+    (q) => q.currency === resolved && q.source === nativeSource,
   );
-  const preferred = selectPreferredRetailQuote(currencyScopedRetail, currency);
+  const preferred = selectPreferredRetailQuote(currencyScopedRetail, resolved);
 
   const rawFloor = pickLowestNonNull(
     pricing.raw.map((r) => ({ price: r.price, currency: r.currency })),
@@ -70,8 +116,8 @@ export default function TreatmentPrice({
       ) : (
         <PriceRow
           label="Retail"
-          headline={formatSelected(null, currency)}
-          detail={`Native ${currency} feed`}
+          headline={formatSelected(null, resolved)}
+          detail={`Native ${resolved} feed`}
           muted
         />
       )}
