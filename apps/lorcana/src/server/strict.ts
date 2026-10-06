@@ -1,11 +1,25 @@
 import 'server-only';
 import { cache } from 'react';
-import type { SupabaseClient } from '@collector-network/database';
+import {
+  getPrintingsBySet,
+  type SupabaseClient,
+  type TcgCard,
+  type TcgPrinting,
+} from '@collector-network/database';
 import { getLorcanaClient } from './client';
 import { getSetBundle, type LcSetBundle } from './browse';
 import { getCardBundleByCardId, type LcCardBundle } from './read';
 import { getPrintingHistory, type HistoryBundle } from './history';
+import {
+  getSetMarketForLorcana,
+  type LcSetMarket,
+} from './set-market';
+import {
+  getFinishSplitForSet,
+  type FinishSplit,
+} from './discovery';
 import type { TcgGradedRow } from './graded';
+import type { LorcanaCurrency } from '../lib/currency';
 
 // Strict + deduplicated factual helpers for ISR routes.
 //
@@ -119,5 +133,69 @@ export const getGradedRowsForAnchorStrict = cache(
   async (anchor: GradedAnchor): Promise<TcgGradedRow[]> =>
     withRetry(`getGradedRowsForAnchor(${anchor.printingId})`, () =>
       _getGradedRowsForAnchorStrict(anchor),
+    ),
+);
+
+// ─────────────────────────────────────────────────────────────────
+// P1b: /set/[slug] strict helpers
+// ─────────────────────────────────────────────────────────────────
+
+/** React.cache + retry wrapper around getPrintingsBySet. The
+ *  underlying helper already throws on error (via throwOnError in
+ *  packages/database). The P1b page used to `.catch(() => [])` at
+ *  call site — removing that at the page level and routing through
+ *  this strict variant means a Supabase outage bubbles up as a 5xx
+ *  rather than being baked into the ISR cache as "no printings". */
+export const getPrintingsBySetStrict = cache(
+  async (setId: string): Promise<TcgPrinting[]> =>
+    withRetry(`getPrintingsBySet(${setId})`, () =>
+      getPrintingsBySet(getLorcanaClient(), setId),
+    ),
+);
+
+interface SetMarketOpts {
+  setId: string;
+  cards: readonly TcgCard[];
+  currency: LorcanaCurrency;
+  preloadedPrintings: readonly TcgPrinting[];
+  topN?: number;
+}
+
+/** React.cache + retry wrapper around getSetMarketForLorcana. The
+ *  underlying helper's retail-quote fetches already throw on error
+ *  (Promise.all surfaces the first rejected batch). This variant
+ *  adds a bounded retry loop so a transient Supabase blip doesn't
+ *  surface as a cached zero-value set.
+ *
+ *  Keyed by setId + currency so a request that touches multiple
+ *  currencies (e.g. hypothetical future preview tooling) does not
+ *  share cached payloads across currencies. The current page only
+ *  calls this once per request with DEFAULT_CURRENCY. */
+export const getSetMarketForLorcanaStrict = cache(
+  async (opts: SetMarketOpts): Promise<LcSetMarket> =>
+    withRetry(`getSetMarketForLorcana(${opts.setId}, ${opts.currency})`, () =>
+      getSetMarketForLorcana(opts.setId, opts.cards, {
+        topN: opts.topN,
+        currency: opts.currency,
+        preloadedPrintings: opts.preloadedPrintings,
+      }),
+    ),
+);
+
+interface FinishSplitOpts {
+  setId: string;
+  cards: readonly TcgCard[];
+  preloadedPrintings: readonly TcgPrinting[];
+}
+
+/** React.cache + retry wrapper around getFinishSplitForSet. Keyed
+ *  by setId so the result is dedup'd within a request. The
+ *  underlying helper's `priceLookup` throws on retail-quote error
+ *  (Promise.all over chunked batches); we always pass preloaded
+ *  printings so the swallowing fallback path is never reached. */
+export const getFinishSplitForSetStrict = cache(
+  async (opts: FinishSplitOpts): Promise<FinishSplit> =>
+    withRetry(`getFinishSplitForSet(${opts.setId})`, () =>
+      getFinishSplitForSet(opts.cards, opts.preloadedPrintings),
     ),
 );
