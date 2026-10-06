@@ -50,17 +50,17 @@ type AuthState =
   | { status: 'user'; user: User };
 
 export function AccountChip() {
-  // Currency is read from the cookie — the same source of truth the
-  // server previously consulted. useState initializer runs once per
-  // mount so there is no flash of the wrong currency.
-  const [currency, setCurrency] = useState<LorcanaCurrency>(() =>
-    readCurrencyCookie(),
-  );
+  // Currency defaults to DEFAULT_CURRENCY on the first render so
+  // the client's initial VDOM matches the server HTML (which has
+  // no document.cookie access and will always SSR as DEFAULT). The
+  // real cookie is read in useEffect, so EUR visitors see one
+  // frame of USD before the toggle snaps to EUR — acceptable
+  // because EUR is a minority and the alternative is a hydration
+  // mismatch for every EUR-cookie visitor.
+  const [currency, setCurrency] = useState<LorcanaCurrency>(DEFAULT_CURRENCY);
   const [auth, setAuth] = useState<AuthState>({ status: 'loading' });
 
   useEffect(() => {
-    // Re-read on mount in case the SSR snapshot and the live cookie
-    // disagreed (document was not defined during SSR).
     setCurrency(readCurrencyCookie());
 
     let cancelled = false;
