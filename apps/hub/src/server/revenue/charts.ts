@@ -116,14 +116,19 @@ export async function revenueBySite(
   for (const s of (sites ?? []) as Array<{ id: string; slug: string; name: string }>) {
     siteById.set(s.id, { slug: s.slug, name: s.name });
   }
-  const key = (r: EpnLedgerRow) => `${r.site_id ?? 'unmapped'}:${r.currency}`;
+  // Rows with site_id = NULL (historical EPN with no SubId1) are
+  // grouped under a stable "site-not-attributable" bucket. Not a
+  // warning — just an honest label. Attribution of historical rows
+  // cannot be reconstructed; future SubId1 tagging will fix this
+  // going forward only.
+  const key = (r: EpnLedgerRow) => `${r.site_id ?? 'site-not-attributable'}:${r.currency}`;
   const map = new Map<string, SiteBreakdown>();
   for (const r of rows) {
     const k = key(r);
     const site = r.site_id ? siteById.get(r.site_id) : null;
     const b = map.get(k) ?? {
-      site_slug: site?.slug ?? 'unmapped',
-      site_name: site?.name ?? 'Unmapped',
+      site_slug: site?.slug ?? 'site-not-attributable',
+      site_name: site?.name ?? 'Site not attributable',
       currency: r.currency,
       confirmed_minor: 0,
       pending_minor: 0,

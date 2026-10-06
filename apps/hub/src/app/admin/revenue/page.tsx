@@ -12,6 +12,7 @@ import {
   clicksBySiteSince,
   conversionsBySourceSince,
   listRecentRevenueEvents,
+  grossSalesSince,
 } from '@/server/revenue/queries';
 import { pokepricesClickTotals } from '@/server/revenue/pokeprices-clicks';
 import { formatInt, formatMoneyMinor, formatDateOnly } from '@/lib/format';
@@ -41,6 +42,29 @@ function monthStartIso(): string {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString().slice(0, 10);
 }
 
+async function loadInvoiceSummary(
+  sb: Awaited<ReturnType<typeof requireAdmin>>['sb'],
+): Promise<{ totals: Record<string, { settled_minor: number; paid_minor: number; count: number }>; total_count: number }> {
+  try {
+    const { data, count } = await sb
+      .from('network_affiliate_invoices')
+      .select('currency, total_minor, payment_status', { count: 'exact' })
+      .limit(1000);
+    const rows = (data ?? []) as Array<{ currency: string; total_minor: number; payment_status: string | null }>;
+    const totals: Record<string, { settled_minor: number; paid_minor: number; count: number }> = {};
+    for (const row of rows) {
+      const t = totals[row.currency] ?? { settled_minor: 0, paid_minor: 0, count: 0 };
+      t.count += 1;
+      t.settled_minor += row.total_minor;
+      if (row.payment_status && /paid/i.test(row.payment_status)) t.paid_minor += row.total_minor;
+      totals[row.currency] = t;
+    }
+    return { totals, total_count: count ?? rows.length };
+  } catch {
+    return { totals: {}, total_count: 0 };
+  }
+}
+
 export default async function RevenuePage() {
   const { admin, sb } = await requireAdmin('/admin/revenue');
   const sites = await listNetworkSites(sb);
@@ -52,16 +76,19 @@ export default async function RevenuePage() {
 
   const [
     todayTotals, w7, w28, mtdTotals,
+    gross28,
     channels28, bySite28,
     clicks28, convs28,
     sponsor, pipeline, recent,
     ppClicks,
     monthly12m, chartBySite12m, chartBySource12m, rpkuPoints, observations, audit,
+    invoiceSummary,
   ] = await Promise.all([
     windowBookedTotals(sb, today),
     windowBookedTotals(sb, since7),
     windowBookedTotals(sb, since28),
     windowBookedTotals(sb, mtd),
+    grossSalesSince(sb, since28),
     revenueByChannelSince(sb, since28),
     revenueBySiteSince(sb, since28),
     clicksBySiteSince(sb, new Date(Date.now() - 28 * 86400000).toISOString()),
@@ -76,6 +103,7 @@ export default async function RevenuePage() {
     revenuePerThousandUsers(sb, '12m'),
     monthlyObservations(sb),
     fetchLedgerAudit(sb),
+    loadInvoiceSummary(sb),
   ]);
 
   // Union of all currencies that appear in any window. We iterate
@@ -122,7 +150,8 @@ export default async function RevenuePage() {
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/audit">EPN diagnostic</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/impact-audit">Impact API audit</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/entries">All entries</Link>
-            <Link className="ui-btn ui-btn--primary ui-btn--sm"   href="/admin/revenue/import">Import CSV</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/revenue/import">CSV (legacy)</Link>
+            <Link className="ui-btn ui-btn--primary ui-btn--sm"   href="/admin/revenue/impact-reset/execute">Impact ingest</Link>
           </span>
         }
       />
@@ -226,7 +255,7 @@ export default async function RevenuePage() {
         )).sort();
         if (chartCurrencies.length === 0 || rpkuPoints.length === 0) return null;
         return (
-          <Panel title="Revenue per 1,000 users" eyebrow="Efficiency" actions={<span className="col-dim" style={{ fontSize: 11.5 }}>(confirmed revenue ÷ summed daily active users) × 1,000</span>}>
+          <Panel title="Confirmed revenue per 1,000 active-user-days" eyebrow="Efficiency" actions={<span className="col-dim" style={{ fontSize: 11.5 }}>Denominator is a sum of daily actives — not deduplicated users</span>}>
             <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))` }}>
               {chartCurrencies.map((ccy) => (
                 <div key={ccy}>
@@ -272,16 +301,52 @@ export default async function RevenuePage() {
       <Panel title="Headline — separated by currency" eyebrow="Never combined">
         {currencies.map((ccy) => {
           const w = pick(w28, ccy);
-          const booked = w?.booked_minor ?? 0;
+          const confirmed = w?.booked_minor ?? 0;
           const pending = w?.pending_minor ?? 0;
-          const refunds = w?.refunds_minor ?? 0;
+          const attributed = confirmed + pending;
+          const reversedCount = w?.reversed_count ?? 0;
+          const grossRow = gross28.find((g) => g.currency === ccy);
+          const invRow = invoiceSummary.totals[ccy];
           return (
             <div key={ccy} style={{ marginBottom: 18 }}>
               <h3 className="admin-eyebrow" style={{ marginBottom: 8 }}>{ccy} · last 28 days</h3>
               <div className="metric-grid metric-grid--compact">
-                <MetricCard label={`REAL BOOKED (${ccy}, 28d)`} value={formatMoneyMinor(booked, ccy)} state={booked ? 'ok' : 'no-data'} helper="confirmed revenue events" />
-                <MetricCard label={`PENDING AFFILIATE (${ccy}, 28d)`} value={formatMoneyMinor(pending, ccy)} state={pending ? 'ok' : 'no-data'} helper="imported, awaiting payout" />
-                <MetricCard label={`REFUNDS / REVERSALS (${ccy}, 28d)`} value={formatMoneyMinor(refunds, ccy)} state={refunds ? 'ok' : 'no-data'} helper="stored negative, kept separate" />
+                <MetricCard
+                  label={`CONFIRMED COMMISSION (${ccy}, 28d)`}
+                  value={formatMoneyMinor(confirmed, ccy)}
+                  state={confirmed ? 'ok' : 'no-data'}
+                  helper="cleared / approved earnings"
+                />
+                <MetricCard
+                  label={`PENDING COMMISSION (${ccy}, 28d)`}
+                  value={formatMoneyMinor(pending, ccy)}
+                  state={pending ? 'ok' : 'no-data'}
+                  helper="currently attributed, awaiting approval"
+                />
+                <MetricCard
+                  label={`ATTRIBUTED COMMISSION (${ccy}, 28d)`}
+                  value={formatMoneyMinor(attributed, ccy)}
+                  state={attributed ? 'ok' : 'no-data'}
+                  helper="confirmed + pending current payout"
+                />
+                <MetricCard
+                  label={`GROSS SALES (${ccy}, 28d)`}
+                  value={grossRow ? formatMoneyMinor(grossRow.gross_minor, ccy) : null}
+                  state={grossRow ? 'ok' : 'no-data'}
+                  helper={grossRow ? `${formatInt(grossRow.action_count)} Actions` : 'sales attributed through EPN'}
+                />
+                <MetricCard
+                  label={`REVERSED (${ccy}, 28d)`}
+                  value={reversedCount ? `${reversedCount}` : null}
+                  state={reversedCount ? 'muted' : 'no-data'}
+                  helper="transactions reversed · historical loss value is not yet available"
+                />
+                <MetricCard
+                  label={`SETTLED / INVOICED (${ccy})`}
+                  value={invRow ? formatMoneyMinor(invRow.settled_minor, ccy) : null}
+                  state={invRow ? 'ok' : 'no-data'}
+                  helper={invRow ? `${invRow.count} invoice(s) · ${formatMoneyMinor(invRow.paid_minor, ccy)} paid` : 'invoice sync not run yet'}
+                />
               </div>
             </div>
           );
@@ -295,12 +360,13 @@ export default async function RevenuePage() {
           </div>
         </div>
         <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
-          Each currency is a separate line — the system never sums across them. SPONSOR MRR + PIPELINE are shown in GBP because they come from deal records you enter directly.
-          No FX conversion is applied to any revenue event; <code>amount_minor</code> + <code>currency</code> on each row are the frozen original values.
+          <strong>Attributed</strong> = confirmed + pending current payout. Confirmed and pending stay separate everywhere because approval lag makes them non-comparable without maturity context.
+          Reversed Actions carry <code>current_payout = 0</code>; the historical commission lost to those reversals is not yet available (ActionUpdates would need to expose OldPayout).
+          Each currency is a separate line — the system never sums across them.
         </p>
       </Panel>
 
-      <Panel title="Windows — booked by currency" eyebrow="Today / 7d / 28d / MTD">
+      <Panel title="Windows — commission by currency" eyebrow="Today / 7d / 28d / MTD">
         <Table
           rows={windows.flatMap((w) => currencies.map((ccy) => {
             const t = pick(w.totals, ccy);
@@ -309,9 +375,9 @@ export default async function RevenuePage() {
               window: w.label,
               label: w.from,
               currency: ccy,
-              booked: t?.booked_minor ?? 0,
+              confirmed: t?.booked_minor ?? 0,
               pending: t?.pending_minor ?? 0,
-              refunds: t?.refunds_minor ?? 0,
+              reversed_count: t?.reversed_count ?? 0,
               events: t?.event_count ?? 0,
             };
           }))}
@@ -319,39 +385,52 @@ export default async function RevenuePage() {
             { key: 'window', header: 'Window', render: (r) => <strong>{r.window}</strong> },
             { key: 'from', header: 'From', render: (r) => <code style={{ fontSize: 11 }}>{r.label}</code> },
             { key: 'currency', header: 'Ccy', render: (r) => <code>{r.currency}</code> },
-            { key: 'booked', header: 'Real booked', className: 'num', render: (r) => formatMoneyMinor(r.booked, r.currency) },
+            { key: 'confirmed', header: 'Confirmed', className: 'num', render: (r) => formatMoneyMinor(r.confirmed, r.currency) },
             { key: 'pending', header: 'Pending', className: 'num', render: (r) => formatMoneyMinor(r.pending, r.currency) },
-            { key: 'refunds', header: 'Refunds', className: 'num', render: (r) => formatMoneyMinor(r.refunds, r.currency) },
-            { key: 'events', header: 'Events', className: 'num', render: (r) => formatInt(r.events) },
+            { key: 'reversed', header: 'Reversed', className: 'num', render: (r) => r.reversed_count > 0 ? formatInt(r.reversed_count) : <span className="col-dim">0</span> },
+            { key: 'events', header: 'Actions', className: 'num', render: (r) => formatInt(r.events) },
           ]}
         />
+        <p className="col-dim" style={{ fontSize: 11, marginTop: 8 }}>
+          Reversed is a transaction count — not a monetary total. Historical commission lost to reversals is not yet available from the API (ActionUpdates does not currently expose OldPayout on these transitions).
+        </p>
       </Panel>
 
-      <Panel title="By source (28d)" eyebrow="Attribution">
+      <Panel title="By source (28d)" eyebrow="Attribution — campaign of origin">
         <Table
-          rows={channels28.map((c, i) => ({ id: i, ...c }))}
+          rows={channels28.map((c, i) => ({ id: i, ...c, attributed: c.confirmed_minor + c.pending_minor }))}
           columns={[
             { key: 'name', header: 'Source', render: (r) => <span><strong>{r.source_name}</strong> <code className="col-dim" style={{ fontSize: 11 }}>{r.source_slug}</code></span> },
             { key: 'kind', header: 'Kind', render: (r) => <StatusBadge state="info" label={r.kind.replace(/_/g, ' ')} /> },
             { key: 'currency', header: 'Ccy', render: (r) => <code>{r.currency}</code> },
-            { key: 'net', header: 'Net', className: 'num', render: (r) => formatMoneyMinor(r.net_minor, r.currency) },
-            { key: 'events', header: 'Events', className: 'num', render: (r) => formatInt(r.event_count) },
+            { key: 'confirmed', header: 'Confirmed', className: 'num', render: (r) => formatMoneyMinor(r.confirmed_minor, r.currency) },
+            { key: 'pending', header: 'Pending', className: 'num', render: (r) => formatMoneyMinor(r.pending_minor, r.currency) },
+            { key: 'attributed', header: 'Attributed total', className: 'num', render: (r) => formatMoneyMinor(r.attributed, r.currency) },
+            { key: 'reversed', header: 'Reversed', className: 'num', render: (r) => r.reversed_count > 0 ? formatInt(r.reversed_count) : <span className="col-dim">0</span> },
+            { key: 'events', header: 'Actions', className: 'num', render: (r) => formatInt(r.event_count) },
           ]}
-          empty={<EmptyState title="No source-attributed revenue yet (28d)" description={<>Use <Link href="/admin/revenue/import">Import CSV</Link> or <Link href="/admin/revenue/entries/new">Manual revenue</Link> to populate.</>} tone="muted" />}
+          empty={<EmptyState title="No affiliate revenue in the last 28 days" description={<>eBay EPN transactions sync automatically from the Impact API — see <Link href="/admin/revenue/impact-reset/execute">Impact ingest</Link>.</>} tone="muted" />}
         />
       </Panel>
 
-      <Panel title="By site (28d)" eyebrow="Per-site">
+      <Panel title="By site (28d)" eyebrow="Per-site · historical EPN rows have no site tag">
         <Table
-          rows={bySite28.map((s, i) => ({ id: i, ...s }))}
+          rows={bySite28.map((s, i) => ({ id: i, ...s, attributed: s.confirmed_minor + s.pending_minor }))}
           columns={[
-            { key: 'site', header: 'Site', render: (r) => r.site_name ? <strong>{r.site_name}</strong> : <span className="col-dim">Network-wide</span> },
+            { key: 'site', header: 'Site', render: (r) => r.site_name ? <strong>{r.site_name}</strong> : <span className="col-dim">Site not attributable</span> },
             { key: 'currency', header: 'Ccy', render: (r) => <code>{r.currency}</code> },
-            { key: 'net', header: 'Net', className: 'num', render: (r) => formatMoneyMinor(r.net_minor, r.currency) },
-            { key: 'events', header: 'Events', className: 'num', render: (r) => formatInt(r.event_count) },
+            { key: 'confirmed', header: 'Confirmed', className: 'num', render: (r) => formatMoneyMinor(r.confirmed_minor, r.currency) },
+            { key: 'pending', header: 'Pending', className: 'num', render: (r) => formatMoneyMinor(r.pending_minor, r.currency) },
+            { key: 'attributed', header: 'Attributed total', className: 'num', render: (r) => formatMoneyMinor(r.attributed, r.currency) },
+            { key: 'reversed', header: 'Reversed', className: 'num', render: (r) => r.reversed_count > 0 ? formatInt(r.reversed_count) : <span className="col-dim">0</span> },
+            { key: 'events', header: 'Actions', className: 'num', render: (r) => formatInt(r.event_count) },
           ]}
           empty={<span className="col-dim">No per-site revenue in the window.</span>}
         />
+        <p className="col-dim" style={{ fontSize: 11, marginTop: 8 }}>
+          Historical EPN Actions did not carry SubId1 attribution, so they roll up as "Site not attributable" — this is expected, not a data error.
+          Future outbound links will tag SubId1 with the originating site; attribution improves from that point forward only.
+        </p>
       </Panel>
 
       <Panel title="Click signal (28d)" eyebrow="Not revenue">
@@ -388,7 +467,12 @@ export default async function RevenuePage() {
         </div>
       </Panel>
 
-      <Panel title="Reconciled affiliate conversions by source (28d)" eyebrow="Imported rows">
+      <Panel title="Reconciled affiliate conversions by source (28d)" eyebrow="network_affiliate_conversions">
+        <p className="col-dim" style={{ fontSize: 12, margin: '0 0 10px' }}>
+          This table reads the <code>network_affiliate_conversions</code> table, which the legacy CSV importer populated.
+          The canonical Impact API ingest writes to <code>network_revenue_events</code> directly — so an empty row count here is <strong>not</strong>
+          evidence that affiliate revenue is missing. Transaction counts live in <strong>By source (28d)</strong> above.
+        </p>
         <Table
           rows={convs28.map((c, i) => ({ id: i, ...c }))}
           columns={[
@@ -396,7 +480,7 @@ export default async function RevenuePage() {
             { key: 'count', header: 'Conv.', className: 'num', render: (r) => formatInt(r.conversions) },
             { key: 'amount', header: 'Value', className: 'num', render: (r) => formatMoneyMinor(r.amount_minor, r.currency) },
           ]}
-          empty={<EmptyState title="No affiliate conversions imported yet" description={<>Use <Link href="/admin/revenue/import">Import CSV</Link> to add EPN rows.</>} tone="muted" />}
+          empty={<EmptyState title="network_affiliate_conversions is empty for this window" description={<>eBay EPN transactions sync automatically from the Impact API into <code>network_revenue_events</code>; this legacy conversions table is only populated by CSV import.</>} tone="muted" />}
         />
       </Panel>
 
@@ -406,10 +490,42 @@ export default async function RevenuePage() {
           columns={[
             { key: 'date', header: 'Date', render: (r) => <code>{formatDateOnly(r.occurred_on)}</code> },
             { key: 'source', header: 'Source', render: (r) => r.network_revenue_sources?.display_name ?? '—' },
-            { key: 'site', header: 'Site', render: (r) => r.network_sites?.name ?? <span className="col-dim">Network</span> },
-            { key: 'kind', header: 'Kind', render: (r) => <StatusBadge state={r.event_kind === 'revenue' ? 'success' : r.event_kind === 'refund' ? 'warning' : 'info'} label={r.event_kind} /> },
-            { key: 'amount', header: 'Amount', className: 'num', render: (r) => formatMoneyMinor(r.amount_minor, r.currency) },
-            { key: 'desc', header: 'Description', render: (r) => <span className="col-dim" style={{ fontSize: 12 }}>{r.description ?? r.external_ref ?? ''}</span> },
+            { key: 'site', header: 'Site', render: (r) => r.network_sites?.name ?? <span className="col-dim">Site not attributable</span> },
+            { key: 'status', header: 'Status', render: (r) => {
+              const status = r.ledger_status ?? (r.source_detail?.['status'] as string | undefined) ?? r.event_kind;
+              const normalised = String(status).toLowerCase();
+              const badgeState =
+                normalised === 'confirmed' ? 'success' :
+                normalised === 'pending'   ? 'warning' :
+                normalised === 'reversed' || normalised === 'reversal' || normalised === 'refund' ? 'failed' :
+                'info';
+              return <StatusBadge state={badgeState} label={normalised} />;
+            } },
+            { key: 'amount', header: 'Amount', className: 'num', render: (r) => {
+              const status = r.ledger_status ?? (r.source_detail?.['status'] as string | undefined);
+              const isPending = status === 'pending';
+              return (
+                <span style={{ opacity: isPending ? 0.7 : 1 }}>
+                  {formatMoneyMinor(r.amount_minor, r.currency)}
+                  {isPending && <span className="col-dim" style={{ fontSize: 10, marginLeft: 4 }}>pending</span>}
+                </span>
+              );
+            } },
+            { key: 'desc', header: 'Description', render: (r) => {
+              const sd = r.source_detail as Record<string, unknown> | null;
+              const payload = (sd?.['provider_payload'] ?? {}) as Record<string, unknown>;
+              const campaign = payload['CampaignName'] ?? sd?.['campaign_id'] ?? null;
+              const title = payload['SubId1'] ?? payload['SharedId'] ?? null;
+              const primary = r.description ?? (campaign && title ? `${campaign} · ${title}` : campaign ?? title);
+              return (
+                <span style={{ fontSize: 12 }}>
+                  {primary ? <span>{String(primary)}</span> : <span className="col-dim">—</span>}
+                  {r.external_ref && (
+                    <> <code className="col-dim" style={{ fontSize: 10, marginLeft: 4 }}>#{String(r.external_ref)}</code></>
+                  )}
+                </span>
+              );
+            } },
           ]}
           empty={<span className="col-dim">No revenue events yet.</span>}
         />

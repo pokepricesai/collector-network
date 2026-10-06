@@ -38,6 +38,8 @@ export interface RevenueEventRow {
   currency: string;
   description: string | null;
   external_ref: string | null;
+  ledger_status: string | null;
+  source_detail: Record<string, unknown> | null;
   recorded_at: string;
   network_revenue_sources: { slug: string; display_name: string; kind: string } | null;
   network_sites: { slug: string; name: string } | null;
@@ -50,7 +52,7 @@ export async function listRecentRevenueEvents(
   const { data, error } = await sb
     .from('network_revenue_events')
     .select(
-      'id, source_id, site_id, sponsorship_id, partner_id, event_kind, occurred_on, amount_minor, currency, description, external_ref, recorded_at, network_revenue_sources(slug, display_name, kind), network_sites(slug, name)',
+      'id, source_id, site_id, sponsorship_id, partner_id, event_kind, occurred_on, amount_minor, currency, description, external_ref, ledger_status, source_detail, recorded_at, network_revenue_sources(slug, display_name, kind), network_sites(slug, name)',
     )
     .order('occurred_on', { ascending: false })
     .order('recorded_at', { ascending: false })
@@ -101,7 +103,9 @@ export interface ChannelRevenueRow {
   source_name: string;
   kind: string;
   currency: string;
-  net_minor: number;
+  confirmed_minor: number;    // ledger_status = confirmed
+  pending_minor: number;      // ledger_status = pending
+  reversed_count: number;     // reversed Actions (amount = 0 in current state)
   event_count: number;
 }
 
@@ -112,12 +116,12 @@ export async function revenueByChannelSince(
   const { data, error } = await sb
     .from('network_revenue_events')
     .select(
-      'amount_minor, currency, source_id, network_revenue_sources(slug, display_name, kind)',
+      'amount_minor, currency, event_kind, ledger_status, source_detail, source_id, network_revenue_sources(slug, display_name, kind)',
     )
     .gte('occurred_on', sinceDate);
   if (error) throw new Error(`[revenue] revenueByChannelSince: ${error.message}`);
   const rows = (data ?? []) as unknown as Array<{
-    amount_minor: number; currency: string;
+    amount_minor: number; currency: string; event_kind: string; ledger_status: string | null; source_detail: Record<string, unknown> | null;
     network_revenue_sources: { slug: string; display_name: string; kind: string } | null;
   }>;
   const bucket = new Map<string, ChannelRevenueRow>();
@@ -127,21 +131,33 @@ export async function revenueByChannelSince(
     const key = `${src.slug}:${r.currency}`;
     const b = bucket.get(key) ?? {
       source_slug: src.slug, source_name: src.display_name, kind: src.kind,
-      currency: r.currency, net_minor: 0, event_count: 0,
+      currency: r.currency,
+      confirmed_minor: 0, pending_minor: 0, reversed_count: 0, event_count: 0,
     };
-    b.net_minor += r.amount_minor;
     b.event_count += 1;
+    const status = r.ledger_status ?? (r.source_detail?.['status'] as string | undefined);
+    if (r.event_kind === 'refund' || r.event_kind === 'reversal' || status === 'reversed') {
+      b.reversed_count += 1;
+    } else if (status === 'pending') {
+      b.pending_minor += r.amount_minor;
+    } else {
+      b.confirmed_minor += r.amount_minor;
+    }
     bucket.set(key, b);
   }
-  return Array.from(bucket.values()).sort((a, b) => b.net_minor - a.net_minor);
+  return Array.from(bucket.values()).sort(
+    (a, b) => (b.confirmed_minor + b.pending_minor) - (a.confirmed_minor + a.pending_minor),
+  );
 }
 
 export interface SiteRevenueRow {
   site_id: string | null;
   site_slug: string | null;
-  site_name: string | null;
+  site_name: string | null;        // null → "Site not attributable"
   currency: string;
-  net_minor: number;
+  confirmed_minor: number;
+  pending_minor: number;
+  reversed_count: number;
   event_count: number;
 }
 
@@ -151,27 +167,88 @@ export async function revenueBySiteSince(
 ): Promise<SiteRevenueRow[]> {
   const { data, error } = await sb
     .from('network_revenue_events')
-    .select('amount_minor, currency, site_id, network_sites(slug, name)')
+    .select('amount_minor, currency, event_kind, ledger_status, source_detail, site_id, network_sites(slug, name)')
     .gte('occurred_on', sinceDate);
   if (error) throw new Error(`[revenue] revenueBySiteSince: ${error.message}`);
   const rows = (data ?? []) as unknown as Array<{
-    amount_minor: number; currency: string; site_id: string | null;
+    amount_minor: number; currency: string; event_kind: string; ledger_status: string | null; source_detail: Record<string, unknown> | null; site_id: string | null;
     network_sites: { slug: string; name: string } | null;
   }>;
   const bucket = new Map<string, SiteRevenueRow>();
   for (const r of rows) {
-    const key = `${r.site_id ?? 'network'}:${r.currency}`;
+    const key = `${r.site_id ?? 'site-not-attributable'}:${r.currency}`;
     const b = bucket.get(key) ?? {
       site_id: r.site_id,
       site_slug: r.network_sites?.slug ?? null,
       site_name: r.network_sites?.name ?? null,
-      currency: r.currency, net_minor: 0, event_count: 0,
+      currency: r.currency,
+      confirmed_minor: 0, pending_minor: 0, reversed_count: 0, event_count: 0,
     };
-    b.net_minor += r.amount_minor;
     b.event_count += 1;
+    const status = r.ledger_status ?? (r.source_detail?.['status'] as string | undefined);
+    if (r.event_kind === 'refund' || r.event_kind === 'reversal' || status === 'reversed') {
+      b.reversed_count += 1;
+    } else if (status === 'pending') {
+      b.pending_minor += r.amount_minor;
+    } else {
+      b.confirmed_minor += r.amount_minor;
+    }
     bucket.set(key, b);
   }
-  return Array.from(bucket.values()).sort((a, b) => b.net_minor - a.net_minor);
+  return Array.from(bucket.values()).sort(
+    (a, b) => (b.confirmed_minor + b.pending_minor) - (a.confirmed_minor + a.pending_minor),
+  );
+}
+
+// Gross-sale value (the API's `Amount` field, not commission) for the
+// window, by currency. Pulled from source_detail.provider_payload.Amount
+// since the current canonical ingest does not promote the gross-sale
+// value to its own column. Deliberate: user asked not to change the
+// ingest in this phase.
+export interface GrossSalesRow { currency: string; gross_minor: number; action_count: number }
+
+export async function grossSalesSince(
+  sb: SupabaseClient,
+  sinceDate: string,
+): Promise<GrossSalesRow[]> {
+  // Scope to EPN sources — we don't track gross sale on non-affiliate
+  // revenue, and other sources may have arbitrary jsonb shapes.
+  const { data: srcs } = await sb
+    .from('network_revenue_sources')
+    .select('id, kind');
+  const epnIds = ((srcs ?? []) as Array<{ id: string; kind: string }>)
+    .filter((s) => s.kind === 'ebay_epn')
+    .map((s) => s.id);
+  if (epnIds.length === 0) return [];
+
+  const PAGE = 1000;
+  const totals = new Map<string, { gross_minor: number; action_count: number }>();
+  for (let offset = 0; offset < 50_000; offset += PAGE) {
+    const { data, error } = await sb
+      .from('network_revenue_events')
+      .select('currency, source_detail')
+      .in('source_id', epnIds)
+      .gte('occurred_on', sinceDate)
+      .range(offset, offset + PAGE - 1);
+    if (error) break;
+    const page = (data ?? []) as Array<{ currency: string; source_detail: Record<string, unknown> | null }>;
+    for (const r of page) {
+      const payload = (r.source_detail?.['provider_payload'] ?? {}) as Record<string, unknown>;
+      const amountRaw = payload['Amount'];
+      if (amountRaw == null || amountRaw === '') continue;
+      const n = typeof amountRaw === 'number' ? amountRaw : Number(amountRaw);
+      if (!Number.isFinite(n)) continue;
+      const minor = Math.round(n * 100);
+      if (!Number.isSafeInteger(minor)) continue;
+      const t = totals.get(r.currency) ?? { gross_minor: 0, action_count: 0 };
+      t.gross_minor += minor;
+      t.action_count += 1;
+      totals.set(r.currency, t);
+    }
+    if (page.length < PAGE) break;
+  }
+  return Array.from(totals.entries()).map(([currency, v]) => ({ currency, ...v }))
+    .sort((a, b) => b.gross_minor - a.gross_minor);
 }
 
 export interface ClickTotalsRow {
@@ -217,9 +294,10 @@ export interface ConversionTotalsRow {
 
 export interface WindowTotals {
   currency: string;
-  booked_minor: number;      // confirmed revenue events, excluding pending/reversal
-  pending_minor: number;     // conversion rows not yet reconciled to a revenue_event
-  refunds_minor: number;     // refunds + reversals
+  booked_minor: number;      // confirmed commission
+  pending_minor: number;     // pending commission (awaiting approval)
+  refunds_minor: number;     // sum of amount on reversed/refund rows (0 for canonical API rows)
+  reversed_count: number;    // transactions reversed (count — historical loss value may be unknown)
   event_count: number;
 }
 
@@ -238,11 +316,12 @@ export async function windowBookedTotals(
   const rows = (data ?? []) as Array<{ amount_minor: number; currency: string; event_kind: string; ledger_status: string | null; source_detail: Record<string, unknown> | null }>;
   const b = new Map<string, WindowTotals>();
   for (const r of rows) {
-    const bucket = b.get(r.currency) ?? { currency: r.currency, booked_minor: 0, pending_minor: 0, refunds_minor: 0, event_count: 0 };
+    const bucket = b.get(r.currency) ?? { currency: r.currency, booked_minor: 0, pending_minor: 0, refunds_minor: 0, reversed_count: 0, event_count: 0 };
     bucket.event_count += 1;
     const status = r.ledger_status ?? (r.source_detail?.['status'] as string | undefined);
     if (r.event_kind === 'refund' || r.event_kind === 'reversal' || status === 'reversed') {
       bucket.refunds_minor += r.amount_minor;
+      bucket.reversed_count += 1;
     } else if (status === 'pending') {
       bucket.pending_minor += r.amount_minor;
     } else {

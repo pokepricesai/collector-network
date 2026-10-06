@@ -64,6 +64,19 @@ export async function monthlyObservations(sb: SupabaseClient): Promise<Observati
   const twoAgoMonth = `${twoAgoDate.getUTCFullYear()}-${String(twoAgoDate.getUTCMonth() + 1).padStart(2, '0')}`;
 
   // ─ Revenue MoM, per currency ────────────────────────────────
+  //
+  // Affiliate commission has significant approval lag (typically
+  // 30-45 days before an Action transitions PENDING → APPROVED). A
+  // month that still has a lot of pending volume cannot be meaningfully
+  // compared against a fully-matured prior month on confirmed-only.
+  //
+  // Maturity rule: a month is "mature" iff its pending share of
+  // attributed commission (confirmed + pending) is below 15%. Only
+  // emit a confirmed MoM headline when BOTH months being compared
+  // are mature. Otherwise emit attribution-based observations that
+  // describe the actual commercial state ("September currently has
+  // £X attributed commission, of which £Y remains pending").
+  const MATURITY_PENDING_SHARE = 0.15;
   const byMonthCcy = new Map<string, { confirmed: number; pending: number; reversed: number }>();
   for (const m of monthly) {
     byMonthCcy.set(`${m.bucket}:${m.currency}`, {
@@ -72,19 +85,45 @@ export async function monthlyObservations(sb: SupabaseClient): Promise<Observati
       reversed: m.reversed_minor,
     });
   }
+  const isMature = (b: { confirmed: number; pending: number } | undefined): boolean => {
+    if (!b) return false;
+    const attributed = b.confirmed + b.pending;
+    if (attributed === 0) return false;
+    return (b.pending / attributed) < MATURITY_PENDING_SHARE;
+  };
+
   const currencies = Array.from(new Set(monthly.map((m) => m.currency)));
   for (const ccy of currencies) {
     const prev = byMonthCcy.get(`${prevMonth}:${ccy}`);
     const prior = byMonthCcy.get(`${twoAgoMonth}:${ccy}`);
-    if (!prev || !prior || prior.confirmed === 0) continue;
+    if (!prev || !prior) continue;
+
+    // Attribution snapshot for the recent month — always safe to emit.
+    const prevAttributed = prev.confirmed + prev.pending;
+    if (prevAttributed > 0) {
+      const pendingShare = Math.round((prev.pending / prevAttributed) * 100);
+      observations.push({
+        id: `attributed-${ccy}-${prevMonth}`,
+        tone: 'neutral',
+        metric_scope: 'revenue',
+        headline: `${monthLabel(prevMonth)} has ${fmtMoney(prevAttributed, ccy)} attributed commission (${pendingShare}% pending)`,
+        evidence: isMature(prev)
+          ? `${fmtMoney(prev.confirmed, ccy)} confirmed · ${fmtMoney(prev.pending, ccy)} pending. Month is substantially mature.`
+          : `${fmtMoney(prev.confirmed, ccy)} confirmed · ${fmtMoney(prev.pending, ccy)} pending. The month has not fully matured — confirmed is not yet comparable with prior months.`,
+      });
+    }
+
+    // Confirmed MoM — only when BOTH months are mature.
+    if (!isMature(prev) || !isMature(prior)) continue;
+    if (prior.confirmed === 0) continue;
     const d = pct(prev.confirmed - prior.confirmed, prior.confirmed);
-    if (Math.abs(d) < 10) continue; // only meaningful changes
+    if (Math.abs(d) < 10) continue;
     observations.push({
       id: `rev-mom-${ccy}`,
       tone: d > 0 ? 'positive' : 'negative',
       metric_scope: 'revenue',
-      headline: `${ccy} confirmed revenue ${d > 0 ? 'rose' : 'fell'} ${fmtPct(d)} month-on-month`,
-      evidence: `${monthLabel(prevMonth)} confirmed ${fmtMoney(prev.confirmed, ccy)} vs ${monthLabel(twoAgoMonth)} ${fmtMoney(prior.confirmed, ccy)}.`,
+      headline: `${ccy} confirmed commission ${d > 0 ? 'rose' : 'fell'} ${fmtPct(d)} month-on-month`,
+      evidence: `${monthLabel(prevMonth)} confirmed ${fmtMoney(prev.confirmed, ccy)} vs ${monthLabel(twoAgoMonth)} ${fmtMoney(prior.confirmed, ccy)}. Both months are substantially mature.`,
     });
   }
 
@@ -157,48 +196,56 @@ export async function monthlyObservations(sb: SupabaseClient): Promise<Observati
     });
   }
 
-  // ─ Site concentration (top site share) ───────────────────────
-  const siteTotals = new Map<string, { site: string; minor: number }>();
-  for (const row of siteSplit) {
-    const existing = siteTotals.get(row.currency) ?? { site: '', minor: 0 };
-    const contribution = row.confirmed_minor;
-    if (contribution > existing.minor) {
-      siteTotals.set(row.currency, { site: row.site_name, minor: contribution });
-    }
-  }
-  for (const [ccy, top] of siteTotals) {
-    const grandTotal = siteSplit
-      .filter((s) => s.currency === ccy)
-      .reduce((acc, s) => acc + s.confirmed_minor, 0);
-    if (grandTotal === 0) continue;
-    const share = (top.minor / grandTotal) * 100;
+  // ─ Site attribution note ─────────────────────────────────────
+  //
+  // Historical EPN Actions carry no reliable site-level attribution
+  // (SubId1 was not consistently tagged across outbound links). The
+  // dashboard groups unattributable rows as "Site not attributable"
+  // — not as a specific site that is coincidentally dominant. This
+  // observation surfaces the fact as context, NOT as a warning.
+  for (const ccy of currencies) {
+    const perSite = siteSplit.filter((s) => s.currency === ccy);
+    if (perSite.length === 0) continue;
+    const grandTotal = perSite.reduce((acc, s) => acc + s.confirmed_minor + s.pending_minor, 0);
+    const unattributable = perSite
+      .filter((s) => s.site_slug === 'unmapped' || s.site_slug === 'site-not-attributable')
+      .reduce((acc, s) => acc + s.confirmed_minor + s.pending_minor, 0);
+    if (grandTotal === 0 || unattributable === 0) continue;
+    const share = (unattributable / grandTotal) * 100;
     if (share < 50) continue;
     observations.push({
-      id: `site-concentration-${ccy}`,
+      id: `attribution-${ccy}`,
       tone: 'neutral',
       metric_scope: 'concentration',
-      headline: `${top.site} is driving the ${ccy} ledger`,
-      evidence: `${share.toFixed(0)}% of ${ccy} confirmed revenue (12m): ${fmtMoney(top.minor, ccy)} out of ${fmtMoney(grandTotal, ccy)}.`,
+      headline: `Historical ${ccy} EPN activity is not yet attributable to individual sites`,
+      evidence: `${share.toFixed(0)}% of attributed commission has no site tag because outbound links did not carry SubId1 at the time of the click. Future SubId1 tagging will fix this going forward; historical rows will remain unattributed.`,
     });
   }
 
   // ─ Current-month-so-far pacing (only if we're mid-month) ────
+  //
+  // Pace against ATTRIBUTED (confirmed + pending), not confirmed-only,
+  // because approval lag makes confirmed pacing meaningless in the
+  // first half of each month.
   const dayOfMonth = now.getUTCDate();
   if (dayOfMonth > 7) {
     for (const ccy of currencies) {
       const curr = byMonthCcy.get(`${currentMonth}:${ccy}`);
       const prev = byMonthCcy.get(`${prevMonth}:${ccy}`);
-      if (!curr || !prev || prev.confirmed === 0) continue;
+      if (!curr || !prev) continue;
+      const currAttrib = curr.confirmed + curr.pending;
+      const prevAttrib = prev.confirmed + prev.pending;
+      if (prevAttrib === 0) continue;
       const daysInMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getUTCDate();
-      const paced = (curr.confirmed / dayOfMonth) * daysInMonth;
-      const d = pct(paced - prev.confirmed, prev.confirmed);
+      const paced = (currAttrib / dayOfMonth) * daysInMonth;
+      const d = pct(paced - prevAttrib, prevAttrib);
       if (Math.abs(d) < 15) continue;
       observations.push({
         id: `pace-${ccy}`,
         tone: d > 0 ? 'positive' : 'warning',
         metric_scope: 'revenue',
-        headline: `${monthLabel(currentMonth)} ${ccy} pacing ${fmtPct(d)} vs ${monthLabel(prevMonth)}`,
-        evidence: `${fmtMoney(curr.confirmed, ccy)} confirmed through day ${dayOfMonth}; projected full-month ${fmtMoney(paced, ccy)} vs ${fmtMoney(prev.confirmed, ccy)} last month.`,
+        headline: `${monthLabel(currentMonth)} ${ccy} attributed commission pacing ${fmtPct(d)} vs ${monthLabel(prevMonth)}`,
+        evidence: `${fmtMoney(currAttrib, ccy)} attributed through day ${dayOfMonth} (confirmed + pending); projected full-month ${fmtMoney(paced, ccy)} vs ${fmtMoney(prevAttrib, ccy)} last month.`,
       });
     }
   }
