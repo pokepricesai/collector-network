@@ -21,7 +21,7 @@ import type {
   QAReport,
   QACheckName,
 } from './types';
-import { BANNED_FILLER_PHRASES, RARITY_VOCABULARY, SPECULATIVE_CLAIM_PATTERNS } from './templates';
+import { BANNED_FILLER_PHRASES, FORCED_COLLECTOR_ANGLE_PATTERNS, RARITY_VOCABULARY, SPECULATIVE_CLAIM_PATTERNS } from './templates';
 
 const TOL_PCT = 0.5;     // percentage comparisons tolerate ±0.5%
 const TOL_MONEY_MINOR = 1; // ±1p/¢ to shrug off rounding
@@ -62,20 +62,67 @@ export async function runDeterministicQA(input: QAInput): Promise<{ report: QARe
     }
   }
 
-  // ─── Card name validity ──────────────────────────────────────
+  // ─── Card name validity (tightened in Checkpoint D) ──────────
+  //
+  // The previous implementation walked every capitalised multi-word
+  // phrase in prose and warned when it wasn't a pack card. That
+  // produced huge noise ("Creative Deck Profile", "Special Summons",
+  // "Normal Traps" and so on were all flagged). It also wasn't
+  // actionable because the writing model has latitude to use proper
+  // nouns that aren't cards.
+  //
+  // New rule: only flag a phrase as an unsupported card identity when
+  // the surrounding context explicitly treats it AS a card. We detect
+  // three card-identity contexts:
+  //
+  //   1. The phrase is wrapped in straight double quotes.
+  //   2. The phrase is immediately preceded by "the card" or
+  //      "a card named" / "card called".
+  //   3. The phrase is immediately adjacent (within 20 chars) to a
+  //      currency or percentage claim.
+  //
+  // Even then, we only warn when the phrase doesn't appear in the
+  // pack's market_data card list. Pack entity match uses lowercase.
   const packCardNames = new Set(input.pack.market_data.map((m) => m.card_name.toLowerCase()));
+  const packCardNameTokens = Array.from(packCardNames); // for substring assist
+  const CARD_IDENTITY_PATTERNS: RegExp[] = [
+    // "Card Name"
+    /"([A-Z][A-Za-z0-9][A-Za-z0-9'\- ]{2,80})"/g,
+    // the card Card Name  /  a card named Card Name
+    /\b(?:the card|a card named|card called)\s+([A-Z][A-Za-z0-9'\-]+(?:\s+[A-Z0-9][A-Za-z0-9'\-]+){0,5})/g,
+  ];
   for (const section of draft.sections) {
-    const names = extractProperNouns(section.paragraphs.join(' '));
-    for (const name of names) {
-      if (name.length < 4) continue; // skip 1-2 word artefacts
-      if (looksLikeCardName(name) && !packCardNames.has(name.toLowerCase())) {
-        // Only emit as warning — some proper nouns in prose are
-        // legitimately not "card names" (e.g. "YGOPrices"). A real
-        // card claim without evidence will almost always co-occur
-        // with a price/percentage, so the money/pct checks above
-        // will catch it as a blocker.
-        findings.push(finding('card_name_valid', 'warning', `"${name}" is not in the evidence pack as a tracked card.`, { section: section.id }));
+    const text = section.paragraphs.join(' ');
+    const candidates: string[] = [];
+    for (const re of CARD_IDENTITY_PATTERNS) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) != null) {
+        const phrase = (m[1] ?? '').trim();
+        if (phrase.length >= 4) candidates.push(phrase);
       }
+    }
+    // Phrases adjacent to a money/percentage claim (within 20 chars).
+    const moneyPctRe = /[£$€]\s?[0-9][0-9,]*(?:\.[0-9]{1,2})?|[+-]?\s?[0-9]+(?:\.[0-9]+)?\s?%/g;
+    const CAP_PHRASE = /\b([A-Z][A-Za-z0-9'\-]+(?:\s+[A-Z0-9][A-Za-z0-9'\-]+){1,5})\b/g;
+    let mm: RegExpExecArray | null;
+    while ((mm = moneyPctRe.exec(text)) != null) {
+      const start = Math.max(0, mm.index - 40);
+      const end   = Math.min(text.length, mm.index + mm[0].length + 40);
+      const window = text.slice(start, end);
+      let cp: RegExpExecArray | null;
+      while ((cp = CAP_PHRASE.exec(window)) != null) {
+        const phrase = cp[1]!.trim();
+        if (phrase.length >= 4) candidates.push(phrase);
+      }
+    }
+
+    for (const phrase of candidates) {
+      const lc = phrase.toLowerCase();
+      if (packCardNames.has(lc)) continue;
+      // Partial substring match against pack cards (e.g. "Angelechy
+      // Ashtra" should match "angelechy ashtra, ft. betb support [cdp]").
+      if (packCardNameTokens.some((n) => n.includes(lc) || lc.includes(n))) continue;
+      findings.push(finding('card_name_valid', 'warning', `"${phrase}" is used in a card-identity context but is not in the evidence pack as a tracked card.`, { section: section.id }));
     }
   }
 
@@ -222,13 +269,7 @@ export async function runDeterministicQA(input: QAInput): Promise<{ report: QARe
         totalEmDashes += matches.length;
         emDashLocations.push({ field, raw: s.length > 160 ? s.slice(0, 157) + '...' : s });
       }
-      // Replace with comma + single space, then collapse any double
-      // spaces/comma-comma artefacts that result from " — " surrounds.
-      return s
-        .replace(/\s*—\s*/g, ', ')
-        .replace(/,\s*,/g, ',')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
+      return repairEmDashes(s);
     };
 
     draft.title            = scanAndRepairString('title', draft.title);
@@ -376,6 +417,41 @@ export async function runDeterministicQA(input: QAInput): Promise<{ report: QARe
     }
   }
 
+  // ─── Forced collector angle (Checkpoint D) ───────────────────
+  {
+    const bodyFlat = draft.sections.flatMap((s) => s.paragraphs).join('\n');
+    for (const pat of FORCED_COLLECTOR_ANGLE_PATTERNS) {
+      const re = new RegExp(pat.pattern.source, pat.pattern.flags.includes('g') ? pat.pattern.flags : pat.pattern.flags + 'g');
+      let m: RegExpExecArray | null;
+      const hits: string[] = [];
+      while ((m = re.exec(bodyFlat)) != null) {
+        hits.push(m[0].slice(0, 80));
+        if (hits.length >= 5) break;
+      }
+      if (hits.length > 0) {
+        findings.push(finding(
+          'forced_collector_angle',
+          'warning',
+          `Templated collector-angle phrasing detected: ${pat.label}.`,
+          { pattern_id: pat.id, hits },
+        ));
+      }
+    }
+
+    // Density gate: no more than one "collectors" every 150 words.
+    const words = bodyFlat.split(/\s+/).filter(Boolean);
+    const collectorHits = (bodyFlat.match(/\bcollectors?\b/gi) ?? []).length;
+    const allowed = Math.max(1, Math.ceil(words.length / 150));
+    if (collectorHits > allowed) {
+      findings.push(finding(
+        'collector_density_high',
+        'warning',
+        `"collector(s)" appears ${collectorHits} time(s) across ${words.length} words (allowed ≤ ${allowed}). Reduce templated collector-centric phrasing.`,
+        { word_count: words.length, collector_hits: collectorHits, allowed },
+      ));
+    }
+  }
+
   // ─── Rarity claims ──────────────────────────────────────────
   // Every rarity string named in paragraph text must appear in
   // evidence_pack.market_data[].printing OR in an external source's
@@ -520,27 +596,56 @@ function extractDates(draft: DraftOutput): DateClaim[] {
   return out;
 }
 
-function extractProperNouns(text: string): string[] {
-  // Very loose heuristic: sequences of 2+ Capitalised words. Returns
-  // the full phrase so compound card names stay intact.
-  const matches: string[] = [];
-  const re = /\b([A-Z][a-z]+(?:\s+(?:of|the|and|[A-Z][a-z0-9']+)){1,8})\b/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) != null) {
-    matches.push(m[1]!);
-  }
-  return matches;
-}
-
-function looksLikeCardName(s: string): boolean {
-  // Reject common non-card phrases that match the proper-noun regex.
-  const blacklist = new Set(['The YGO', 'YGOPrices', 'Yu-Gi-Oh', 'Collector Network']);
-  for (const b of blacklist) if (s.includes(b)) return false;
-  return true;
-}
-
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Deterministic em-dash repair. Guarantees zero U+2014 in the output.
+// Chooses a punctuation substitute per occurrence based on context:
+//
+//   * Parenthetical aside: "X — Y — Z" (two em dashes close by, aside
+//     between them) → wrap the aside in commas when it looks like a
+//     non-restrictive clause, otherwise use parentheses.
+//   * Pre-list em dash: "X — a, b, c" → colon.
+//   * Sentence-break em dash: left side ends with a word, right side
+//     starts with capital, and the segment on either side reads as an
+//     independent clause → full stop + space + capital.
+//   * Default: comma + space.
+//
+// After punctuation substitution we collapse the resulting runs of
+// whitespace / repeated commas / orphan commas before terminal
+// punctuation. We NEVER leave an em dash in place.
+export function repairEmDashes(input: string): string {
+  if (!input.includes('—')) return input;
+  let out = input;
+
+  // Parenthetical aside: `word — aside — word`. Replace both dashes
+  // with commas (safe for restrictive and non-restrictive asides when
+  // the aside is short).
+  out = out.replace(/\s*—\s*([^—\n]{1,80}?)\s*—\s*/g, ', $1, ');
+
+  // Pre-list em dash: a list of at least two comma-separated items on
+  // the right side → use colon.
+  out = out.replace(/\s*—\s*(?=[^.!?\n]{0,200}?[^,\n]+,\s*[^,\n]+)/g, ': ');
+
+  // Sentence-break em dash: right side begins with a capital letter
+  // after optional whitespace and the preceding char is a lower-case
+  // letter → full stop + space.
+  out = out.replace(/([a-z0-9])\s*—\s*(?=[A-Z])/g, '$1. ');
+
+  // Default (any remaining em dash): comma + space.
+  out = out.replace(/\s*—\s*/g, ', ');
+
+  // Cleanups: no double commas, no space before punctuation, no stray
+  // leading comma, collapse whitespace.
+  out = out
+    .replace(/,\s*,+/g, ',')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/^\s*[,;:]\s*/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return out;
 }
 
 // Builds a lowercase corpus of every string in the evidence pack

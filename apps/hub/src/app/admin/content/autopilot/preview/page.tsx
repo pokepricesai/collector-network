@@ -9,7 +9,7 @@ import { HOLD_REASON_LABELS } from '@/server/autopilot/holds';
 import { runDeterministicQA } from '@/server/autopilot/qa';
 import { draftToBodyRich, reconstructDraftFromArticle, type TiptapDoc, type TiptapNode, type TiptapInline, type TiptapMark } from '@/server/autopilot/body-rich';
 import type { EvidencePackPayload, QAReport } from '@/server/autopilot/types';
-import { executeFirstPaidDraftAction } from './actions';
+import { executeFirstPaidDraftAction, markPaidArticleNonPublishableAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -187,6 +187,12 @@ export default async function AutopilotPreviewPage() {
       }
     }
 
+    // publishReady enforcement: synthesised empty pack can NEVER be
+    // publish-ready (speculative/rarity checks can't corroborate, so
+    // their silence is not evidence of correctness). Even zero
+    // blockers in this mode is unsafe.
+    const publishReady = report.blocker_count === 0 && packSource !== 'missing_synthesised';
+
     reQA = {
       report,
       correctedBodyRich: corrected,
@@ -199,7 +205,54 @@ export default async function AutopilotPreviewPage() {
       markdownImageLeakCount: imageLeakCount,
       markdownLinkLeakCount: linkLeakCount,
       headingLeakageCount: headingLeakCount,
-      publishReady: report.blocker_count === 0,
+      publishReady,
+    };
+  }
+
+  // ─── Provenance diagnostic for the latest paid draft ───────────
+  // Explicit server-side counts so the operator can confirm "pack
+  // missing" rather than infer from a notice. Rendered as a separate
+  // panel below the quality report.
+  interface ProvenanceDiag {
+    article_id: string;
+    autopilot_run_id: string | null;
+    packs_by_article_id: number;
+    packs_by_run_id: number;
+    distinct_packs_total: number;
+    cost_log_rows: number;
+    qa_finding_rows: number;
+    reservations_by_run: number;
+    pack_content_hashes: string[];
+  }
+  let provenance: ProvenanceDiag | null = null;
+  if (latestArticle) {
+    const [{ count: packsByArticle }, { count: packsByRun }, { count: costRows }, { count: qaRows }, { count: resRows }, { data: packRowsForHashes }] = await Promise.all([
+      sb.from('network_article_evidence_packs').select('id', { count: 'exact', head: true }).eq('article_id', latestArticle.id),
+      latestArticle.autopilot_run_id
+        ? sb.from('network_article_evidence_packs').select('id', { count: 'exact', head: true }).eq('autopilot_run_id', latestArticle.autopilot_run_id)
+        : Promise.resolve({ count: 0 } as { count: number | null }),
+      latestArticle.autopilot_run_id
+        ? sb.from('network_ai_cost_log').select('id', { count: 'exact', head: true }).eq('autopilot_run_id', latestArticle.autopilot_run_id)
+        : Promise.resolve({ count: 0 } as { count: number | null }),
+      sb.from('network_article_qa_findings').select('id', { count: 'exact', head: true }).eq('article_id', latestArticle.id),
+      latestArticle.autopilot_run_id
+        ? sb.from('network_ai_budget_reservations').select('id', { count: 'exact', head: true }).eq('autopilot_run_id', latestArticle.autopilot_run_id)
+        : Promise.resolve({ count: 0 } as { count: number | null }),
+      sb.from('network_article_evidence_packs').select('content_hash')
+        .or(`article_id.eq.${latestArticle.id}${latestArticle.autopilot_run_id ? `,autopilot_run_id.eq.${latestArticle.autopilot_run_id}` : ''}`)
+        .limit(5),
+    ]);
+    const hashes = ((packRowsForHashes ?? []) as Array<{ content_hash: string | null }>).map((r) => r.content_hash ?? '(null)');
+    provenance = {
+      article_id: latestArticle.id,
+      autopilot_run_id: latestArticle.autopilot_run_id,
+      packs_by_article_id: packsByArticle ?? 0,
+      packs_by_run_id: packsByRun ?? 0,
+      distinct_packs_total: new Set(hashes.filter(Boolean)).size,
+      cost_log_rows: costRows ?? 0,
+      qa_finding_rows: qaRows ?? 0,
+      reservations_by_run: resRows ?? 0,
+      pack_content_hashes: hashes,
     };
   }
 
@@ -282,6 +335,57 @@ export default async function AutopilotPreviewPage() {
         </Panel>
       )}
 
+      {latestArticle && provenance && (
+        <Panel
+          title="Evidence provenance diagnostic (latest paid run)"
+          eyebrow={provenance.packs_by_article_id + provenance.packs_by_run_id === 0 ? 'No pack row found' : 'Pack row(s) found'}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+            <KV label="article_id" value={provenance.article_id.slice(0, 12) + '…'} />
+            <KV label="autopilot_run_id" value={provenance.autopilot_run_id ? provenance.autopilot_run_id.slice(0, 12) + '…' : '—'} />
+            <KV label="packs by article_id" value={provenance.packs_by_article_id.toString()} warn={provenance.packs_by_article_id === 0} />
+            <KV label="packs by run_id" value={provenance.packs_by_run_id.toString()} warn={provenance.packs_by_run_id === 0} />
+            <KV label="distinct packs (hash)" value={provenance.distinct_packs_total.toString()} />
+            <KV label="cost_log rows" value={provenance.cost_log_rows.toString()} warn={provenance.cost_log_rows === 0} />
+            <KV label="qa_findings rows" value={provenance.qa_finding_rows.toString()} />
+            <KV label="budget reservations" value={provenance.reservations_by_run.toString()} />
+          </div>
+          {provenance.pack_content_hashes.length > 0 && (
+            <>
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Pack content hashes</h3>
+              <ul style={{ fontSize: 11, margin: 0, paddingLeft: 20 }}>
+                {provenance.pack_content_hashes.map((h, i) => <li key={i}><code>{h}</code></li>)}
+              </ul>
+            </>
+          )}
+          {provenance.packs_by_article_id === 0 && provenance.packs_by_run_id === 0 && (
+            <>
+              <Notice tone="warning">
+                <strong>No evidence pack row exists for this paid article.</strong>{' '}
+                Neither <code>article_id</code> nor <code>autopilot_run_id</code> finds a row in{' '}
+                <code>network_article_evidence_packs</code>. The original frozen pack is unrecoverable from the database,
+                so the article's factual grounding cannot be verified. It will remain a successful <em>generation/cost
+                test</em> only.
+              </Notice>
+              {latestArticle.hold_reasons && !latestArticle.hold_reasons.includes('evidence_provenance_missing') && (
+                <form action={markPaidArticleNonPublishableAction} style={{ marginTop: 10 }}>
+                  <input type="hidden" name="article_id" value={latestArticle.id} />
+                  <label style={{ display: 'block', fontSize: 13, marginBottom: 10 }}>
+                    <input type="checkbox" name="confirm" required /> I confirm this article's original evidence pack is unrecoverable; mark it non-publishable with <code>evidence_provenance_missing</code>.
+                  </label>
+                  <button type="submit" className="admin-btn admin-btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }}>
+                    Mark article non-publishable (missing provenance)
+                  </button>
+                  <p className="col-dim" style={{ fontSize: 11, marginTop: 6, margin: '6px 0 0' }}>
+                    This writes <code>evidence_provenance_missing</code> into the article's <code>hold_reasons</code>. No body / body_rich / status change. No AI call. No budget spend.
+                  </p>
+                </form>
+              )}
+            </>
+          )}
+        </Panel>
+      )}
+
       {latestArticle && reQA && (
         <Panel
           title="Quality report (re-run on existing paid draft, no new AI call)"
@@ -316,8 +420,15 @@ export default async function AutopilotPreviewPage() {
             <KV label="Speculative claims (unsupported)" value={reQA.speculativeHits.length.toString()} warn={reQA.speculativeHits.length > 0} />
             <KV label="Rarity claims (unsupported)" value={reQA.rarityUnsupported.length.toString()} warn={reQA.rarityUnsupported.length > 0} />
             <KV label="Reconstructed sections" value={reQA.reconstructedSectionCount.toString()} />
-            <KV label="Publish-ready" value={reQA.report.blocker_count === 0 ? 'yes' : 'no'} warn={reQA.report.blocker_count > 0} />
+            <KV label="Publish-ready" value={reQA.publishReady ? 'yes' : 'no'} warn={!reQA.publishReady} />
           </div>
+          {!reQA.publishReady && reQA.packSource === 'missing_synthesised' && (
+            <Notice tone="warning">
+              Publish-ready forced to <strong>NO</strong> because the evidence pack is unrecoverable. Pack-dependent QA
+              cannot corroborate rarity, speculative, or market claims; publishing with no evidence trail is unsafe
+              regardless of structural checks passing.
+            </Notice>
+          )}
 
           {reQA.speculativeHits.length > 0 && (
             <>
@@ -387,20 +498,89 @@ export default async function AutopilotPreviewPage() {
       )}
 
       {latestArticle ? (
-        <Panel
-          title="First paid pilot completed"
-          eyebrow="Review existing draft above / below"
-        >
-          <Notice tone="success">
-            <strong>FIRST PAID PILOT COMPLETED.</strong>{' '}
-            A paid autopilot draft already exists for this pilot (run{' '}
-            <code>{latestArticle.autopilot_run_id?.slice(0, 8) ?? '???'}</code>, inserted{' '}
-            <code>{new Date(latestArticle.created_at).toISOString().slice(0, 19).replace('T', ' ')}</code> UTC). The
-            trigger button, confirmation checkbox, and pre-paid approval checklist are intentionally hidden to prevent
-            accidental duplicate paid calls. Review the existing draft and the quality report below before deciding on a
-            second generation.
-          </Notice>
-        </Panel>
+        <>
+          <Panel
+            title="First paid pilot completed"
+            eyebrow="Review existing draft above / below"
+          >
+            <Notice tone="success">
+              <strong>FIRST PAID PILOT COMPLETED.</strong>{' '}
+              A paid autopilot draft already exists for this pilot (run{' '}
+              <code>{latestArticle.autopilot_run_id?.slice(0, 8) ?? '???'}</code>, inserted{' '}
+              <code>{new Date(latestArticle.created_at).toISOString().slice(0, 19).replace('T', ' ')}</code> UTC). The
+              trigger button, confirmation checkbox, and pre-paid approval checklist are intentionally hidden to prevent
+              accidental duplicate paid calls. Review the existing draft and the quality report below before deciding on a
+              second generation.
+            </Notice>
+          </Panel>
+
+          {chosen && (
+            <Panel
+              title="Article #2 — candidate preview (deterministic, NOT generated)"
+              eyebrow="No AI call, no budget reserved"
+            >
+              <Notice tone="info">
+                <strong>Discovery + research only.</strong>{' '}
+                Below is the next highest-quality eligible candidate the deterministic pipeline would select for a
+                second paid run. Nothing has been generated. The trigger will be re-enabled only after separate
+                approval, with the Checkpoint-D hardening applied.
+              </Notice>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginTop: 10 }}>
+                <KV label="Working title" value={chosen.discovery.working_title} />
+                <KV label="Template"      value={chosen.discovery.template_id} />
+                <KV label="Final score"   value={`${chosen.final_score.total}/100`} />
+                <KV label="Discovery score" value={`${chosen.discovery.discovery_score}/40`} />
+                <KV label="Evidence quality" value={chosen.evidence_quality.status} warn={chosen.evidence_quality.status !== 'ready'} />
+                <KV label="Eligible"      value={chosen.eligible_for_generation ? 'yes' : 'no'} warn={!chosen.eligible_for_generation} />
+                <KV label="Cards extracted"  value={chosen.entities.cards.length.toString()} />
+                <KV label="Sets extracted"   value={chosen.entities.sets.length.toString()} />
+                <KV label="Internal links"   value={chosen.internal_links_outbound.length.toString()} />
+                <KV label="Images available" value={chosen.images.length.toString()} warn={chosen.images.length === 0} />
+                <KV label="External sources" value={chosen.external_sources.length.toString()} />
+                <KV label="Pack schema version" value={chosen.evidence_pack.schema_version} />
+                <KV label="Prompt hash (sha256)" value={preview.prompt ? preview.prompt.prompt_hash.slice(0, 16) + '…' : '—'} />
+                <KV label="Prompt version"      value={preview.prompt?.prompt_version ?? '—'} />
+                <KV label="Projected cost (USD)" value={fmtUsd(preview.pipeline.budget_preview.projected_cost_usd)} warn={preview.pipeline.budget_preview.projected_cost_usd > preview.pipeline.budget_preview.per_article_cap_usd} />
+                <KV label="Per-article cap (USD)" value={fmtUsd(preview.pipeline.budget_preview.per_article_cap_usd)} />
+              </div>
+
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Research sources (external_sources in frozen pack)</h3>
+              {chosen.external_sources.length === 0 ? (
+                <p className="col-dim" style={{ fontSize: 12.5 }}>No external sources — candidate is internally grounded.</p>
+              ) : (
+                <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+                  {chosen.external_sources.map((s, i) => (
+                    <li key={i}>
+                      <StatusBadge state={s.source_tier === 'official' ? 'success' : s.source_tier === 'secondary' ? 'info' : 'warning'} label={`T${s.source_tier === 'official' ? 1 : s.source_tier === 'secondary' ? 2 : 3}`} />
+                      {' '}<strong>{s.publisher}</strong> · <code style={{ fontSize: 10 }}>{s.url.length > 70 ? s.url.slice(0, 67) + '…' : s.url}</code>
+                      {s.published_at && <> · <code>{s.published_at}</code></>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Entities (deterministic match)</h3>
+              <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                <div><strong>Cards:</strong> {chosen.entities.cards.length === 0 ? '(none)' : chosen.entities.cards.slice(0, 10).map((c) => c.name).join(', ')}{chosen.entities.cards.length > 10 ? ', ...' : ''}</div>
+                <div><strong>Sets:</strong> {chosen.entities.sets.length === 0 ? '(none)' : chosen.entities.sets.slice(0, 10).map((s) => s.name).join(', ')}{chosen.entities.sets.length > 10 ? ', ...' : ''}</div>
+              </div>
+
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Approved internal links</h3>
+              {chosen.internal_links_outbound.length === 0 ? (
+                <p className="col-dim" style={{ fontSize: 12.5 }}>No internal link candidates for this topic.</p>
+              ) : (
+                <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+                  {chosen.internal_links_outbound.slice(0, 10).map((l, i) => <li key={i}><code style={{ fontSize: 11 }}>{l.target_url}</code> · {l.anchor_concepts.join(', ')} · <code>{l.reason}</code></li>)}
+                </ul>
+              )}
+
+              <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
+                No trigger button appears here. Article #2 generation requires separate approval and will be enabled in a
+                follow-up change to the preview page gating.
+              </p>
+            </Panel>
+          )}
+        </>
       ) : (
         <Panel
           title="First paid draft generation (admin-triggered, ONE call only)"

@@ -432,7 +432,10 @@ export type QACheckName =
   | 'markdown_link_leak'
   | 'heading_leakage'
   | 'speculative_claim'
-  | 'rarity_claim_supported';
+  | 'rarity_claim_supported'
+  // Checkpoint D:
+  | 'forced_collector_angle'
+  | 'collector_density_high';
 
 export type QASeverity = 'blocker' | 'warning' | 'info';
 export type QASource = 'deterministic' | 'semantic_ai';

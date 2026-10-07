@@ -194,6 +194,25 @@ export const DRAFT_RULES: readonly string[] = Object.freeze([
   'NEVER predict or state a specific rarity (Secret Rare, Ultra Rare, Starlight Rare, Ghost Rare, Collector\'s Rare, Quarter Century, Platinum Secret Rare, Prismatic, etc.) unless the exact rarity string is present in evidence_pack.market_data[].printing or in an external source\'s headline, summary, or facts.',
   'NEVER state as fact that a card will "increase demand", "see renewed collector interest", "command a premium", "sustain demand", "appreciate in value", "attract chase printings", or any similar speculative market claim. If the evidence pack does not explicitly support a market, rarity, price, demand, tournament, or collector claim, either omit it or clearly label it as uncertain (for example, "it is not yet clear whether..."). The deterministic QA pass REJECTS speculative statements of fact.',
   'For news articles: report what the external source actually said. Short attributed quotations only. Do NOT invent collector reactions, market reactions, or tournament implications unless the sources describe them.',
+  // Checkpoint D hardening (post first paid run):
+  'NEVER speculate about future demand, future prices, collector interest, rarity, premiums, investment potential, tournament viability, chase printings, or secondary-market appreciation. If the frozen evidence pack does not explicitly state the claim, OMIT it. Do not soften it, do not qualify it, do not label it as uncertain. Just omit.',
+  'Useful factual explanation is ALWAYS preferable to speculative collector prose. Explain what the subject is, what the external sources said, and what the pack\'s market_data shows. If there is nothing factual to say in a section, omit the section.',
+  'Do NOT force "collector" angle filler into every paragraph. Do NOT open paragraphs with "For collectors...", "Collectors pursuing...", "Collectors chasing...", "TCG-focused collectors should...", or similar templated collector-centric openers. Add collector context ONLY when there is a specific, useful piece of collector information that the pack supports.',
+  'Collector relevance is a natural output of the facts, not a prefix. If the news is about a tournament change, say what changed and what it means. Do not pivot to "for collectors..." paragraphs unless the pack contains collector-specific evidence.',
+  'The reader should never see the word "collectors" more than once per 150 words. Prefer specific nouns (players, duelists, judges, the archetype\'s pilots) when the context fits them better.',
+]);
+
+// Phrases that are forbidden as paragraph openers / templated hooks.
+// Detected deterministically and surfaced as `forced_collector_angle`
+// warnings so the operator sees the drift even if the overall body
+// otherwise passes.
+export const FORCED_COLLECTOR_ANGLE_PATTERNS: readonly { id: string; pattern: RegExp; label: string }[] = Object.freeze([
+  { id: 'for_collectors_opener',     pattern: /(?:^|[.!?]\s+)for\s+collectors[,.:\s]/i,                     label: '"For collectors..." opener' },
+  { id: 'collectors_pursuing',       pattern: /\bcollectors\s+pursuing\b/i,                                  label: 'collectors pursuing' },
+  { id: 'collectors_chasing',        pattern: /\bcollectors\s+chasing\b/i,                                   label: 'collectors chasing' },
+  { id: 'tcg_focused_collectors',    pattern: /\bTCG[\s-]?focused\s+collectors\b/i,                          label: 'TCG-focused collectors' },
+  { id: 'collectors_should_note',    pattern: /\bcollectors\s+should\s+(?:note|know|look|watch)\b/i,         label: 'collectors should note' },
+  { id: 'collector_angle_filler',    pattern: /\bfrom\s+a\s+collector\s+(?:perspective|standpoint|angle)\b/i, label: 'from a collector perspective' },
 ]);
 
 // Phrases that, when present in paragraph text, require matching

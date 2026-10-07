@@ -221,8 +221,15 @@ export async function executeFirstPaidDraftAction(formData: FormData): Promise<v
   const article_id = (articleRow as { id: string }).id;
 
   // Now insert the pack WITH article_id set at insert time, so a
-  // follow-up UPDATE isn't required. Any insert failure is logged
-  // but doesn't abort — the article is already in place.
+  // follow-up UPDATE isn't required.
+  //
+  // If the pack insert FAILS the article is still correct in every
+  // other way, but its provenance is unverifiable — the deterministic
+  // QA + semantic checks that reference the pack have no evidence to
+  // compare against. Append `evidence_provenance_missing` to the
+  // article's hold_reasons so the publish gate blocks and the admin
+  // UI can surface the broken state. The paid API cost already
+  // happened; we still consume the budget to keep the ledger honest.
   const packId = await persistEvidencePack({
     sb,
     payload: chosen.evidence_pack,
@@ -231,6 +238,14 @@ export async function executeFirstPaidDraftAction(formData: FormData): Promise<v
     article_id,
     autopilot_run_id: run_id,
   });
+  if (!packId.ok) {
+    const extendedHoldReasons = Array.from(new Set([...hold_reasons, 'evidence_provenance_missing']));
+    await sb.from('network_articles').update({
+      hold_reasons: extendedHoldReasons,
+      status: 'review',
+    }).eq('id', article_id);
+    console.error('[autopilot] pack insert failed for article', article_id, packId.error);
+  }
   await persistQAFindings(sb, article_id, packId.ok ? packId.id ?? null : null, report);
   await consumeAiBudget(sb, { reservationId, articleId: article_id, actualUsd: exec.cost_usd });
 
@@ -255,6 +270,55 @@ export async function executeFirstPaidDraftAction(formData: FormData): Promise<v
   void AUTO_PUBLISH_PRIVILEGE_IS_FALSE;
   revalidatePath('/admin/content/autopilot/preview');
   revalidatePath('/admin/content');
+}
+
+// Admin action: mark an existing paid autopilot article as permanently
+// non-publishable because its evidence pack cannot be recovered. Only
+// writes `evidence_provenance_missing` into the article's hold_reasons
+// after verifying no pack row exists for this article (by article_id
+// or autopilot_run_id). Idempotent; dedupes hold_reasons. Never
+// touches body/body_rich/status beyond adding the hold.
+export async function markPaidArticleNonPublishableAction(formData: FormData): Promise<void> {
+  const articleId = formData.get('article_id');
+  if (typeof articleId !== 'string' || articleId.length < 10) return;
+  if (!formData.has('confirm')) return;
+
+  const { sb } = await requireAdmin('/admin/content/autopilot/preview');
+
+  // Verify the article exists and pull autopilot_run_id.
+  const { data: artRow } = await sb
+    .from('network_articles')
+    .select('id, hold_reasons, autopilot_run_id')
+    .eq('id', articleId)
+    .maybeSingle();
+  const art = artRow as null | { id: string; hold_reasons: string[] | null; autopilot_run_id: string | null };
+  if (!art) return;
+
+  // Verify no pack exists by either lookup. If a pack DOES exist, we
+  // refuse to mark the article non-publishable since the operator
+  // probably meant a different article.
+  const { count: byArticle } = await sb
+    .from('network_article_evidence_packs')
+    .select('id', { count: 'exact', head: true })
+    .eq('article_id', art.id);
+  let byRun = 0;
+  if (art.autopilot_run_id) {
+    const { count } = await sb
+      .from('network_article_evidence_packs')
+      .select('id', { count: 'exact', head: true })
+      .eq('autopilot_run_id', art.autopilot_run_id);
+    byRun = count ?? 0;
+  }
+  if ((byArticle ?? 0) > 0 || byRun > 0) {
+    // Pack exists; a different hold reason (if any) is appropriate.
+    // Do nothing here to avoid overriding operator intent.
+    revalidatePath('/admin/content/autopilot/preview');
+    return;
+  }
+
+  const next = Array.from(new Set([...(art.hold_reasons ?? []), 'evidence_provenance_missing']));
+  await sb.from('network_articles').update({ hold_reasons: next }).eq('id', art.id);
+  revalidatePath('/admin/content/autopilot/preview');
 }
 
 // ─── Helpers ───────────────────────────────────────────────────

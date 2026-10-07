@@ -56,6 +56,7 @@ export const HOLD_REASON_LABELS: Record<string, { title: string; detail: string;
   markdown_heading_leak:           { title: 'Markdown heading in paragraph',     detail: 'The model emitted "###" style markdown headings inside paragraph text instead of using section.heading.',                                                       resolution: 'Regenerate; auto-repair not applied.' },
   speculative_claim_unsupported:   { title: 'Speculative claim not in evidence', detail: 'The draft contains phrases like "renewed collector interest" or "command a premium" that the evidence pack does not support.',                                   resolution: 'Edit to remove or soften into uncertainty, or regenerate.' },
   rarity_claim_unsupported:        { title: 'Rarity not in evidence',            detail: 'The draft names a specific rarity (Secret Rare, Ultra Rare, etc.) that is not present in evidence_pack.market_data[].printing or any external source.',          resolution: 'Edit to remove the rarity claim, or regenerate against evidence that includes it.' },
+  evidence_provenance_missing:     { title: 'Evidence pack provenance missing',  detail: 'No evidence pack row exists for this paid article (neither by article_id nor by autopilot_run_id). Pack-dependent QA could not run authoritatively, so the article cannot be shown to be factually grounded.',  resolution: 'Treat as a non-publishable test run. Future paid runs persist the pack with article_id set at insert time.' },
 };
 
 export interface HoldRow {
