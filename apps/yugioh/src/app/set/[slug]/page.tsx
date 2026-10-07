@@ -18,7 +18,6 @@ import { buildYugiohEbayLink } from '../../../lib/ebay';
 import Faq from '../../../components/Faq';
 import EbayAffiliateDisclosure from '../../../components/EbayAffiliateDisclosure';
 import { setFaq } from '../../../lib/faq-content';
-import { getYgoCurrency } from '../../../lib/currency-server';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 1800;
@@ -56,10 +55,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SetPage({ params }: Props) {
   const { slug } = await params;
-  const [data, currency] = await Promise.all([
-    getYugiohSetBySlug(slug),
-    getYgoCurrency(),
-  ]);
+  // Currency is a presentation preference owned by the cookie-aware
+  // CardBrowseTile client component. Dropping the server-side cookie
+  // read here is what unlocks ISR / Full Route Cache on this page.
+  const data = await getYugiohSetBySlug(slug);
   if (!data) notFound();
 
   const jsonLd = buildSetJsonLd(data, siteUrl());
@@ -252,7 +251,6 @@ export default async function SetPage({ params }: Props) {
                 collectorNumber={entry.card.collector_number}
                 bestUsdRetail={entry.bestUsdRetail?.price ?? null}
                 bestEurRetail={entry.bestEurRetail?.price ?? null}
-                preferredCurrency={currency}
               />
             ))}
           </div>

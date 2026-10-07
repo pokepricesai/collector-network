@@ -6,7 +6,7 @@ import { Surface } from '../../components/Surface';
 import { GradedRankingTable, RetailRankingTable } from '../../components/market/MarketRankingTable';
 import { StaleSourceNotice } from '../../components/StaleSourceNotice';
 import { siteUrl } from '../../lib/site-url';
-import { getYgoCurrency } from '../../lib/currency-server';
+import { CurrencyScope } from '../../components/CurrencyScope';
 import { getYugiohMarketHomeData } from '../../server/market';
 import Faq from '../../components/Faq';
 import { MARKET_FAQ } from '../../lib/faq-content';
@@ -24,10 +24,11 @@ export const metadata: Metadata = {
 };
 
 export default async function MarketHomePage() {
-  const [data, currency] = await Promise.all([
-    getYugiohMarketHomeData(),
-    getYgoCurrency(),
-  ]);
+  // Currency moved to CurrencyScope client gate around the stale
+  // source notices below. Both USD + EUR notices are rendered;
+  // CurrencyScope hides the one that does not match the viewer's
+  // cookie after mount. Lets this page serve from Full Route Cache.
+  const data = await getYugiohMarketHomeData();
 
   return (
     <>
@@ -49,12 +50,12 @@ export default async function MarketHomePage() {
             valuable right now&rdquo; view is more useful than fabricated
             gainers.
           </div>
-          {currency === 'USD' && (
+          <CurrencyScope currency="USD">
             <StaleSourceNotice source="tcggraph.tcgplayer" />
-          )}
-          {currency === 'EUR' && (
+          </CurrencyScope>
+          <CurrencyScope currency="EUR">
             <StaleSourceNotice source="tcggraph.cardmarket" />
-          )}
+          </CurrencyScope>
         </header>
 
         {data.topRetailUsd.length > 0 && (

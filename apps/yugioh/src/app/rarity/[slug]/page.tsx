@@ -14,7 +14,6 @@ import {
 } from '../../../design/tokens';
 import { siteUrl } from '../../../lib/site-url';
 import { toCardSlug } from '../../../lib/slug';
-import { getYgoCurrency } from '../../../lib/currency-server';
 import {
   getYugiohRarityBySlug,
   type RarityPageData,
@@ -67,10 +66,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function RarityPage({ params }: Props) {
   const { slug } = await params;
   if (!isValidFamily(slug)) notFound();
-  const [data, currency] = await Promise.all([
-    getYugiohRarityBySlug(slug),
-    getYgoCurrency(),
-  ]);
+  // Currency moved to the cookie-aware CardBrowseTile client
+  // component so this page can be served from the Full Route Cache.
+  const data = await getYugiohRarityBySlug(slug);
   if (!data) notFound();
 
   const jsonLd = buildJsonLd(data, siteUrl());
@@ -231,7 +229,6 @@ export default async function RarityPage({ params }: Props) {
                 setLine={entry.set?.code?.toUpperCase() ?? null}
                 bestUsdRetail={entry.bestUsdRetail?.price ?? null}
                 bestEurRetail={entry.bestEurRetail?.price ?? null}
-                preferredCurrency={currency}
               />
             ))}
           </div>

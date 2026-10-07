@@ -1,7 +1,15 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CardImageFrame } from '../CardImageFrame';
 import { RarityBadge } from '../RarityBadge';
-import type { YgoCurrency } from '../../lib/currency';
+import {
+  CURRENCY_COOKIE,
+  DEFAULT_CURRENCY,
+  isYgoCurrency,
+  type YgoCurrency,
+} from '../../lib/currency';
 import styles from '../browse/Browse.module.css';
 
 export interface CardBrowseTileProps {
@@ -16,9 +24,28 @@ export interface CardBrowseTileProps {
   setLine?: string | null;
   bestUsdRetail?: number | null;
   bestEurRetail?: number | null;
-  /** The reader's currency preference (from the Header cookie read).
-   *  Determines which price is primary; the other is shown as alt. */
+  /** Optional explicit currency hint. When omitted (recommended for
+   *  ISR callers like /set, /rarity, /archetype) the tile starts
+   *  from DEFAULT_CURRENCY on first render — matching the server
+   *  HTML — and reads ygo_currency after mount. Dynamic callers that
+   *  already know the server-side cookie can pass this to avoid the
+   *  one-frame swap. */
   preferredCurrency?: YgoCurrency;
+}
+
+function readCurrencyCookie(): YgoCurrency {
+  if (typeof document === 'undefined') return DEFAULT_CURRENCY;
+  const prefix = `${CURRENCY_COOKIE}=`;
+  const parts = document.cookie ? document.cookie.split(';') : [];
+  for (const raw of parts) {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith(prefix)) {
+      const value = decodeURIComponent(trimmed.slice(prefix.length));
+      if (isYgoCurrency(value)) return value;
+      return DEFAULT_CURRENCY;
+    }
+  }
+  return DEFAULT_CURRENCY;
 }
 
 function formatPrice(value: number, currency: YgoCurrency): string {
@@ -29,6 +56,12 @@ function formatPrice(value: number, currency: YgoCurrency): string {
 // Shared tile for image-led card grids (set / rarity / archetype
 // browse pages). Uses the .setCard* class family in Browse.module.css
 // so all three surfaces render an identical visual language.
+//
+// Cookie-aware client component so callers (/set, /rarity,
+// /archetype) can render without a server cookie() read. Hydration
+// is safe because the first render always uses the explicit prop
+// value or DEFAULT_CURRENCY; the real cookie value is applied in
+// useEffect, matching the Lorcana P1a pattern.
 export function CardBrowseTile(props: CardBrowseTileProps) {
   const {
     href,
@@ -39,8 +72,22 @@ export function CardBrowseTile(props: CardBrowseTileProps) {
     setLine,
     bestUsdRetail,
     bestEurRetail,
-    preferredCurrency = 'USD',
+    preferredCurrency: initialCurrency,
   } = props;
+
+  const serverCurrency: YgoCurrency = initialCurrency ?? DEFAULT_CURRENCY;
+  const [preferredCurrency, setPreferredCurrency] = useState<YgoCurrency>(serverCurrency);
+
+  useEffect(() => {
+    // Only consult the cookie when the caller did NOT pass an
+    // explicit value. Dynamic routes that already read the cookie
+    // server-side pass it in and own the authoritative choice.
+    if (initialCurrency !== undefined) return;
+    setPreferredCurrency(readCurrencyCookie());
+    const onChange = () => setPreferredCurrency(readCurrencyCookie());
+    window.addEventListener('ygo:currency-changed', onChange);
+    return () => window.removeEventListener('ygo:currency-changed', onChange);
+  }, [initialCurrency]);
 
   // Pick a primary + secondary based on the reader's currency pref.
   // If the preferred currency has no data we fall back to the other —

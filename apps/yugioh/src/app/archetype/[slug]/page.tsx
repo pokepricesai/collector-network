@@ -18,7 +18,6 @@ import {
 } from '../../../server/browse';
 import Faq from '../../../components/Faq';
 import { archetypeFaq } from '../../../lib/faq-content';
-import { getYgoCurrency } from '../../../lib/currency-server';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
@@ -53,10 +52,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ArchetypePage({ params }: Props) {
   const { slug } = await params;
-  const [data, currency] = await Promise.all([
-    getYugiohArchetypeBySlug(slug),
-    getYgoCurrency(),
-  ]);
+  // Currency moved to the cookie-aware CardBrowseTile client
+  // component so this page can be served from the Full Route Cache.
+  const data = await getYugiohArchetypeBySlug(slug);
   if (!data) notFound();
 
   const jsonLd = buildJsonLd(data, siteUrl());
@@ -251,7 +249,6 @@ export default async function ArchetypePage({ params }: Props) {
                 setLine={entry.set?.code?.toUpperCase() ?? null}
                 bestUsdRetail={entry.bestUsdRetail?.price ?? null}
                 bestEurRetail={entry.bestEurRetail?.price ?? null}
-                preferredCurrency={currency}
               />
             ))}
           </div>
