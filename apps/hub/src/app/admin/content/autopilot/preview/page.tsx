@@ -5,6 +5,7 @@ import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { previewPipeline } from '@/server/autopilot/pipeline';
 import { HOLD_REASON_LABELS } from '@/server/autopilot/holds';
+import { executeFirstPaidDraftAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -21,6 +22,44 @@ export default async function AutopilotPreviewPage() {
   const sites = await listNetworkSites(sb);
   const preview = await previewPipeline({ sb, site_slug: 'ygo' });
 
+  // Latest autopilot article (any status) so Luke can review the first
+  // paid draft without hunting through the article list.
+  const { data: latestArticleRow } = await sb
+    .from('network_articles')
+    .select('id, title, slug, status, body, body_rich, meta_title, meta_description, featured_image_url, hold_reasons, budget_cents_actual, autopilot_run_id, created_at, updated_at, content_type')
+    .not('autopilot_run_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const latestArticle = latestArticleRow as null | {
+    id: string; title: string; slug: string; status: string; body: string | null; body_rich: Record<string, unknown> | null;
+    meta_title: string | null; meta_description: string | null; featured_image_url: string | null;
+    hold_reasons: string[]; budget_cents_actual: number | null; autopilot_run_id: string | null;
+    created_at: string; updated_at: string; content_type: string;
+  };
+
+  // Pull the matching AI cost log entry for the run.
+  interface CostLogRow {
+    model: string; input_tokens: number; output_tokens: number;
+    cache_read_tokens: number; cache_write_tokens: number;
+    est_cost_usd: number; created_at: string;
+  }
+  let latestCost: CostLogRow | null = null;
+  if (latestArticle?.autopilot_run_id) {
+    const { data: costRow } = await sb
+      .from('network_ai_cost_log')
+      .select('model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, est_cost_usd, created_at')
+      .eq('autopilot_run_id', latestArticle.autopilot_run_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    latestCost = (costRow as CostLogRow | null) ?? null;
+  }
+
+  // Only an eligible candidate is a valid first-run subject.
+  const canTrigger = preview.researched_shortlist.some((r) => r.eligible_for_generation);
+  const chosen = preview.researched_shortlist.find((r) => r.eligible_for_generation) ?? null;
+
   const outcomeTone =
     preview.pipeline.outcome === 'ready_for_first_paid_run' ? 'success' :
     preview.pipeline.outcome === 'ready_to_publish' ? 'success' :
@@ -34,6 +73,106 @@ export default async function AutopilotPreviewPage() {
         description={<>End-to-end preview of what the autopilot would do with the top YGO opportunity. <strong>Fixture mode: no AI call, no budget reserved, no publishing.</strong> The fixture draft is deterministically rendered from the evidence pack so the downstream QA + body_rich pipeline is exercised without model spend.</>}
         actions={<Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/content/autopilot">Autopilot settings</Link>}
       />
+
+      {latestArticle && (
+        <Panel
+          title="Latest paid autopilot draft (review-only, not published)"
+          eyebrow={`${latestArticle.status.toUpperCase()} · run ${latestArticle.autopilot_run_id?.slice(0, 8) ?? ''}`}
+          actions={<Link className="ui-btn ui-btn--secondary ui-btn--sm" href={`/admin/content/articles/${latestArticle.id}`}>Open article editor</Link>}
+        >
+          <Notice tone={latestArticle.hold_reasons?.length ? 'warning' : 'success'}>
+            <strong>REAL AI DRAFT · not fixture.</strong>{' '}
+            Status is <code>{latestArticle.status}</code>. <code>auto_publish_allowed</code> stays <strong>false</strong> for YGO — this draft will not go live until Luke manually promotes it.
+          </Notice>
+
+          {latestCost && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginTop: 10 }}>
+              <KV label="Model" value={latestCost.model} />
+              <KV label="Input tokens" value={latestCost.input_tokens.toLocaleString()} />
+              <KV label="Output tokens" value={latestCost.output_tokens.toLocaleString()} />
+              <KV label="Cache read" value={(latestCost.cache_read_tokens ?? 0).toLocaleString()} />
+              <KV label="Cache write" value={(latestCost.cache_write_tokens ?? 0).toLocaleString()} />
+              <KV label="Cost (USD)" value={`$${Number(latestCost.est_cost_usd).toFixed(6)}`} />
+              <KV label="Cost (GBP approx)" value={`£${(Number(latestCost.est_cost_usd) * 0.79).toFixed(5)}`} />
+            </div>
+          )}
+
+          <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Article</h3>
+          <div style={{ padding: 12, border: '1px solid var(--admin-border)', borderRadius: 'var(--radius-md)', background: 'var(--admin-surface)' }}>
+            <h1 style={{ fontSize: 20, margin: '0 0 6px' }}>{latestArticle.title}</h1>
+            <div className="col-dim" style={{ fontSize: 12, marginBottom: 10 }}>
+              <strong>meta_title:</strong> {latestArticle.meta_title ?? '(none)'}
+              {' · '}
+              <strong>meta_description:</strong> {latestArticle.meta_description ?? '(none)'}
+              {' · '}
+              <strong>slug:</strong> <code>{latestArticle.slug}</code>
+            </div>
+            {latestArticle.featured_image_url && (
+              <img src={latestArticle.featured_image_url} alt="" style={{ maxWidth: 240, display: 'block', margin: '0 0 10px' }} />
+            )}
+            <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {latestArticle.body ?? '(no body persisted)'}
+            </div>
+          </div>
+
+          <details style={{ marginTop: 10 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>body_rich (TipTap JSON)</summary>
+            <pre style={{ background: 'var(--admin-surface-strong)', padding: 10, borderRadius: 6, fontSize: 11, maxHeight: 320, overflow: 'auto' }}>
+              {latestArticle.body_rich ? JSON.stringify(latestArticle.body_rich, null, 2) : '(none)'}
+            </pre>
+          </details>
+
+          {latestArticle.hold_reasons && latestArticle.hold_reasons.length > 0 && (
+            <>
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Hold reasons</h3>
+              <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+                {latestArticle.hold_reasons.map((r) => (
+                  <li key={r}><code>{r}</code> · {HOLD_REASON_LABELS[r]?.title ?? '(unknown reason)'}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Panel>
+      )}
+
+      <Panel
+        title="First paid draft generation (admin-triggered, ONE call only)"
+        eyebrow={canTrigger ? 'Eligible candidate present' : 'No eligible candidate'}
+      >
+        {canTrigger && chosen ? (
+          <>
+            <Notice tone="warning">
+              <strong>This spends real money.</strong>{' '}
+              Clicking the button below makes <strong>ONE</strong> paid Anthropic Messages call using{' '}
+              <code>default_draft_model</code> (currently Haiku 4.5 by config). Projected cost is shown in panel 5; the
+              per-article cap and daily/monthly budgets are enforced by the atomic reservation RPC.
+              <br /><br />
+              <strong>No publishing.</strong> The resulting article is written to <code>network_articles</code> with
+              <code>status=review</code>; <code>auto_publish_allowed</code> stays <code>false</code> for YGO.
+              <br /><br />
+              Selected subject: <strong>{chosen.discovery.working_title}</strong> (template: <code>{chosen.discovery.template_id}</code>, final score <code>{chosen.final_score.total}/100</code>).
+            </Notice>
+            <form action={executeFirstPaidDraftAction} style={{ marginTop: 10 }}>
+              <label style={{ display: 'block', fontSize: 13, marginBottom: 10 }}>
+                <input type="checkbox" name="confirm" required /> I confirm the research pack, approve one paid draft call, and understand nothing will be published.
+              </label>
+              <button type="submit" className="admin-btn admin-btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>
+                Run first paid draft now
+              </button>
+            </form>
+            <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
+              This button is wired to <code>executeFirstPaidDraftAction</code>. It reserves budget, calls the model once,
+              parses the response through <code>parseDraftJson</code>, runs deterministic QA, writes the article in review
+              state, and consumes the actual cost. No retries. No fallback. No semantic QA.
+            </p>
+          </>
+        ) : (
+          <Notice tone="info">
+            No eligible researched candidate. Enable sources or wait for a stronger signal — the button only appears when
+            at least one candidate meets the final-score threshold and evidence quality is ready.
+          </Notice>
+        )}
+      </Panel>
 
       <Panel title="Pipeline outcome" eyebrow="End of fixture dry-run">
         <Notice tone={outcomeTone}>
