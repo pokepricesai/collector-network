@@ -30,7 +30,7 @@ import AskYGOPricesPanel from '../../../components/card/AskYGOPricesPanel';
 import Faq from '../../../components/Faq';
 import EbayAffiliateDisclosure from '../../../components/EbayAffiliateDisclosure';
 import { StaleSourceNotice } from '../../../components/StaleSourceNotice';
-import { getYgoCurrency } from '../../../lib/currency-server';
+import { CurrencyScope } from '../../../components/CurrencyScope';
 import { cardFaq } from '../../../lib/faq-content';
 import styles from '../../../components/card/CardIdentity.module.css';
 
@@ -79,10 +79,11 @@ export const revalidate = 1800;
 
 export default async function LogicalCardPage({ params }: Props) {
   const { slug } = await params;
-  const [data, currency] = await Promise.all([
-    getYugiohLogicalCardBySlug(slug),
-    getYgoCurrency(),
-  ]);
+  // Currency moved to CurrencyScope client gate around the stale
+  // source notices below. The USD + EUR price ranges in the pricing
+  // panel are rendered unconditionally in both currencies; only the
+  // "this feed is stale" banner is currency-scoped.
+  const data = await getYugiohLogicalCardBySlug(slug);
   if (!data) notFound();
 
   const jsonLd = buildCardJsonLd(data, siteUrl());
@@ -312,12 +313,12 @@ export default async function LogicalCardPage({ params }: Props) {
               Range across every indexed printing. Currency is never converted.
             </p>
           </header>
-          {currency === 'USD' && (
+          <CurrencyScope currency="USD">
             <StaleSourceNotice source="tcggraph.tcgplayer" />
-          )}
-          {currency === 'EUR' && (
+          </CurrencyScope>
+          <CurrencyScope currency="EUR">
             <StaleSourceNotice source="tcggraph.cardmarket" />
-          )}
+          </CurrencyScope>
           <div className={styles.pricingGrid}>
             <Surface variant="market" className={styles.priceCell}>
               <span className={styles.priceLabel}>USD retail range</span>
