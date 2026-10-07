@@ -425,7 +425,14 @@ export type QACheckName =
   | 'body_rich_sanitised'
   | 'duplicate_content'
   | 'banned_filler_phrase'
-  | 'unsupported_number';
+  | 'unsupported_number'
+  // Checkpoint C hardening checks:
+  | 'no_em_dash'
+  | 'markdown_image_leak'
+  | 'markdown_link_leak'
+  | 'heading_leakage'
+  | 'speculative_claim'
+  | 'rarity_claim_supported';
 
 export type QASeverity = 'blocker' | 'warning' | 'info';
 export type QASource = 'deterministic' | 'semantic_ai';

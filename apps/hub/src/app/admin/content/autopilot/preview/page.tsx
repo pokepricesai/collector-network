@@ -1,3 +1,4 @@
+import type React from 'react';
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { Notice, Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
@@ -5,6 +6,9 @@ import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { previewPipeline } from '@/server/autopilot/pipeline';
 import { HOLD_REASON_LABELS } from '@/server/autopilot/holds';
+import { runDeterministicQA } from '@/server/autopilot/qa';
+import { draftToBodyRich, reconstructDraftFromArticle, type TiptapDoc, type TiptapNode, type TiptapInline, type TiptapMark } from '@/server/autopilot/body-rich';
+import type { EvidencePackPayload, QAReport } from '@/server/autopilot/types';
 import { executeFirstPaidDraftAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -54,6 +58,99 @@ export default async function AutopilotPreviewPage() {
       .limit(1)
       .maybeSingle();
     latestCost = (costRow as CostLogRow | null) ?? null;
+  }
+
+  // ─── Re-run deterministic QA on the latest paid draft ──────────
+  // Uses the stored body (markdown) + the frozen evidence pack. No AI
+  // call. The reconstructed body_rich produced by the enhanced
+  // converter is shown as the "corrected preview" so the operator can
+  // see what the article WOULD look like after the Checkpoint-C
+  // hardening repairs.
+  interface ReQAResult {
+    report: QAReport;
+    correctedBodyRich: TiptapDoc;
+    pack: EvidencePackPayload | null;
+    reconstructedSectionCount: number;
+    rarityUnsupported: string[];
+    speculativeHits: Array<{ pattern_id: string; label: string; count: number }>;
+    emDashCount: number;
+    markdownImageLeakCount: number;
+    markdownLinkLeakCount: number;
+    headingLeakageCount: number;
+  }
+  let reQA: ReQAResult | null = null;
+  if (latestArticle) {
+    const { data: packRow } = await sb
+      .from('network_article_evidence_packs')
+      .select('payload')
+      .eq('article_id', latestArticle.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const pack = ((packRow as null | { payload: unknown })?.payload ?? null) as EvidencePackPayload | null;
+
+    const { data: ygoSite } = await sb
+      .from('network_sites')
+      .select('id')
+      .eq('slug', 'ygo')
+      .maybeSingle();
+    const ygoSiteId = (ygoSite as null | { id: string })?.id ?? null;
+
+    if (pack && ygoSiteId) {
+      const reconstructed = reconstructDraftFromArticle({
+        title: latestArticle.title,
+        meta_title: latestArticle.meta_title,
+        meta_description: latestArticle.meta_description,
+        slug: latestArticle.slug,
+        featured_image_url: latestArticle.featured_image_url,
+        body: latestArticle.body,
+      });
+      // Clone so runDeterministicQA mutations don't leak into our
+      // reconstructed state (the function already JSON clones but
+      // being explicit here keeps the two uses independent).
+      const { report, repaired } = await runDeterministicQA({ sb, pack, draft: JSON.parse(JSON.stringify(reconstructed)), site_id: ygoSiteId });
+      const corrected = draftToBodyRich(repaired);
+
+      // Breakout counters from the findings for the quality report.
+      const rarityUnsupported: string[] = [];
+      const speculativeMap = new Map<string, { label: string; count: number }>();
+      let emDashCount = 0;
+      let imageLeakCount = 0;
+      let linkLeakCount = 0;
+      let headingLeakCount = 0;
+      for (const f of report.findings) {
+        if (f.check_name === 'rarity_claim_supported') {
+          const un = (f.evidence as { unsupported?: Array<{ rarity: string }> }).unsupported ?? [];
+          for (const u of un) rarityUnsupported.push(u.rarity);
+        } else if (f.check_name === 'speculative_claim') {
+          const id = (f.evidence as { pattern_id?: string }).pattern_id ?? 'unknown';
+          const hits = ((f.evidence as { hits?: unknown[] }).hits ?? []).length;
+          const existing = speculativeMap.get(id);
+          speculativeMap.set(id, { label: f.message.match(/"([^"]+)"/)?.[1] ?? id, count: (existing?.count ?? 0) + Math.max(1, hits) });
+        } else if (f.check_name === 'no_em_dash') {
+          emDashCount += ((f.evidence as { count?: number }).count ?? 0);
+        } else if (f.check_name === 'markdown_image_leak') {
+          imageLeakCount += ((f.evidence as { count?: number }).count ?? 0);
+        } else if (f.check_name === 'markdown_link_leak') {
+          linkLeakCount += ((f.evidence as { count?: number }).count ?? 0);
+        } else if (f.check_name === 'heading_leakage') {
+          headingLeakCount += ((f.evidence as { count?: number }).count ?? 0);
+        }
+      }
+
+      reQA = {
+        report,
+        correctedBodyRich: corrected,
+        pack,
+        reconstructedSectionCount: reconstructed.sections.length,
+        rarityUnsupported,
+        speculativeHits: Array.from(speculativeMap.entries()).map(([pattern_id, v]) => ({ pattern_id, label: v.label, count: v.count })),
+        emDashCount,
+        markdownImageLeakCount: imageLeakCount,
+        markdownLinkLeakCount: linkLeakCount,
+        headingLeakageCount: headingLeakCount,
+      };
+    }
   }
 
   // Only an eligible candidate is a valid first-run subject.
@@ -132,6 +229,94 @@ export default async function AutopilotPreviewPage() {
               </ul>
             </>
           )}
+        </Panel>
+      )}
+
+      {latestArticle && reQA && (
+        <Panel
+          title="Quality report (re-run on existing paid draft, no new AI call)"
+          eyebrow={`${reQA.report.blocker_count} blocker(s), ${reQA.report.warning_count} warning(s)`}
+        >
+          <Notice tone={reQA.report.blocker_count === 0 ? 'success' : 'warning'}>
+            <strong>Deterministic QA re-run against the frozen evidence pack.</strong>{' '}
+            This runs the Checkpoint-C-hardened checks (em dash hard-ban, markdown leakage, speculative-claim scan, rarity support) over the stored body. No AI call. The repaired body_rich preview below is what publishing would persist after auto-repair.
+          </Notice>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginTop: 10 }}>
+            <KV label="Em dash count" value={reQA.emDashCount.toString()} warn={reQA.emDashCount > 0} />
+            <KV label="Markdown image leaks" value={reQA.markdownImageLeakCount.toString()} warn={reQA.markdownImageLeakCount > 0} />
+            <KV label="Markdown link leaks" value={reQA.markdownLinkLeakCount.toString()} warn={reQA.markdownLinkLeakCount > 0} />
+            <KV label="Heading markdown leaks" value={reQA.headingLeakageCount.toString()} warn={reQA.headingLeakageCount > 0} />
+            <KV label="Speculative claims (unsupported)" value={reQA.speculativeHits.length.toString()} warn={reQA.speculativeHits.length > 0} />
+            <KV label="Rarity claims (unsupported)" value={reQA.rarityUnsupported.length.toString()} warn={reQA.rarityUnsupported.length > 0} />
+            <KV label="Reconstructed sections" value={reQA.reconstructedSectionCount.toString()} />
+            <KV label="Publish-ready" value={reQA.report.blocker_count === 0 ? 'yes' : 'no'} warn={reQA.report.blocker_count > 0} />
+          </div>
+
+          {reQA.speculativeHits.length > 0 && (
+            <>
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Speculative claims not supported by evidence</h3>
+              <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+                {reQA.speculativeHits.map((s) => <li key={s.pattern_id}><code>{s.pattern_id}</code> · {s.label} ({s.count}x)</li>)}
+              </ul>
+            </>
+          )}
+          {reQA.rarityUnsupported.length > 0 && (
+            <>
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Rarities named but not in evidence</h3>
+              <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+                {reQA.rarityUnsupported.map((r) => <li key={r}><code>{r}</code></li>)}
+              </ul>
+            </>
+          )}
+
+          {reQA.report.findings.length > 0 && (
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>All QA findings ({reQA.report.findings.length})</summary>
+              <Table
+                columns={[
+                  { key: 's', header: 'Severity', render: (r: QARow) => <StatusBadge state={r.severity === 'blocker' ? 'failed' : r.severity === 'warning' ? 'warning' : 'info'} label={r.severity} /> },
+                  { key: 'c', header: 'Check',    render: (r: QARow) => <code>{r.check}</code> },
+                  { key: 'm', header: 'Message',  render: (r: QARow) => <span style={{ fontSize: 12.5 }}>{r.message}</span> },
+                ]}
+                rows={reQA.report.findings.map((f, i) => ({ id: i, severity: f.severity, check: f.check_name, message: f.message }))}
+                empty=""
+              />
+            </details>
+          )}
+
+          {reQA.report.auto_repairs_applied.length > 0 && (
+            <>
+              <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Auto-repairs applied by this re-run</h3>
+              <ul style={{ fontSize: 12.5, margin: 0, paddingLeft: 20 }}>
+                {reQA.report.auto_repairs_applied.map((r, i) => <li key={i}><code>{r.check_name}</code>: {r.action}</li>)}
+              </ul>
+            </>
+          )}
+        </Panel>
+      )}
+
+      {latestArticle && reQA && (
+        <Panel
+          title="Corrected body_rich preview (post-repair, not persisted)"
+          eyebrow="How the article should render after Checkpoint-C auto-repair"
+        >
+          <Notice tone="info">
+            This is a <strong>preview only</strong>. The repaired body_rich has NOT been written back to <code>network_articles.body_rich</code>. Images that leaked as Markdown are promoted to proper TipTap image nodes; em dashes are replaced with commas; headings and links are structured properly.
+          </Notice>
+          <div style={{ marginTop: 12, padding: 14, border: '1px solid var(--admin-border)', borderRadius: 'var(--radius-md)', background: 'var(--admin-surface)' }}>
+            <h1 style={{ fontSize: 22, margin: '0 0 10px' }}>{latestArticle.title}</h1>
+            {latestArticle.featured_image_url && (
+              <img src={latestArticle.featured_image_url} alt="" style={{ maxWidth: 320, display: 'block', margin: '0 0 14px' }} />
+            )}
+            <TiptapView doc={reQA.correctedBodyRich} />
+          </div>
+          <details style={{ marginTop: 10 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Corrected body_rich (TipTap JSON)</summary>
+            <pre style={{ background: 'var(--admin-surface-strong)', padding: 10, borderRadius: 6, fontSize: 11, maxHeight: 320, overflow: 'auto' }}>
+              {JSON.stringify(reQA.correctedBodyRich, null, 2)}
+            </pre>
+          </details>
         </Panel>
       )}
 
@@ -641,3 +826,57 @@ function KV({ label, value, warn }: { label: string; value: string; warn?: boole
 }
 
 function fmtUsd(n: number): string { return `$${n.toFixed(4)}`; }
+
+// Minimal TipTap-JSON renderer. Supports paragraph / heading(level) /
+// image nodes with text + link / bold / italic marks. Narrow by
+// design: this isn't a full TipTap editor, just enough to show the
+// admin an accurate preview of what the published article will look
+// like once the publisher adapter renders body_rich.
+function TiptapView({ doc }: { doc: TiptapDoc }) {
+  return (
+    <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--admin-text)' }}>
+      {doc.content.map((node, i) => renderNode(node, i))}
+    </div>
+  );
+}
+function renderNode(node: TiptapNode, key: number): React.ReactNode {
+  if (node.type === 'paragraph') {
+    return (
+      <p key={key} style={{ margin: '0 0 12px' }}>
+        {(node.content ?? []).map((n, j) => renderInline(n, j))}
+      </p>
+    );
+  }
+  if (node.type === 'heading') {
+    const Tag = node.attrs.level === 2 ? 'h2' : node.attrs.level === 3 ? 'h3' : 'h2';
+    const style =
+      node.attrs.level === 2
+        ? { fontSize: 18, margin: '18px 0 8px', fontWeight: 700 }
+        : { fontSize: 15, margin: '14px 0 6px', fontWeight: 700 };
+    return (
+      <Tag key={key} style={style}>
+        {node.content.map((n, j) => renderInline(n, j))}
+      </Tag>
+    );
+  }
+  if (node.type === 'image') {
+    return (
+      <img
+        key={key}
+        src={node.attrs.src}
+        alt={node.attrs.alt ?? ''}
+        style={{ display: 'block', maxWidth: 320, margin: '12px 0' }}
+      />
+    );
+  }
+  return null;
+}
+function renderInline(node: TiptapInline, key: number): React.ReactNode {
+  let el: React.ReactNode = node.text;
+  for (const mark of (node.marks ?? []) as TiptapMark[]) {
+    if (mark.type === 'bold') el = <strong key={`b-${key}`}>{el}</strong>;
+    else if (mark.type === 'italic') el = <em key={`i-${key}`}>{el}</em>;
+    else if (mark.type === 'link') el = <a key={`l-${key}`} href={mark.attrs.href} style={{ color: 'var(--admin-accent)' }}>{el}</a>;
+  }
+  return <span key={key}>{el}</span>;
+}

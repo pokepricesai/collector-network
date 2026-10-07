@@ -21,7 +21,7 @@ import type {
   QAReport,
   QACheckName,
 } from './types';
-import { BANNED_FILLER_PHRASES } from './templates';
+import { BANNED_FILLER_PHRASES, RARITY_VOCABULARY, SPECULATIVE_CLAIM_PATTERNS } from './templates';
 
 const TOL_PCT = 0.5;     // percentage comparisons tolerate ±0.5%
 const TOL_MONEY_MINOR = 1; // ±1p/¢ to shrug off rounding
@@ -203,6 +203,223 @@ export async function runDeterministicQA(input: QAInput): Promise<{ report: QARe
     }
   }
 
+  // ─── Em dash hard-ban (Checkpoint C) ─────────────────────────
+  // No em dash character may appear anywhere in the article. We
+  // scan every text-bearing field and auto-repair paragraph bodies
+  // (headings, titles, meta also) by replacing an em dash with a
+  // comma + space. The finding is kept even after auto-repair so
+  // the operator sees that the model drafted em dashes in the
+  // first place; the publish-ready gate uses the auto_repaired
+  // flag below.
+  {
+    let totalEmDashes = 0;
+    const emDashLocations: Array<{ field: string; raw: string }> = [];
+
+    const scanAndRepairString = (field: string, s: string): string => {
+      if (!s.includes('—')) return s;
+      const matches = s.match(/—/g);
+      if (matches) {
+        totalEmDashes += matches.length;
+        emDashLocations.push({ field, raw: s.length > 160 ? s.slice(0, 157) + '...' : s });
+      }
+      // Replace with comma + single space, then collapse any double
+      // spaces/comma-comma artefacts that result from " — " surrounds.
+      return s
+        .replace(/\s*—\s*/g, ', ')
+        .replace(/,\s*,/g, ',')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    };
+
+    draft.title            = scanAndRepairString('title', draft.title);
+    draft.meta_title       = scanAndRepairString('meta_title', draft.meta_title);
+    draft.meta_description = scanAndRepairString('meta_description', draft.meta_description);
+    for (const section of draft.sections) {
+      if (section.heading != null) section.heading = scanAndRepairString(`section[${section.id}].heading`, section.heading);
+      section.paragraphs = section.paragraphs.map((p, idx) => scanAndRepairString(`section[${section.id}].p[${idx}]`, p));
+      for (const link of section.internal_links) link.anchor = scanAndRepairString(`section[${section.id}].link.anchor`, link.anchor);
+      for (const img of section.images) img.alt_text = scanAndRepairString(`section[${section.id}].image.alt`, img.alt_text);
+    }
+
+    if (totalEmDashes > 0) {
+      findings.push(finding(
+        'no_em_dash',
+        'blocker',
+        `Em dash present in draft (${totalEmDashes} occurrence${totalEmDashes === 1 ? '' : 's'}). Auto-repaired to commas; keep the finding so operator can review context before publish.`,
+        { count: totalEmDashes, locations: emDashLocations.slice(0, 10) },
+      ));
+      repairs.push({ check_name: 'no_em_dash', action: `replaced ${totalEmDashes} em dash(es) with commas` });
+    }
+  }
+
+  // ─── Markdown leakage in paragraphs ──────────────────────────
+  // Catches four shapes:
+  //   1. ![alt](url)         — image markdown leaked into paragraph text
+  //   2. [text](url)         — link markdown; should be in internal_links
+  //   3. ### ... / ## ...    — markdown heading leaked into a paragraph
+  //   4. **bold** / *italic* — inline emphasis markdown
+  //
+  // Only (1) is auto-repaired: we strip the markdown image from the
+  // paragraph and (if the URL is in the evidence pack) push an image
+  // node onto the section's images list. The other three leave the
+  // paragraph as-is and emit a blocker because reconstructing TipTap
+  // marks deterministically from arbitrary markdown is lossy; we'd
+  // rather fail loudly and have the operator inspect.
+  {
+    const IMG_MD_RE  = /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g;
+    const LINK_MD_RE = /(?<!\!)\[([^\]]+)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g;
+    const HEADING_MD_RE = /^\s{0,3}#{1,6}\s+/;
+    const BOLD_RE = /\*\*[^*\n]+\*\*/;
+    const ITAL_RE = /(^|[^*])\*[^*\n]+\*(?!\*)/;
+
+    let imageLeaks = 0;
+    let linkLeaks = 0;
+    let headingLeaks = 0;
+    let emphasisLeaks = 0;
+    const imageLeakSamples: string[] = [];
+    const linkLeakSamples: string[] = [];
+    const headingLeakSamples: string[] = [];
+
+    for (const section of draft.sections) {
+      for (let i = 0; i < section.paragraphs.length; i++) {
+        let p = section.paragraphs[i]!;
+
+        // Image markdown: strip and promote URL to image list if
+        // allowed by the pack.
+        p = p.replace(IMG_MD_RE, (_match, alt: string, url: string) => {
+          imageLeaks += 1;
+          imageLeakSamples.push(url);
+          if (packImageUrls.has(url)) {
+            // Promote once; dedupe on URL.
+            if (!section.images.some((img) => img.source_url === url)) {
+              section.images.push({ source_url: url, alt_text: (alt ?? '').trim() });
+              repairs.push({ check_name: 'markdown_image_leak', action: `promoted markdown image ${url} into section.images` });
+            }
+          } else {
+            repairs.push({ check_name: 'markdown_image_leak', action: `stripped markdown image ${url} (not in evidence pack)` });
+          }
+          return '';
+        }).replace(/\s{2,}/g, ' ').trim();
+
+        if (LINK_MD_RE.test(p)) {
+          // Reset regex because `.test` leaves lastIndex set.
+          LINK_MD_RE.lastIndex = 0;
+          let m: RegExpExecArray | null;
+          while ((m = LINK_MD_RE.exec(p)) != null) {
+            linkLeaks += 1;
+            linkLeakSamples.push(`${m[1]!} -> ${m[2]!}`);
+          }
+        }
+        if (HEADING_MD_RE.test(p)) {
+          headingLeaks += 1;
+          headingLeakSamples.push(p.slice(0, 80));
+        }
+        if (BOLD_RE.test(p) || ITAL_RE.test(p)) {
+          emphasisLeaks += 1;
+        }
+
+        section.paragraphs[i] = p;
+      }
+      // Drop any paragraphs that became empty after image stripping.
+      section.paragraphs = section.paragraphs.filter((p) => p.trim().length > 0);
+    }
+
+    if (imageLeaks > 0) {
+      findings.push(finding('markdown_image_leak', 'blocker', `Markdown image syntax leaked into paragraph text (${imageLeaks}). Auto-repaired by stripping/promoting; see samples.`, { count: imageLeaks, samples: imageLeakSamples.slice(0, 8) }));
+    }
+    if (linkLeaks > 0) {
+      findings.push(finding('markdown_link_leak', 'blocker', `Markdown link syntax [text](url) found in paragraph text (${linkLeaks}). Model must emit links via internal_links, not inline markdown.`, { count: linkLeaks, samples: linkLeakSamples.slice(0, 8) }));
+    }
+    if (headingLeaks > 0) {
+      findings.push(finding('heading_leakage', 'blocker', `Markdown heading syntax at start of paragraph (${headingLeaks}). Headings must be section.heading, not inline markdown.`, { count: headingLeaks, samples: headingLeakSamples }));
+    }
+    if (emphasisLeaks > 0) {
+      findings.push(finding('markdown_link_leak', 'warning', `Inline **bold** or *italic* markdown present (${emphasisLeaks}). TipTap preview will render it as literal asterisks.`, { count: emphasisLeaks }));
+    }
+  }
+
+  // ─── Speculative market claims ──────────────────────────────
+  // A claim is speculative-unsupported when the pattern matches in
+  // the article text AND no near-equivalent phrase appears in the
+  // evidence pack's external_sources or market_data context.
+  {
+    const evidenceCorpus = buildEvidenceCorpus(input.pack);
+    const paragraphCorpus = draft.sections.flatMap((s) => s.paragraphs).join('\n').toLowerCase();
+
+    for (const pat of SPECULATIVE_CLAIM_PATTERNS) {
+      const re = new RegExp(pat.pattern.source, pat.pattern.flags.includes('g') ? pat.pattern.flags : pat.pattern.flags + 'g');
+      let m: RegExpExecArray | null;
+      const hits: Array<{ phrase: string; context: string }> = [];
+      while ((m = re.exec(paragraphCorpus)) != null) {
+        const start = Math.max(0, m.index - 40);
+        const end   = Math.min(paragraphCorpus.length, m.index + m[0].length + 40);
+        hits.push({ phrase: m[0], context: paragraphCorpus.slice(start, end) });
+        if (hits.length >= 5) break;
+      }
+      if (hits.length === 0) continue;
+
+      // Check evidence corpus for any direct corroboration. The bar is
+      // intentionally generous (substring match on the matched phrase
+      // or on any of two to three tokens from it) because the writer
+      // may paraphrase and we don't want a hard-blocker on surface
+      // word choice when the evidence supports the gist.
+      const supportedByEvidence = evidenceCorpus.includes(pat.label.toLowerCase())
+        || evidenceCorpus.includes(hits[0]!.phrase.toLowerCase());
+      if (!supportedByEvidence) {
+        findings.push(finding(
+          'speculative_claim',
+          'blocker',
+          `Speculative market claim "${pat.label}" present in draft but not supported by evidence pack.`,
+          { pattern_id: pat.id, hits },
+        ));
+      }
+    }
+  }
+
+  // ─── Rarity claims ──────────────────────────────────────────
+  // Every rarity string named in paragraph text must appear in
+  // evidence_pack.market_data[].printing OR in an external source's
+  // headline/summary/facts. Case-insensitive whole-phrase matching.
+  {
+    const rarityHaystack = (() => {
+      const parts: string[] = [];
+      for (const m of input.pack.market_data) {
+        if (m.printing) parts.push(m.printing);
+      }
+      for (const src of input.pack.external_sources) {
+        parts.push(src.headline);
+        if (src.summary) parts.push(src.summary);
+        for (const f of src.facts) parts.push(f);
+      }
+      return parts.join(' | ').toLowerCase();
+    })();
+
+    const paragraphText = draft.sections.flatMap((s) => s.paragraphs).join(' ');
+    const titleText     = `${draft.title} ${draft.meta_title} ${draft.meta_description}`;
+    const scanText      = `${titleText} ${paragraphText}`.toLowerCase();
+
+    const unsupported: Array<{ rarity: string; where: string }> = [];
+    for (const rarity of RARITY_VOCABULARY) {
+      if (rarity === 'Common') continue;             // skip trivial token
+      const needle = rarity.toLowerCase();
+      // Word-ish match: require the phrase surrounded by non-alpha
+      // boundaries so e.g. "Super Rare" doesn't match "superrare".
+      const re = new RegExp(`(^|[^a-z])${escapeRe(needle)}([^a-z]|$)`);
+      if (!re.test(scanText)) continue;
+      if (rarityHaystack.includes(needle)) continue; // supported
+      unsupported.push({ rarity, where: paragraphText.toLowerCase().includes(needle) ? 'body' : 'title/meta' });
+    }
+
+    if (unsupported.length > 0) {
+      findings.push(finding(
+        'rarity_claim_supported',
+        'blocker',
+        `Rarity claim(s) not supported by evidence pack: ${unsupported.map((u) => u.rarity).join(', ')}.`,
+        { unsupported },
+      ));
+    }
+  }
+
   // ─── Metadata length normalisation ───────────────────────────
   if (draft.meta_title.length > 60) {
     draft.meta_title = draft.meta_title.slice(0, 59) + '…';
@@ -320,6 +537,32 @@ function looksLikeCardName(s: string): boolean {
   const blacklist = new Set(['The YGO', 'YGOPrices', 'Yu-Gi-Oh', 'Collector Network']);
   for (const b of blacklist) if (s.includes(b)) return false;
   return true;
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Builds a lowercase corpus of every string in the evidence pack
+// that the writer may legitimately draw a market/collector claim
+// from. Used by the speculative-claim check to decide whether a
+// speculative phrase is corroborated.
+function buildEvidenceCorpus(pack: EvidencePackPayload): string {
+  const parts: string[] = [];
+  if (pack.topic.summary) parts.push(pack.topic.summary);
+  parts.push(pack.methodology);
+  parts.push(pack.article_angle.one_line);
+  for (const m of pack.article_angle.must_cover) parts.push(m);
+  for (const src of pack.external_sources) {
+    parts.push(src.headline);
+    if (src.summary) parts.push(src.summary);
+    for (const f of src.facts) parts.push(f);
+  }
+  for (const m of pack.market_data) {
+    parts.push(m.card_name);
+    if (m.printing) parts.push(m.printing);
+  }
+  return parts.join(' | ').toLowerCase();
 }
 
 function tokeniseTitle(s: string): Set<string> {

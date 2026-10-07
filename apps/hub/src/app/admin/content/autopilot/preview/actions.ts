@@ -160,6 +160,13 @@ export async function executeFirstPaidDraftAction(formData: FormData): Promise<v
     else if (f.check_name === 'image_resolves') hold_reasons.push('image_missing');
     else if (f.check_name === 'banned_filler_phrase' || f.check_name === 'body_rich_sanitised') hold_reasons.push('semantic_qa_failed');
     else if (f.check_name === 'broken_internal_link' || f.check_name === 'internal_link_resolves') hold_reasons.push('broken_internal_link');
+    // Checkpoint C hardening:
+    else if (f.check_name === 'no_em_dash') hold_reasons.push('em_dash_present');
+    else if (f.check_name === 'markdown_image_leak') hold_reasons.push('markdown_image_leak');
+    else if (f.check_name === 'markdown_link_leak') hold_reasons.push('markdown_link_leak');
+    else if (f.check_name === 'heading_leakage') hold_reasons.push('markdown_heading_leak');
+    else if (f.check_name === 'speculative_claim') hold_reasons.push('speculative_claim_unsupported');
+    else if (f.check_name === 'rarity_claim_supported') hold_reasons.push('rarity_claim_unsupported');
   }
 
   const bodyMarkdown = draftToMarkdown(repaired);
