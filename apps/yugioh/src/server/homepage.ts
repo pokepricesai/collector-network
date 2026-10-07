@@ -343,9 +343,17 @@ async function loadRarityDiscovery(
         images: { small?: string; normal?: string } | null;
       }> | null) ?? [];
       if (rows.length === 0) return null;
+      // Planner-estimated count. The homepage rarity-discovery tiles
+      // display a rounded "N cards" vanity number; exact precision is
+      // not required. count=exact triggers a filtered index scan
+      // under tcg_cards_game_set_idx on every ISR cycle × 6 rarities
+      // (planner cost ~17.4k per the P0 audit); count=planned reads
+      // the planner's row estimate (reltuples=~153k verified healthy)
+      // in O(1). Fallback to rows.length preserved if planned returns
+      // null. See YGO P0 cost audit (P0-1).
       const { count } = await supabase
         .from('tcg_cards')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'planned', head: true })
         .eq('game_id', 'ygo')
         .eq('rarity', rarity);
       const representativeImage =
