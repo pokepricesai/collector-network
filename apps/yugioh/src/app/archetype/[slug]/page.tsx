@@ -21,6 +21,14 @@ import { archetypeFaq } from '../../../lib/faq-content';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 3600;
+// Next.js 16 ISR fallback registration: generateStaticParams=[] +
+// dynamicParams=true opts dynamic-segment routes into the Full
+// Route Cache without build-time enumeration. See /set/[slug] for
+// the same pattern.
+export const dynamicParams = true;
+export function generateStaticParams(): { slug: string }[] {
+  return [];
+}
 
 interface Props {
   params: Promise<{ slug: string }>;
