@@ -27,9 +27,20 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Skip static assets and the icon/OG endpoints so we don't waste
-  // Lambda time on them. Next's built-in matcher syntax.
+  // Skip static assets, OG endpoints, and the API routes that have
+  // zero Supabase session dependency. Session-sensitive paths
+  // (/auth/*, /account/*, /collection, /watchlist, /decks,
+  // /dashboard, /settings, /api/watchlist/*) are still matched and
+  // get the middleware session refresh. See YGO P0-6 audit:
+  //
+  //   /api/search/*    — anonymous read; no cookies, no auth
+  //   /api/currency    — writes the ygo_currency cookie only;
+  //                      explicitly not an auth cookie
+  //   /api/affiliate/* — anonymous telemetry; no auth
+  //   /api/ai/ask      — IP rate-limited; no Supabase session
+  //   /api/revalidate  — Bearer-token (YGO_REVALIDATE_TOKEN) auth;
+  //                      no Supabase session interaction
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon1.png|apple-icon.png|ygoprices-logo.png|ygoprices-favicon.png|sitemap.xml|sitemap|robots.txt|api/prewarm).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon1.png|apple-icon.png|ygoprices-logo.png|ygoprices-favicon.png|sitemap.xml|sitemap|robots.txt|api/prewarm|api/search|api/currency|api/affiliate|api/ai/ask|api/revalidate).*)',
   ],
 };
