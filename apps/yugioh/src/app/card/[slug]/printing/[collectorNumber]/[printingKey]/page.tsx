@@ -51,13 +51,17 @@ interface Props {
 }
 
 export const revalidate = 1800;
-// NOTE: ISR fallback registration (dynamicParams + generateStaticParams)
-// deliberately NOT added here. Same reason as /card/[slug]: the
-// Account/Watchlist/Add-to-Deck Mount server components call
-// getCurrentUser() -> cookies() which throws DYNAMIC_SERVER_USAGE
-// when the route is classified as potentially-static. Lifting
-// those auth reads into client islands (same shape as P0-2 Header)
-// is the required follow-up to flip this route. See YGO P0-4 report.
+// Next.js 16 ISR fallback registration: see /card/[slug] for the
+// same pattern. Add-to-Collection / Watch / Add-to-Deck Mounts
+// are now cookie-free client islands (YGO P0-5).
+export const dynamicParams = true;
+export function generateStaticParams(): {
+  slug: string;
+  collectorNumber: string;
+  printingKey: string;
+}[] {
+  return [];
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, collectorNumber, printingKey } = await params;
