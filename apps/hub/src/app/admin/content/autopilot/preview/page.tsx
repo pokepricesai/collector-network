@@ -30,13 +30,13 @@ export default async function AutopilotPreviewPage() {
   // paid draft without hunting through the article list.
   const { data: latestArticleRow } = await sb
     .from('network_articles')
-    .select('id, title, slug, status, body, body_rich, meta_title, meta_description, featured_image_url, hold_reasons, budget_cents_actual, autopilot_run_id, created_at, updated_at, content_type')
+    .select('id, site_id, title, slug, status, body, body_rich, meta_title, meta_description, featured_image_url, hold_reasons, budget_cents_actual, autopilot_run_id, created_at, updated_at, content_type')
     .not('autopilot_run_id', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   const latestArticle = latestArticleRow as null | {
-    id: string; title: string; slug: string; status: string; body: string | null; body_rich: Record<string, unknown> | null;
+    id: string; site_id: string; title: string; slug: string; status: string; body: string | null; body_rich: Record<string, unknown> | null;
     meta_title: string | null; meta_description: string | null; featured_image_url: string | null;
     hold_reasons: string[]; budget_cents_actual: number | null; autopilot_run_id: string | null;
     created_at: string; updated_at: string; content_type: string;
@@ -61,15 +61,29 @@ export default async function AutopilotPreviewPage() {
   }
 
   // ─── Re-run deterministic QA on the latest paid draft ──────────
+  //
   // Uses the stored body (markdown) + the frozen evidence pack. No AI
   // call. The reconstructed body_rich produced by the enhanced
   // converter is shown as the "corrected preview" so the operator can
   // see what the article WOULD look like after the Checkpoint-C
   // hardening repairs.
+  //
+  // RESILIENCE (post-6e30da5 bug fix):
+  //  * Pack lookup falls back from article_id to autopilot_run_id so a
+  //    missed link-back UPDATE in the paid-run action doesn't hide
+  //    the panel.
+  //  * site_id is taken from the article row itself; we no longer
+  //    need a separate network_sites lookup.
+  //  * If the pack is STILL missing we synthesise a minimal empty
+  //    pack and run the pack-independent checks (em dash, markdown
+  //    leakage, structure) anyway, with a clear notice.
+  //  * We filter out slug_unique findings since the stored article's
+  //    own slug obviously matches itself.
   interface ReQAResult {
     report: QAReport;
     correctedBodyRich: TiptapDoc;
     pack: EvidencePackPayload | null;
+    packSource: 'linked_by_article_id' | 'linked_by_run_id' | 'missing_synthesised';
     reconstructedSectionCount: number;
     rarityUnsupported: string[];
     speculativeHits: Array<{ pattern_id: string; label: string; count: number }>;
@@ -77,80 +91,116 @@ export default async function AutopilotPreviewPage() {
     markdownImageLeakCount: number;
     markdownLinkLeakCount: number;
     headingLeakageCount: number;
+    publishReady: boolean;
   }
   let reQA: ReQAResult | null = null;
   if (latestArticle) {
-    const { data: packRow } = await sb
-      .from('network_article_evidence_packs')
-      .select('payload')
-      .eq('article_id', latestArticle.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const pack = ((packRow as null | { payload: unknown })?.payload ?? null) as EvidencePackPayload | null;
-
-    const { data: ygoSite } = await sb
-      .from('network_sites')
-      .select('id')
-      .eq('slug', 'ygo')
-      .maybeSingle();
-    const ygoSiteId = (ygoSite as null | { id: string })?.id ?? null;
-
-    if (pack && ygoSiteId) {
-      const reconstructed = reconstructDraftFromArticle({
-        title: latestArticle.title,
-        meta_title: latestArticle.meta_title,
-        meta_description: latestArticle.meta_description,
-        slug: latestArticle.slug,
-        featured_image_url: latestArticle.featured_image_url,
-        body: latestArticle.body,
-      });
-      // Clone so runDeterministicQA mutations don't leak into our
-      // reconstructed state (the function already JSON clones but
-      // being explicit here keeps the two uses independent).
-      const { report, repaired } = await runDeterministicQA({ sb, pack, draft: JSON.parse(JSON.stringify(reconstructed)), site_id: ygoSiteId });
-      const corrected = draftToBodyRich(repaired);
-
-      // Breakout counters from the findings for the quality report.
-      const rarityUnsupported: string[] = [];
-      const speculativeMap = new Map<string, { label: string; count: number }>();
-      let emDashCount = 0;
-      let imageLeakCount = 0;
-      let linkLeakCount = 0;
-      let headingLeakCount = 0;
-      for (const f of report.findings) {
-        if (f.check_name === 'rarity_claim_supported') {
-          const un = (f.evidence as { unsupported?: Array<{ rarity: string }> }).unsupported ?? [];
-          for (const u of un) rarityUnsupported.push(u.rarity);
-        } else if (f.check_name === 'speculative_claim') {
-          const id = (f.evidence as { pattern_id?: string }).pattern_id ?? 'unknown';
-          const hits = ((f.evidence as { hits?: unknown[] }).hits ?? []).length;
-          const existing = speculativeMap.get(id);
-          speculativeMap.set(id, { label: f.message.match(/"([^"]+)"/)?.[1] ?? id, count: (existing?.count ?? 0) + Math.max(1, hits) });
-        } else if (f.check_name === 'no_em_dash') {
-          emDashCount += ((f.evidence as { count?: number }).count ?? 0);
-        } else if (f.check_name === 'markdown_image_leak') {
-          imageLeakCount += ((f.evidence as { count?: number }).count ?? 0);
-        } else if (f.check_name === 'markdown_link_leak') {
-          linkLeakCount += ((f.evidence as { count?: number }).count ?? 0);
-        } else if (f.check_name === 'heading_leakage') {
-          headingLeakCount += ((f.evidence as { count?: number }).count ?? 0);
+    // Try pack lookup by article_id first (what the paid-run action
+    // links on success), fall back to autopilot_run_id (always
+    // populated at insert time), fall back to a synthesised empty
+    // pack as a last resort.
+    let pack: EvidencePackPayload | null = null;
+    let packSource: ReQAResult['packSource'] = 'missing_synthesised';
+    {
+      const { data: packByArticle } = await sb
+        .from('network_article_evidence_packs')
+        .select('payload')
+        .eq('article_id', latestArticle.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const p1 = ((packByArticle as null | { payload: unknown })?.payload ?? null) as EvidencePackPayload | null;
+      if (p1) {
+        pack = p1;
+        packSource = 'linked_by_article_id';
+      } else if (latestArticle.autopilot_run_id) {
+        const { data: packByRun } = await sb
+          .from('network_article_evidence_packs')
+          .select('payload')
+          .eq('autopilot_run_id', latestArticle.autopilot_run_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const p2 = ((packByRun as null | { payload: unknown })?.payload ?? null) as EvidencePackPayload | null;
+        if (p2) {
+          pack = p2;
+          packSource = 'linked_by_run_id';
         }
       }
-
-      reQA = {
-        report,
-        correctedBodyRich: corrected,
-        pack,
-        reconstructedSectionCount: reconstructed.sections.length,
-        rarityUnsupported,
-        speculativeHits: Array.from(speculativeMap.entries()).map(([pattern_id, v]) => ({ pattern_id, label: v.label, count: v.count })),
-        emDashCount,
-        markdownImageLeakCount: imageLeakCount,
-        markdownLinkLeakCount: linkLeakCount,
-        headingLeakageCount: headingLeakCount,
-      };
     }
+    if (!pack) {
+      pack = synthesiseEmptyPack();
+      packSource = 'missing_synthesised';
+    }
+
+    const reconstructed = reconstructDraftFromArticle({
+      title: latestArticle.title,
+      meta_title: latestArticle.meta_title,
+      meta_description: latestArticle.meta_description,
+      slug: latestArticle.slug,
+      featured_image_url: latestArticle.featured_image_url,
+      body: latestArticle.body,
+    });
+
+    const qaResult = await runDeterministicQA({
+      sb,
+      pack,
+      draft: JSON.parse(JSON.stringify(reconstructed)),
+      site_id: latestArticle.site_id,
+    });
+
+    // Filter out slug_unique findings — we're re-scanning an article
+    // that is itself in the table, so its own slug always matches.
+    const filteredFindings = qaResult.report.findings.filter((f) => f.check_name !== 'slug_unique');
+    const report: QAReport = {
+      findings: filteredFindings,
+      blocker_count: filteredFindings.filter((f) => f.severity === 'blocker').length,
+      warning_count: filteredFindings.filter((f) => f.severity === 'warning').length,
+      info_count: filteredFindings.filter((f) => f.severity === 'info').length,
+      auto_repairs_applied: qaResult.report.auto_repairs_applied,
+    };
+    const corrected = draftToBodyRich(qaResult.repaired);
+
+    const rarityUnsupported: string[] = [];
+    const speculativeMap = new Map<string, { label: string; count: number }>();
+    let emDashCount = 0;
+    let imageLeakCount = 0;
+    let linkLeakCount = 0;
+    let headingLeakCount = 0;
+    for (const f of report.findings) {
+      if (f.check_name === 'rarity_claim_supported') {
+        const un = (f.evidence as { unsupported?: Array<{ rarity: string }> }).unsupported ?? [];
+        for (const u of un) rarityUnsupported.push(u.rarity);
+      } else if (f.check_name === 'speculative_claim') {
+        const id = (f.evidence as { pattern_id?: string }).pattern_id ?? 'unknown';
+        const hits = ((f.evidence as { hits?: unknown[] }).hits ?? []).length;
+        const existing = speculativeMap.get(id);
+        speculativeMap.set(id, { label: f.message.match(/"([^"]+)"/)?.[1] ?? id, count: (existing?.count ?? 0) + Math.max(1, hits) });
+      } else if (f.check_name === 'no_em_dash') {
+        emDashCount += ((f.evidence as { count?: number }).count ?? 0);
+      } else if (f.check_name === 'markdown_image_leak') {
+        imageLeakCount += ((f.evidence as { count?: number }).count ?? 0);
+      } else if (f.check_name === 'markdown_link_leak') {
+        linkLeakCount += ((f.evidence as { count?: number }).count ?? 0);
+      } else if (f.check_name === 'heading_leakage') {
+        headingLeakCount += ((f.evidence as { count?: number }).count ?? 0);
+      }
+    }
+
+    reQA = {
+      report,
+      correctedBodyRich: corrected,
+      pack: packSource === 'missing_synthesised' ? null : pack,
+      packSource,
+      reconstructedSectionCount: reconstructed.sections.length,
+      rarityUnsupported,
+      speculativeHits: Array.from(speculativeMap.entries()).map(([pattern_id, v]) => ({ pattern_id, label: v.label, count: v.count })),
+      emDashCount,
+      markdownImageLeakCount: imageLeakCount,
+      markdownLinkLeakCount: linkLeakCount,
+      headingLeakageCount: headingLeakCount,
+      publishReady: report.blocker_count === 0,
+    };
   }
 
   // Only an eligible candidate is a valid first-run subject.
@@ -235,12 +285,28 @@ export default async function AutopilotPreviewPage() {
       {latestArticle && reQA && (
         <Panel
           title="Quality report (re-run on existing paid draft, no new AI call)"
-          eyebrow={`${reQA.report.blocker_count} blocker(s), ${reQA.report.warning_count} warning(s)`}
+          eyebrow={`${reQA.report.blocker_count} blocker(s), ${reQA.report.warning_count} warning(s) · build 6e30da5+`}
         >
           <Notice tone={reQA.report.blocker_count === 0 ? 'success' : 'warning'}>
             <strong>Deterministic QA re-run against the frozen evidence pack.</strong>{' '}
             This runs the Checkpoint-C-hardened checks (em dash hard-ban, markdown leakage, speculative-claim scan, rarity support) over the stored body. No AI call. The repaired body_rich preview below is what publishing would persist after auto-repair.
           </Notice>
+          {reQA.packSource === 'linked_by_run_id' && (
+            <Notice tone="info">
+              <strong>Pack located via <code>autopilot_run_id</code> fallback.</strong>{' '}
+              The paid-run action inserted the evidence pack with <code>article_id=null</code> and the post-insert UPDATE
+              to link it to this article did not take effect. QA still ran against the real frozen pack, so speculative
+              and rarity checks are authoritative.
+            </Notice>
+          )}
+          {reQA.packSource === 'missing_synthesised' && (
+            <Notice tone="warning">
+              <strong>Evidence pack not found in the DB.</strong>{' '}
+              Ran against a synthesised empty pack. Pack-independent checks (em dash, markdown leakage, body structure)
+              are authoritative; speculative-claim and rarity-claim checks could not corroborate against evidence, so
+              those categories report 0 unsupported findings regardless of actual drift.
+            </Notice>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginTop: 10 }}>
             <KV label="Em dash count" value={reQA.emDashCount.toString()} warn={reQA.emDashCount > 0} />
@@ -320,44 +386,61 @@ export default async function AutopilotPreviewPage() {
         </Panel>
       )}
 
-      <Panel
-        title="First paid draft generation (admin-triggered, ONE call only)"
-        eyebrow={canTrigger ? 'Eligible candidate present' : 'No eligible candidate'}
-      >
-        {canTrigger && chosen ? (
-          <>
-            <Notice tone="warning">
-              <strong>This spends real money.</strong>{' '}
-              Clicking the button below makes <strong>ONE</strong> paid Anthropic Messages call using{' '}
-              <code>default_draft_model</code> (currently Haiku 4.5 by config). Projected cost is shown in panel 5; the
-              per-article cap and daily/monthly budgets are enforced by the atomic reservation RPC.
-              <br /><br />
-              <strong>No publishing.</strong> The resulting article is written to <code>network_articles</code> with
-              <code>status=review</code>; <code>auto_publish_allowed</code> stays <code>false</code> for YGO.
-              <br /><br />
-              Selected subject: <strong>{chosen.discovery.working_title}</strong> (template: <code>{chosen.discovery.template_id}</code>, final score <code>{chosen.final_score.total}/100</code>).
-            </Notice>
-            <form action={executeFirstPaidDraftAction} style={{ marginTop: 10 }}>
-              <label style={{ display: 'block', fontSize: 13, marginBottom: 10 }}>
-                <input type="checkbox" name="confirm" required /> I confirm the research pack, approve one paid draft call, and understand nothing will be published.
-              </label>
-              <button type="submit" className="admin-btn admin-btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>
-                Run first paid draft now
-              </button>
-            </form>
-            <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
-              This button is wired to <code>executeFirstPaidDraftAction</code>. It reserves budget, calls the model once,
-              parses the response through <code>parseDraftJson</code>, runs deterministic QA, writes the article in review
-              state, and consumes the actual cost. No retries. No fallback. No semantic QA.
-            </p>
-          </>
-        ) : (
-          <Notice tone="info">
-            No eligible researched candidate. Enable sources or wait for a stronger signal — the button only appears when
-            at least one candidate meets the final-score threshold and evidence quality is ready.
+      {latestArticle ? (
+        <Panel
+          title="First paid pilot completed"
+          eyebrow="Review existing draft above / below"
+        >
+          <Notice tone="success">
+            <strong>FIRST PAID PILOT COMPLETED.</strong>{' '}
+            A paid autopilot draft already exists for this pilot (run{' '}
+            <code>{latestArticle.autopilot_run_id?.slice(0, 8) ?? '???'}</code>, inserted{' '}
+            <code>{new Date(latestArticle.created_at).toISOString().slice(0, 19).replace('T', ' ')}</code> UTC). The
+            trigger button, confirmation checkbox, and pre-paid approval checklist are intentionally hidden to prevent
+            accidental duplicate paid calls. Review the existing draft and the quality report below before deciding on a
+            second generation.
           </Notice>
-        )}
-      </Panel>
+        </Panel>
+      ) : (
+        <Panel
+          title="First paid draft generation (admin-triggered, ONE call only)"
+          eyebrow={canTrigger ? 'Eligible candidate present' : 'No eligible candidate'}
+        >
+          {canTrigger && chosen ? (
+            <>
+              <Notice tone="warning">
+                <strong>This spends real money.</strong>{' '}
+                Clicking the button below makes <strong>ONE</strong> paid Anthropic Messages call using{' '}
+                <code>default_draft_model</code> (currently Haiku 4.5 by config). Projected cost is shown in panel 5; the
+                per-article cap and daily/monthly budgets are enforced by the atomic reservation RPC.
+                <br /><br />
+                <strong>No publishing.</strong> The resulting article is written to <code>network_articles</code> with
+                <code>status=review</code>; <code>auto_publish_allowed</code> stays <code>false</code> for YGO.
+                <br /><br />
+                Selected subject: <strong>{chosen.discovery.working_title}</strong> (template: <code>{chosen.discovery.template_id}</code>, final score <code>{chosen.final_score.total}/100</code>).
+              </Notice>
+              <form action={executeFirstPaidDraftAction} style={{ marginTop: 10 }}>
+                <label style={{ display: 'block', fontSize: 13, marginBottom: 10 }}>
+                  <input type="checkbox" name="confirm" required /> I confirm the research pack, approve one paid draft call, and understand nothing will be published.
+                </label>
+                <button type="submit" className="admin-btn admin-btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>
+                  Run first paid draft now
+                </button>
+              </form>
+              <p className="col-dim" style={{ fontSize: 11, marginTop: 10 }}>
+                This button is wired to <code>executeFirstPaidDraftAction</code>. It reserves budget, calls the model once,
+                parses the response through <code>parseDraftJson</code>, runs deterministic QA, writes the article in review
+                state, and consumes the actual cost. No retries. No fallback. No semantic QA.
+              </p>
+            </>
+          ) : (
+            <Notice tone="info">
+              No eligible researched candidate. Enable sources or wait for a stronger signal, the button only appears when
+              at least one candidate meets the final-score threshold and evidence quality is ready.
+            </Notice>
+          )}
+        </Panel>
+      )}
 
       <Panel title="Pipeline outcome" eyebrow="End of fixture dry-run">
         <Notice tone={outcomeTone}>
@@ -784,19 +867,21 @@ export default async function AutopilotPreviewPage() {
         )}
       </Panel>
 
-      <Panel title="10. First paid-run approval checklist" eyebrow="Required before any real AI call">
-        <ol style={{ fontSize: 13, lineHeight: 1.7, margin: 0, paddingLeft: 24 }}>
-          <li>Confirm the opportunity above is the correct first subject.</li>
-          <li>Confirm the evidence pack is sufficient for the template.</li>
-          <li>Confirm images + internal links look right.</li>
-          <li>Confirm projected cost (${preview.pipeline.budget_preview.projected_cost_usd.toFixed(4)}) ≤ per-article cap (${preview.pipeline.budget_preview.per_article_cap_usd.toFixed(2)}).</li>
-          <li>Confirm model selection ({preview.pipeline.evidence_pack.generation_constraints.template_id} on default_draft_model).</li>
-          <li>Flip <code>autopilot_enabled=true</code> at <Link href="/admin/content/autopilot">/admin/content/autopilot</Link> AND explicitly approve the first run.</li>
-        </ol>
-        <p className="col-dim" style={{ fontSize: 12, marginTop: 10 }}>
-          Checkpoint B stops before any paid call. The first paid draft lands in Checkpoint C.
-        </p>
-      </Panel>
+      {!latestArticle && (
+        <Panel title="10. First paid-run approval checklist" eyebrow="Required before any real AI call">
+          <ol style={{ fontSize: 13, lineHeight: 1.7, margin: 0, paddingLeft: 24 }}>
+            <li>Confirm the opportunity above is the correct first subject.</li>
+            <li>Confirm the evidence pack is sufficient for the template.</li>
+            <li>Confirm images + internal links look right.</li>
+            <li>Confirm projected cost (${preview.pipeline.budget_preview.projected_cost_usd.toFixed(4)}) ≤ per-article cap (${preview.pipeline.budget_preview.per_article_cap_usd.toFixed(2)}).</li>
+            <li>Confirm model selection ({preview.pipeline.evidence_pack.generation_constraints.template_id} on default_draft_model).</li>
+            <li>Flip <code>autopilot_enabled=true</code> at <Link href="/admin/content/autopilot">/admin/content/autopilot</Link> AND explicitly approve the first run.</li>
+          </ol>
+          <p className="col-dim" style={{ fontSize: 12, marginTop: 10 }}>
+            Hidden once a first paid draft exists so this checklist can&apos;t be used to accidentally re-run the pilot.
+          </p>
+        </Panel>
+      )}
     </AdminShell>
   );
 }
@@ -826,6 +911,33 @@ function KV({ label, value, warn }: { label: string; value: string; warn?: boole
 }
 
 function fmtUsd(n: number): string { return `$${n.toFixed(4)}`; }
+
+// Fallback when the paid-run evidence pack can't be located. Used
+// only so the pack-independent QA checks (em dash, markdown leakage,
+// body structure) still run and populate the quality report. The
+// speculative/rarity checks will simply find no evidence to
+// corroborate against — their findings are not authoritative in this
+// mode and the UI surfaces a notice.
+function synthesiseEmptyPack(): EvidencePackPayload {
+  return {
+    schema_version: '2',
+    site: { slug: 'ygo', name: 'YGOPrices' },
+    topic: { kind: 'news', working_title: '', primary_query: null, secondary_queries: [], summary: null },
+    date_range: { from: '2026-01-01', to: '2026-12-31' },
+    methodology: '',
+    market_data: [],
+    search_data: [],
+    related_pages: [],
+    internal_links: [],
+    existing_content: [],
+    images: [],
+    commercial_links: [],
+    external_sources: [],
+    article_angle: { anchor: 'news_update', one_line: '', must_cover: [], must_not_cover: [], dominant_tier: 'internal' },
+    generation_constraints: { template_id: 'news', max_output_tokens: 1500, target_word_count_min: 300, target_word_count_max: 600, banned_phrases: [] },
+    budget: { max_cost_usd: 0, projected_draft_cost_usd: 0, projected_qa_cost_usd: null, projected_total_cost_usd: 0 },
+  };
+}
 
 // Minimal TipTap-JSON renderer. Supports paragraph / heading(level) /
 // image nodes with text + link / bold / italic marks. Narrow by

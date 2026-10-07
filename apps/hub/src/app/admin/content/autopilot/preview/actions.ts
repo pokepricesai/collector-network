@@ -142,15 +142,17 @@ export async function executeFirstPaidDraftAction(formData: FormData): Promise<v
   const bodyRich: TiptapDoc = draftToBodyRich(repaired);
 
   // ─── 8. Persist evidence pack + article ────────────────────────
-  const packId = await persistEvidencePack({
-    sb,
-    payload: chosen.evidence_pack,
-    content_hash: hashCanonical(chosen.evidence_pack),
-    idea_id: chosen.discovery.kind === 'internal_idea' ? chosen.discovery.key : null,
-    article_id: null, // will be linked after article insert
-    autopilot_run_id: run_id,
-  });
-
+  //
+  // Order changed from pack-first + update-later to article-first +
+  // pack-with-article_id-set-at-insert. The old order relied on an
+  // UPDATE that silently failed (seen in prod on the first paid run,
+  // where the pack row ended up with article_id=null). Inserting the
+  // article first means the pack can be stored with its FK already
+  // populated — no UPDATE path to misfire.
+  //
+  // The article is inserted a few lines down (article_id resolves at
+  // step 8b); the pack insert follows at step 8c.
+  //
   // Hold reasons derived from QA blockers.
   const hold_reasons: string[] = [];
   for (const f of report.findings) {
@@ -208,7 +210,9 @@ export async function executeFirstPaidDraftAction(formData: FormData): Promise<v
   if (articleErr) {
     // Article didn't persist, but the paid call did happen — we MUST
     // consume the budget to keep the ledger honest. Hold with
-    // publisher_failed so operators can diagnose.
+    // publisher_failed so operators can diagnose. No evidence pack
+    // was inserted at this stage (we moved the pack insert below the
+    // article insert in this commit), so there's nothing to clean up.
     await consumeAiBudget(sb, { reservationId, articleId: null, actualUsd: exec.cost_usd });
     await writeHeldArticle(sb, admin.adminRowId, run_id, 'ygo', 'publisher_failed', `Insert into network_articles failed: ${articleErr.message}. Paid cost ${exec.cost_usd.toFixed(4)} USD still accounted via reservation.`);
     revalidatePath('/admin/content/autopilot/preview');
@@ -216,11 +220,17 @@ export async function executeFirstPaidDraftAction(formData: FormData): Promise<v
   }
   const article_id = (articleRow as { id: string }).id;
 
-  // Link evidence pack back to the article (we inserted it before the
-  // article row existed, so update now).
-  if (packId.ok && packId.id) {
-    await sb.from('network_article_evidence_packs').update({ article_id }).eq('id', packId.id);
-  }
+  // Now insert the pack WITH article_id set at insert time, so a
+  // follow-up UPDATE isn't required. Any insert failure is logged
+  // but doesn't abort — the article is already in place.
+  const packId = await persistEvidencePack({
+    sb,
+    payload: chosen.evidence_pack,
+    content_hash: hashCanonical(chosen.evidence_pack),
+    idea_id: chosen.discovery.kind === 'internal_idea' ? chosen.discovery.key : null,
+    article_id,
+    autopilot_run_id: run_id,
+  });
   await persistQAFindings(sb, article_id, packId.ok ? packId.id ?? null : null, report);
   await consumeAiBudget(sb, { reservationId, articleId: article_id, actualUsd: exec.cost_usd });
 
