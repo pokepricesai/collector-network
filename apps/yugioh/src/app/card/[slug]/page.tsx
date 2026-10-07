@@ -76,6 +76,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Card pages are ISR'd on request. Popular families (BEWD, DM etc)
 // will bake at build eventually; for now revalidate every 30 min.
 export const revalidate = 1800;
+// NOTE: ISR fallback registration (dynamicParams + generateStaticParams)
+// deliberately NOT added here. The Account/Watchlist/Add-to-Deck
+// Mount server components rendered on this page call getCurrentUser()
+// -> cookies(), which throws DYNAMIC_SERVER_USAGE when the route is
+// classified as potentially-static. Lifting those auth reads into
+// client islands (same shape as the P0-2 Header fix) is the required
+// follow-up to flip this route from f to ISR. See YGO P0-4 report.
 
 export default async function LogicalCardPage({ params }: Props) {
   const { slug } = await params;

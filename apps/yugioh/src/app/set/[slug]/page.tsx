@@ -21,6 +21,16 @@ import { setFaq } from '../../../lib/faq-content';
 import styles from '../../../components/browse/Browse.module.css';
 
 export const revalidate = 1800;
+// Next.js 16 — on dynamic-segment routes, `revalidate` alone no
+// longer opts into the Full Route Cache. Returning an empty array
+// from generateStaticParams + dynamicParams=true registers this
+// route for on-demand ISR (first request per slug renders at the
+// origin and caches for `revalidate` seconds; subsequent requests
+// serve from the edge). Zero build-time DB work.
+export const dynamicParams = true;
+export function generateStaticParams(): { slug: string }[] {
+  return [];
+}
 
 interface Props {
   params: Promise<{ slug: string }>;
