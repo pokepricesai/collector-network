@@ -1,11 +1,8 @@
 import Link from 'next/link';
-import { getCurrentUser } from '@collector-network/auth';
-import { readYgoProfile } from '../lib/user-profile';
-import { AccountMenu } from './AccountMenu';
+import { AccountIsland } from './AccountIsland';
 import { SearchBar } from './SearchBar';
 import { CurrencyToggle } from './CurrencyToggle';
 import { MobileNavDrawer } from './MobileNavDrawer';
-import { getYgoCurrency } from '../lib/currency-server';
 import styles from './Header.module.css';
 
 interface NavItem {
@@ -28,19 +25,13 @@ const NAV: NavItem[] = [
   { label: 'Insights', href: '/insights' },
 ];
 
-export async function Header({ compactSearch = true }: { compactSearch?: boolean }) {
-  // Read user and currency in parallel so the header adds no extra
-  // serial round trips to a page's cold path.
-  const [user, currency] = await Promise.all([
-    getCurrentUser(),
-    getYgoCurrency(),
-  ]);
-  const profile = user ? readYgoProfile(user) : null;
-  const photoUrl = user
-    ? ((user.user_metadata?.['avatar_url'] as string | undefined) ??
-      (user.user_metadata?.['picture'] as string | undefined) ??
-      null)
-    : null;
+// Header is a synchronous server component. User identity and
+// currency are owned by the AccountIsland + cookie-aware
+// CurrencyToggle client islands below, so this component makes
+// zero cookies()/headers()/auth calls. Keeping Header static-only
+// is what unlocks the Full Route Cache for every public page that
+// renders it (see YGO P02 audit).
+export function Header({ compactSearch = true }: { compactSearch?: boolean }) {
   return (
     <header className={styles.header}>
       <div className={styles.row}>
@@ -77,25 +68,14 @@ export async function Header({ compactSearch = true }: { compactSearch?: boolean
         </nav>
         <div className={styles.accountSlot}>
           <div className={styles.desktopCurrency}>
-            <CurrencyToggle initial={currency} />
+            {/* No `initial` prop: CurrencyToggle starts from
+                DEFAULT_CURRENCY on the server render and reads the
+                ygo_currency cookie after mount. Needed to keep this
+                Header free of cookies() reads. */}
+            <CurrencyToggle />
           </div>
-          {user && (
-            <Link href={"/dashboard" as const} className={`${styles.dashboardLink} ${styles.desktopDashboard}`}>
-              Dashboard
-            </Link>
-          )}
-          <AccountMenu
-            user={
-              user
-                ? {
-                    displayName: profile?.displayName ?? '',
-                    avatarKey: profile?.avatarKey ?? 'dragon',
-                    photoUrl,
-                  }
-                : null
-            }
-          />
-          <MobileNavDrawer items={NAV} currency={currency} hasUser={Boolean(user)} />
+          <AccountIsland />
+          <MobileNavDrawer items={NAV} />
         </div>
       </div>
     </header>
