@@ -1,46 +1,65 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { readMiddlewareSession } from '@collector-network/auth';
 
-// The canonical apex host. www.<canonical> gets a 308 permanent
-// redirect so search engines and users converge on one origin. The
-// Vercel deployment hostname (yugioh-web.vercel.app) is left alone
-// deliberately: it is used by preview/CI tooling and rewriting it
-// would break those flows.
-const CANONICAL_HOST = 'ygoprices.io';
-
-// Slice C: session-refresh middleware. Runs on every routable path
-// (excluding the assets matcher below) so the Supabase auth cookie
-// stays fresh across navigation. Per-route protection lives inside
-// the route handlers via requireUser().
+// Session-refresh middleware. Runs ONLY on routes whose server tree
+// reads the Supabase session cookie (requireUser-protected pages,
+// auth callbacks that write session cookies, and the private
+// watchlist status API). Public catalogue + SEO routes are
+// deliberately NOT matched so a Full Route Cache HIT serves without
+// paying Vercel middleware cost or a Supabase /auth/v1/user call.
+//
+// www -> apex canonicalisation lives at the Vercel routing layer
+// in apps/yugioh/vercel.json (shipped in YGO P0-7 Stage 1) so this
+// middleware no longer needs to see public requests merely to
+// rewrite the host.
+//
+// Per-route protection continues to live inside the route handlers
+// via requireUser(). Mutation server actions and authenticated API
+// routes remain Supabase-RLS-scoped; the middleware refresh is a
+// convenience, not a security boundary.
 export async function middleware(request: NextRequest) {
-  // www -> apex redirect (308 so browsers + crawlers cache it).
-  const host = request.headers.get('host') ?? '';
-  if (host === `www.${CANONICAL_HOST}`) {
-    const url = request.nextUrl.clone();
-    url.host = CANONICAL_HOST;
-    url.protocol = 'https:';
-    return NextResponse.redirect(url, 308);
-  }
   const response = NextResponse.next();
   await readMiddlewareSession({ request, response });
   return response;
 }
 
 export const config = {
-  // Skip static assets, OG endpoints, and the API routes that have
-  // zero Supabase session dependency. Session-sensitive paths
-  // (/auth/*, /account/*, /collection, /watchlist, /decks,
-  // /dashboard, /settings, /api/watchlist/*) are still matched and
-  // get the middleware session refresh. See YGO P0-6 audit:
+  // Narrow positive allowlist. Each entry is a route whose server
+  // tree reads the Supabase session cookie:
   //
-  //   /api/search/*    — anonymous read; no cookies, no auth
-  //   /api/currency    — writes the ygo_currency cookie only;
-  //                      explicitly not an auth cookie
-  //   /api/affiliate/* — anonymous telemetry; no auth
-  //   /api/ai/ask      — IP rate-limited; no Supabase session
-  //   /api/revalidate  — Bearer-token (YGO_REVALIDATE_TOKEN) auth;
-  //                      no Supabase session interaction
+  //   /account/:path*     — requireUser() on /account +
+  //                         /account/reset-password
+  //   /collection         — requireUser()
+  //   /watchlist          — requireUser()
+  //   /decks/:path*       — requireUser() on /decks, /decks/new,
+  //                         /decks/[id]
+  //   /dashboard          — requireUser()
+  //   /settings           — requireUser()
+  //   /email-preferences  — requireUser()
+  //   /auth/:path*        — callback (writes session), confirm
+  //                         (writes session), sign-out (clears
+  //                         session)
+  //   /api/watchlist/:path* — RLS-scoped read in
+  //                           /api/watchlist/status
+  //
+  // Public catalogue + SEO routes (/, /card/*, /set/*, /rarity/*,
+  // /archetype/*, /market*, /sets, /rarities, /archetypes,
+  // /insights*, /forbidden-limited, /card-finder, /search, /contact,
+  // /privacy, /terms, /sign-in, /sign-up) bypass middleware
+  // entirely. The P0-6 API carve-outs (/api/search, /api/currency,
+  // /api/affiliate, /api/ai/ask, /api/revalidate, /api/prewarm) are
+  // naturally excluded by the positive allowlist. Static assets
+  // (_next, favicon, logos, sitemap, robots) also naturally
+  // excluded.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon1.png|apple-icon.png|ygoprices-logo.png|ygoprices-favicon.png|sitemap.xml|sitemap|robots.txt|api/prewarm|api/search|api/currency|api/affiliate|api/ai/ask|api/revalidate).*)',
+    '/account/:path*',
+    '/collection',
+    '/watchlist',
+    '/decks/:path*',
+    '/dashboard',
+    '/settings',
+    '/email-preferences',
+    '/auth/:path*',
+    '/api/watchlist/:path*',
   ],
 };
