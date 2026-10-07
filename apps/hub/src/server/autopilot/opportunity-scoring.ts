@@ -28,6 +28,7 @@ import type {
   ScoredOpportunity,
 } from './types';
 import type { AutopilotSiteSlug } from './config';
+import { applyProfile, RAW_MAX, type ScoringDimension } from './scoring-profiles';
 
 export interface ScoringSignals {
   // Internal — unchanged.
@@ -183,14 +184,45 @@ export function scoreOpportunity(inputs: ScoringInputs): OpportunityScore {
     source_agreement_penalty,
     effort_adjustment,
   };
+
+  // Checkpoint B.3: apply the article-type scoring profile. Each
+  // profile allocates 100 points across the nine positive dimensions,
+  // so a NEWS article isn't penalised for missing search demand that
+  // the profile doesn't care about. Penalties stay flat.
+  const raw: Record<ScoringDimension, number> = {
+    search_potential,
+    market_significance,
+    timeliness,
+    evidence_quality,
+    commercial_relevance,
+    internal_link_opportunity,
+    existing_content_gap,
+    newsworthiness,
+    source_authority,
+  };
+  const applied = applyProfile(inputs.template_id, raw);
+  rationale.push(`Scoring profile: ${applied.profile.label} — ${applied.profile.description}`);
+
   const total = clamp(
-    search_potential + market_significance + timeliness + evidence_quality +
-    commercial_relevance + internal_link_opportunity + existing_content_gap +
-    newsworthiness + source_authority +
-    duplication_penalty + source_agreement_penalty + effort_adjustment,
+    applied.weighted_sum + duplication_penalty + source_agreement_penalty + effort_adjustment,
     0, 100,
   );
-  return { total, components, rationale };
+
+  return {
+    total,
+    components,
+    rationale,
+    profile_id: applied.profile.template_id,
+    profile_label: applied.profile.label,
+    profile_breakdown: applied.breakdown.map((b) => ({
+      dimension: b.dimension,
+      raw: b.raw,
+      raw_max: b.raw_max,
+      weight: b.weight,
+      contribution: Math.round(b.contribution * 10) / 10,
+      used: b.used,
+    })),
+  };
 }
 
 // ─── Routing: new vs refresh vs internal-link vs skip ──────────

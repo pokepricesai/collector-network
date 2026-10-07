@@ -64,14 +64,37 @@ export default async function AutopilotPreviewPage() {
           <KV label="Target article (refresh)" value={preview.pipeline.opportunity.routing.target_article_id ?? '—'} />
         </div>
 
-        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>Score breakdown</h3>
+        <h3 className="admin-eyebrow" style={{ marginTop: 14, marginBottom: 6 }}>
+          Scoring profile · {preview.pipeline.opportunity.score.profile_label ?? '(default)'}
+          {preview.pipeline.opportunity.score.profile_id && (
+            <code style={{ fontSize: 11, marginLeft: 8, color: 'var(--admin-text-subtle)' }}>{preview.pipeline.opportunity.score.profile_id}</code>
+          )}
+        </h3>
+        <p className="col-dim" style={{ fontSize: 12, margin: '0 0 8px' }}>
+          Each profile allocates 100 points across the dimensions that matter for THIS article type. Unused dimensions carry weight 0 and don't penalise the score — they appear here only for transparency.
+        </p>
         <Table
           columns={[
-            { key: 'c', header: 'Component',  render: (r: BreakdownRow) => <code>{r.component}</code> },
-            { key: 'v', header: 'Value',      className: 'num', render: (r: BreakdownRow) => r.value.toString() },
-            { key: 'm', header: 'Max',        className: 'num', render: (r: BreakdownRow) => r.max.toString() },
+            { key: 'u', header: 'Used', render: (r: ProfileRow) => r.used
+              ? <StatusBadge state="success" label="yes" />
+              : <StatusBadge state="disabled" label="no" /> },
+            { key: 'd', header: 'Dimension', render: (r: ProfileRow) => <code>{r.dimension}</code> },
+            { key: 'r', header: 'Raw',   className: 'num', render: (r: ProfileRow) => `${r.raw}/${r.raw_max}` },
+            { key: 'w', header: 'Weight', className: 'num', render: (r: ProfileRow) => `${r.weight}/100` },
+            { key: 'c', header: 'Contribution', className: 'num', render: (r: ProfileRow) =>
+              r.used
+                ? <strong>{r.contribution.toFixed(1)}</strong>
+                : <span className="col-dim">—</span> },
           ]}
-          rows={scoreBreakdownRows(preview.pipeline.opportunity.score.components)}
+          rows={(preview.pipeline.opportunity.score.profile_breakdown ?? []).map((b, i) => ({
+            id: `${i}`,
+            dimension: b.dimension,
+            raw: b.raw,
+            raw_max: b.raw_max,
+            weight: b.weight,
+            contribution: b.contribution,
+            used: b.used,
+          }))}
           empty=""
         />
 
@@ -454,28 +477,7 @@ export default async function AutopilotPreviewPage() {
   );
 }
 
-interface BreakdownRow { id: string; component: string; value: number; max: number }
-function scoreBreakdownRows(c: {
-  search_potential: number; market_significance: number; timeliness: number; evidence_quality: number;
-  commercial_relevance: number; internal_link_opportunity: number; existing_content_gap: number;
-  newsworthiness: number; source_authority: number;
-  duplication_penalty: number; source_agreement_penalty: number; effort_adjustment: number;
-}): BreakdownRow[] {
-  return [
-    { id: 'search',   component: 'Search potential',          value: c.search_potential,          max: 15 },
-    { id: 'market',   component: 'Market significance',       value: c.market_significance,       max: 15 },
-    { id: 'time',     component: 'Timeliness',                value: c.timeliness,                max: 10 },
-    { id: 'ev',       component: 'Evidence quality',          value: c.evidence_quality,          max: 10 },
-    { id: 'comm',     component: 'Commercial relevance',      value: c.commercial_relevance,      max: 10 },
-    { id: 'links',    component: 'Internal-link opportunity', value: c.internal_link_opportunity, max: 10 },
-    { id: 'gap',      component: 'Existing-content gap',      value: c.existing_content_gap,      max: 10 },
-    { id: 'news',     component: 'Newsworthiness',            value: c.newsworthiness,            max: 10 },
-    { id: 'auth',     component: 'Source authority',          value: c.source_authority,          max: 10 },
-    { id: 'dup',      component: 'Duplication penalty',       value: c.duplication_penalty,       max: 0 },
-    { id: 'agree',    component: 'Source-agreement penalty',  value: c.source_agreement_penalty,  max: 0 },
-    { id: 'effort',   component: 'Effort adjustment',         value: c.effort_adjustment,         max: 5 },
-  ];
-}
+interface ProfileRow { id: string; dimension: string; raw: number; raw_max: number; weight: number; contribution: number; used: boolean }
 
 interface ImgRow { id: number; role: string | null; alt: string; url: string }
 interface LinkRow { id: number; url: string; anchors: string[]; reason: string; priority: number }

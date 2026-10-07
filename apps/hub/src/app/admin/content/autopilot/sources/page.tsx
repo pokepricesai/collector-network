@@ -3,7 +3,7 @@ import { AdminShell } from '@/components/admin/AdminShell';
 import { Notice, Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
-import { listSources } from '@/server/autopilot/sources';
+import { listSources, classifyHealth, type SourceHealth } from '@/server/autopilot/sources';
 import { toggleSourceAction, refreshDiscoveryAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -44,19 +44,26 @@ export default async function AutopilotSourcesPage() {
             { key: 't',  header: 'Tier', render: (r: SrcRow) => (
               <StatusBadge
                 state={r.tier === 'official' ? 'success' : r.tier === 'secondary' ? 'info' : 'warning'}
-                label={`${r.tier} (${r.trust_level})`}
+                label={`T${r.trust_level} · ${r.tier}`}
               />
             ) },
             { key: 'n',  header: 'Name',     render: (r: SrcRow) => <strong>{r.name}</strong> },
-            { key: 'd',  header: 'Domain',   render: (r: SrcRow) => <code style={{ fontSize: 11 }}>{r.domain}</code> },
-            { key: 'c',  header: 'Category', render: (r: SrcRow) => <code style={{ fontSize: 11 }}>{r.category ?? '—'}</code> },
+            { key: 'h',  header: 'Health',   render: (r: SrcRow) => <HealthBadge h={r.health} /> },
             { key: 'm',  header: 'Method',   render: (r: SrcRow) => <code>{r.discovery_method}</code> },
-            { key: 'f',  header: 'Feed',     render: (r: SrcRow) => r.feed_url
-              ? <code style={{ fontSize: 10 }}>{r.feed_url.length > 36 ? r.feed_url.slice(0, 33) + '…' : r.feed_url}</code>
-              : <span className="col-dim">—</span> },
-            { key: 'l',  header: 'Last run', render: (r: SrcRow) => r.last_discovered_at
-              ? <code style={{ fontSize: 11 }}>{r.last_discovered_at.slice(0, 16).replace('T', ' ')}{r.last_signal_count != null ? ` · ${r.last_signal_count}` : ''}</code>
+            { key: 'f',  header: 'Feed / Listing', render: (r: SrcRow) => {
+              const u = r.feed_url ?? r.listing_url;
+              return u ? <code style={{ fontSize: 10 }}>{u.length > 36 ? u.slice(0, 33) + '…' : u}</code> : <span className="col-dim">—</span>;
+            } },
+            { key: 'r',  header: 'Last pass', render: (r: SrcRow) => r.last_discovered_at
+              ? <code style={{ fontSize: 11 }}>{r.last_discovered_at.slice(0, 16).replace('T', ' ')}</code>
               : <span className="col-dim">never</span> },
+            { key: 's',  header: 'Items / retained', render: (r: SrcRow) =>
+              r.last_signal_count != null
+                ? <code style={{ fontSize: 11 }}>{r.last_signal_count} / {r.last_signals_retained ?? 0}</code>
+                : <span className="col-dim">—</span> },
+            { key: 'err', header: 'Last error', render: (r: SrcRow) => r.last_error
+              ? <code style={{ fontSize: 10, color: 'var(--danger)' }}>{r.last_error.length > 48 ? r.last_error.slice(0, 45) + '…' : r.last_error}</code>
+              : <span className="col-dim">—</span> },
             { key: 'e',  header: 'Enabled',  render: (r: SrcRow) => (
               <form action={toggleSourceAction} style={{ display: 'inline' }}>
                 <input type="hidden" name="id" value={r.id} />
@@ -76,8 +83,13 @@ export default async function AutopilotSourcesPage() {
             category: s.category,
             discovery_method: s.discovery_method,
             feed_url: s.feed_url,
+            listing_url: s.listing_url,
             last_discovered_at: s.last_discovered_at,
             last_signal_count: s.last_signal_count,
+            last_signals_retained: s.last_signals_retained,
+            last_error: s.last_error,
+            last_successful_fetch_at: s.last_successful_fetch_at,
+            health: classifyHealth(s),
             enabled: s.enabled,
           }))}
           empty="No sources registered."
@@ -107,7 +119,27 @@ interface SrcRow {
   category: string | null;
   discovery_method: string;
   feed_url: string | null;
+  listing_url: string | null;
   last_discovered_at: string | null;
   last_signal_count: number | null;
+  last_signals_retained: number | null;
+  last_error: string | null;
+  last_successful_fetch_at: string | null;
+  health: SourceHealth;
   enabled: boolean;
+}
+
+const HEALTH_META: Record<SourceHealth, { label: string; state: 'success' | 'info' | 'warning' | 'failed' | 'disabled' | 'archived' }> = {
+  healthy:          { label: 'HEALTHY',           state: 'success' },
+  no_recent_items:  { label: 'NO RECENT ITEMS',   state: 'info' },
+  manual_only:      { label: 'MANUAL ONLY',       state: 'archived' },
+  fetch_error:      { label: 'FETCH ERROR',       state: 'failed' },
+  parse_error:      { label: 'PARSE ERROR',       state: 'failed' },
+  filtered_to_zero: { label: 'FILTERED TO ZERO',  state: 'warning' },
+  never_run:        { label: 'NEVER RUN',         state: 'disabled' },
+};
+
+function HealthBadge({ h }: { h: SourceHealth }) {
+  const meta = HEALTH_META[h];
+  return <StatusBadge state={meta.state} label={meta.label} />;
 }

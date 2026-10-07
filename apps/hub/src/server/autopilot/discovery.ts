@@ -21,7 +21,7 @@ import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DiscoveredSignal } from './types';
 import type { AutopilotSiteSlug } from './config';
-import { listEnabledSources, markSourceDiscovered, type SourceRow } from './sources';
+import { listEnabledSources, markSourceDiscovered, markSourceError, type SourceRow } from './sources';
 
 const MAX_RESPONSE_BYTES = 2_000_000;        // 2 MB per feed
 const MAX_ITEMS_PER_SOURCE = 20;
@@ -88,21 +88,23 @@ export async function runDiscovery(
   for (let i = 0; i < sources.length; i++) {
     const source = sources[i]!;
     try {
-      const signals = await fetchSourceSignals(source);
+      const { items, raw_count } = await fetchSourceSignals(source);
       result.sources_scanned += 1;
-      result.signals_found += signals.length;
+      result.signals_found += items.length;
       let inserted = 0;
       let dup = 0;
-      for (const sig of signals) {
+      for (const sig of items) {
         const ok = await persistSignal(sb, source, sig);
         if (ok === 'inserted') inserted += 1;
         else if (ok === 'duplicate') dup += 1;
       }
       result.signals_inserted += inserted;
       result.signals_skipped_duplicate += dup;
-      await markSourceDiscovered(sb, source.id, signals.length);
+      await markSourceDiscovered(sb, source.id, raw_count, items.length);
     } catch (err) {
-      result.errors.push({ source_id: source.id, source_name: source.name, message: err instanceof Error ? err.message : String(err) });
+      const msg = err instanceof Error ? err.message : String(err);
+      result.errors.push({ source_id: source.id, source_name: source.name, message: msg });
+      await markSourceError(sb, source.id, msg);
     }
     if (i < sources.length - 1) await sleep(POLITE_DELAY_MS);
   }
@@ -151,44 +153,122 @@ export async function loadActiveSignals(sb: SupabaseClient, siteSlug: AutopilotS
 // ─── Internal helpers ──────────────────────────────────────────
 
 interface FeedItem { title: string; url: string; published_at: string | null; summary: string | null }
+interface FetchSummary { items: FeedItem[]; raw_count: number }
 
-async function fetchSourceSignals(source: SourceRow): Promise<FeedItem[]> {
+async function fetchSourceSignals(source: SourceRow): Promise<FetchSummary> {
+  // Manual sources contribute nothing; they only exist as reference
+  // for operators or as a future hand-fed path.
+  if (source.discovery_method === 'manual') return { items: [], raw_count: 0 };
+
+  // listing_page: fetch a human page and extract anchor links as
+  // signals. Used for official sources that don't publish a feed.
+  if (source.discovery_method === 'listing_page') {
+    const listingUrl = source.listing_url;
+    if (!listingUrl) throw new Error('listing_page source missing listing_url');
+    const html = await fetchText(listingUrl);
+    const items = parseListingPageLinks(html, listingUrl).slice(0, MAX_ITEMS_PER_SOURCE);
+    const retained = applyGameFilter(source, items);
+    return { items: retained, raw_count: items.length };
+  }
+
+  // RSS / Atom path.
   if (source.discovery_method !== 'rss' && source.discovery_method !== 'atom') {
-    // sitemap / manual methods land in later checkpoints.
-    return [];
+    return { items: [], raw_count: 0 };
   }
   const feedUrl = source.feed_url;
-  if (!feedUrl) return [];
+  if (!feedUrl) throw new Error('feed_url not configured');
 
+  const text = await fetchText(feedUrl);
+  const parsed = source.discovery_method === 'atom' ? parseAtom(text) : parseRss(text);
+  if (parsed.length === 0) throw new Error('parse_error: feed body yielded 0 items (invalid XML or empty feed)');
+  const filtered = applyGameFilter(source, parsed).slice(0, MAX_ITEMS_PER_SOURCE);
+  return { items: filtered, raw_count: parsed.length };
+}
+
+// Only mixed-game feeds carry a `requires_game_filter` flag. YGO-
+// dedicated sources skip the filter — fixes the "YGOPRODeck filtered
+// to zero" bug.
+function applyGameFilter(source: SourceRow, items: FeedItem[]): FeedItem[] {
+  if (!source.requires_game_filter) return items;
+  const re = /yu-?gi-?oh|ygo/i;
+  return items.filter((i) => re.test(i.url) || re.test(i.title));
+}
+
+async function fetchText(url: string): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  let text = '';
   try {
-    const resp = await fetch(feedUrl, {
+    const resp = await fetch(url, {
       method: 'GET',
       signal: ctrl.signal,
       headers: {
         'User-Agent': UA,
-        'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5',
+        'Accept': 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/html;q=0.9, */*;q=0.5',
       },
       cache: 'no-store',
     });
-    if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+    if (!resp.ok) throw new Error(`fetch_error: ${resp.status} ${resp.statusText}`);
     const buf = await resp.arrayBuffer();
-    if (buf.byteLength > MAX_RESPONSE_BYTES) throw new Error(`response ${buf.byteLength} bytes exceeds ${MAX_RESPONSE_BYTES} cap`);
-    text = new TextDecoder('utf-8').decode(buf);
+    if (buf.byteLength > MAX_RESPONSE_BYTES) {
+      throw new Error(`fetch_error: response ${buf.byteLength} bytes exceeds ${MAX_RESPONSE_BYTES} cap`);
+    }
+    return new TextDecoder('utf-8').decode(buf);
   } finally {
     clearTimeout(timer);
   }
+}
 
-  const items = source.discovery_method === 'atom' ? parseAtom(text) : parseRss(text);
-  // Light filter: for multi-game feeds like TCGplayer Infinite, keep
-  // only items whose URL or title mentions Yu-Gi-Oh so we don't
-  // pollute the YGO queue with unrelated games.
-  const filtered = source.site_slug === 'ygo'
-    ? items.filter((i) => /yu-?gi-?oh|ygo/i.test(i.url) || /yu-?gi-?oh|ygo/i.test(i.title))
-    : items;
-  return filtered.slice(0, MAX_ITEMS_PER_SOURCE);
+// Deterministic listing-page extractor. Returns anchor links whose
+// text looks like an article title (long enough, not navigation).
+// Only used for sources configured with discovery_method='listing_page'.
+function parseListingPageLinks(html: string, baseUrl: string): FeedItem[] {
+  const base = new URL(baseUrl);
+  // Strip global junk first — same as external-extraction.
+  const clean = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+    .replace(/<header[\s\S]*?<\/header>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+
+  const items: FeedItem[] = [];
+  const seen = new Set<string>();
+  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(clean)) != null) {
+    const href = m[1]!;
+    const text = m[2]!
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    // Discard obvious nav / short / anchor-fragment links.
+    if (!text || text.length < 20 || text.length > 200) continue;
+    if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) continue;
+    let abs = href;
+    try {
+      abs = new URL(href, base).toString();
+    } catch {
+      continue;
+    }
+    // Only keep links on the same host as the listing page — avoids
+    // navigating off-site to random partners/ads.
+    try {
+      const u = new URL(abs);
+      if (u.hostname !== base.hostname) continue;
+      // Discard links that look like category hubs / pagination.
+      if (/\/(category|tag|page|archive|author|login|register|search)\b/i.test(u.pathname)) continue;
+      if (u.pathname === '/' || u.pathname === base.pathname) continue;
+    } catch { continue; }
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    items.push({ title: text, url: abs, published_at: null, summary: null });
+    if (items.length >= MAX_ITEMS_PER_SOURCE * 2) break;
+  }
+  return items;
 }
 
 type PersistResult = 'inserted' | 'duplicate' | 'error';

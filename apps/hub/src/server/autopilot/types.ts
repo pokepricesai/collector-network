@@ -165,7 +165,7 @@ export interface GenerationConstraints {
 // ────────────────────── External sources ──────────────────────
 
 export type SourceTier = 'official' | 'secondary' | 'community';
-export type DiscoveryMethod = 'rss' | 'atom' | 'json_feed' | 'sitemap' | 'manual';
+export type DiscoveryMethod = 'rss' | 'atom' | 'json_feed' | 'sitemap' | 'manual' | 'listing_page';
 
 export interface DiscoveredSignal {
   id: string | null;                     // null when the signal isn't persisted yet
@@ -277,6 +277,20 @@ export interface OpportunityScore {
   total: number;                    // 0..100 clamped
   components: OpportunityScoreComponents;
   rationale: string[];              // human-readable, 1 line per interesting signal
+  // Checkpoint B.3: profile_id tells callers which template-specific
+  // weight distribution produced this score. profile_breakdown lists
+  // every weighted dimension (used + unused) so the UI can show the
+  // reasoning without having to re-derive it.
+  profile_id?: ArticleTemplateId;
+  profile_label?: string;
+  profile_breakdown?: Array<{
+    dimension: string;
+    raw: number;
+    raw_max: number;
+    weight: number;
+    contribution: number;
+    used: boolean;
+  }>;
 }
 
 export type RoutingDecision = 'new_article' | 'refresh' | 'internal_link_reinforce' | 'skip';

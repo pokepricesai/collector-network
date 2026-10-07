@@ -51,12 +51,24 @@ export async function extractEntities(
   siteSlug: AutopilotSiteSlug,
   text: string,
 ): Promise<EntityExtractionResult> {
-  const tokens = tokenise(text);
+  // Hard-coded tightening after the B.2 live test showed the extractor
+  // happily matched "Genesys" + "Anniversary" + "Update" against ten
+  // unrelated cards:
+  //   * Only 2+ token phrases are allowed as search anchors (single
+  //     tokens are nearly always too ambiguous).
+  //   * Every DB candidate MUST pass nameAppearsInText(): ≥ 70% of
+  //     its significant name tokens must appear as whole words in
+  //     the source text. This kills ILIKE substring false positives.
+  //   * Common stopwords inside a candidate name are ignored when
+  //     computing coverage so "Anniversary" matching a card called
+  //     "Anniversary Pack Blue-Eyes" doesn't get a free pass.
+  const multiWordPhrases = findCapitalisedPhrases(text, 2, 5).slice(0, 8);
   const setCodes = findSetCodes(text);
 
-  // Set lookup — exact code match first (most specific), then
-  // name ILIKE for multi-word tokens.
+  // ─── Set lookup ────────────────────────────────────────────
   const sets: ExtractedSet[] = [];
+  const seenSetIds = new Set<string>();
+
   if (setCodes.length > 0) {
     const { data } = await sb
       .from('tcg_sets')
@@ -65,15 +77,14 @@ export async function extractEntities(
       .in('code', setCodes)
       .limit(20);
     for (const r of (data ?? []) as Array<{ id: string; name: string; code: string }>) {
+      if (seenSetIds.has(r.id)) continue;
+      seenSetIds.add(r.id);
       sets.push({ id: r.id, name: r.name, code: r.code });
     }
   }
 
-  // Set name lookup via multi-word phrase candidates — only run when
-  // we see at least one Capitalised multi-token phrase, else skip.
-  const multiWordPhrases = findCapitalisedPhrases(text, 2, 5).slice(0, 5);
   for (const phrase of multiWordPhrases) {
-    if (sets.length >= 10) break;
+    if (sets.length >= 8) break;
     const { data } = await sb
       .from('tcg_sets')
       .select('id, name, code')
@@ -81,17 +92,18 @@ export async function extractEntities(
       .ilike('name', `%${phrase}%`)
       .limit(3);
     for (const r of (data ?? []) as Array<{ id: string; name: string; code: string }>) {
-      if (!sets.some((s) => s.id === r.id)) sets.push({ id: r.id, name: r.name, code: r.code });
+      if (seenSetIds.has(r.id)) continue;
+      if (!nameAppearsInText(r.name, text)) continue;
+      seenSetIds.add(r.id);
+      sets.push({ id: r.id, name: r.name, code: r.code });
     }
   }
 
-  // Card lookup via proper-noun phrases. We prefer longer phrases
-  // first to catch multi-word card names (e.g. "Blue-Eyes White
-  // Dragon"), then fall back to single Capitalised tokens.
+  // ─── Card lookup ──────────────────────────────────────────
   const cards: ExtractedCard[] = [];
   const seenCardIds = new Set<string>();
   for (const phrase of multiWordPhrases) {
-    if (cards.length >= 10) break;
+    if (cards.length >= 8) break;
     const { data } = await sb
       .from('tcg_cards')
       .select('id, name, collector_number, rarity, images')
@@ -100,13 +112,41 @@ export async function extractEntities(
       .limit(5);
     for (const r of (data ?? []) as Array<{ id: string; name: string; collector_number: string | null; rarity: string | null; images: { large?: string; normal?: string; small?: string } | null }>) {
       if (seenCardIds.has(r.id)) continue;
+      if (!nameAppearsInText(r.name, text)) continue;
       seenCardIds.add(r.id);
       const image_url = r.images?.large ?? r.images?.normal ?? r.images?.small ?? null;
       cards.push({ id: r.id, name: r.name, collector_number: r.collector_number, rarity: r.rarity, image_url });
     }
   }
 
-  return { cards, sets, raw_tokens: tokens.slice(0, 20) };
+  return { cards, sets, raw_tokens: multiWordPhrases.slice(0, 20) };
+}
+
+// Verifies a candidate name is actually plausibly referenced in the
+// source text. For each significant token of the name, check that it
+// appears as a whole word (case-insensitive). Return true only if at
+// least MATCH_THRESHOLD of the significant tokens hit.
+const MATCH_THRESHOLD = 0.7;
+function nameAppearsInText(name: string, text: string): boolean {
+  const nameTokens = name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 2 && !STOPWORDS.has(t));
+  if (nameTokens.length === 0) return false;
+  const textLower = text.toLowerCase();
+  let hits = 0;
+  for (const t of nameTokens) {
+    const re = new RegExp(`\\b${escapeRegex(t)}\\b`);
+    if (re.test(textLower)) hits += 1;
+  }
+  const coverage = hits / nameTokens.length;
+  // Single-token names (e.g. "Exodia") must match outright.
+  if (nameTokens.length === 1) return coverage === 1;
+  return coverage >= MATCH_THRESHOLD;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // Match card entities into internal link + image + commercial outputs.
@@ -159,23 +199,23 @@ function tokenise(text: string): string[] {
     .filter((t) => t.length > 2 && !STOPWORDS.has(t.toLowerCase()));
 }
 
-// Capitalised multi-token phrases: sequences of 2+ Capitalised tokens.
-// Returns phrases in descending length so the matcher tries the most
-// specific first.
+// Capitalised multi-token phrases: sequences of minTokens+ Capitalised
+// tokens. Deliberately NO single-token fallback — the live test showed
+// single-token "proper nouns" like "Genesys" trigger far too many
+// false ILIKE positives. Named entities worth matching almost always
+// have at least two significant tokens in the source text.
 function findCapitalisedPhrases(text: string, minTokens: number, maxTokens: number): string[] {
   const phrases: string[] = [];
   const re = new RegExp(`\\b([A-Z][a-z0-9'-]+(?:\\s+(?:of|the|and|&|[A-Z][a-z0-9'-]+)){${minTokens - 1},${maxTokens - 1}})\\b`, 'g');
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) != null) {
     const phrase = m[1]!.trim();
-    if (phrase && !phrases.includes(phrase)) phrases.push(phrase);
-  }
-  // Also allow a single Capitalised token >= 4 chars (e.g. "Exodia").
-  const single = new RegExp(`\\b([A-Z][a-z0-9'-]{3,})\\b`, 'g');
-  let s: RegExpExecArray | null;
-  while ((s = single.exec(text)) != null) {
-    const token = s[1]!.trim();
-    if (token && !phrases.includes(token) && !STOPWORDS.has(token.toLowerCase())) phrases.push(token);
+    if (!phrase) continue;
+    if (phrases.includes(phrase)) continue;
+    // Reject phrases that are all stopwords — e.g. "Anniversary Update".
+    const sigTokens = phrase.toLowerCase().split(/\s+/).filter((t) => !STOPWORDS.has(t));
+    if (sigTokens.length < Math.max(1, Math.ceil(minTokens / 2))) continue;
+    phrases.push(phrase);
   }
   phrases.sort((a, b) => b.length - a.length);
   return phrases.slice(0, 20);
