@@ -19,9 +19,9 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
+import { createBrowserSupabase } from '@collector-network/auth';
 import { SearchBar } from './SearchBar';
 import { CurrencyToggle } from './CurrencyToggle';
-import type { YgoCurrency } from '../lib/currency';
 import styles from './MobileNavDrawer.module.css';
 
 export interface MobileNavItem {
@@ -31,21 +31,45 @@ export interface MobileNavItem {
 
 interface Props {
   items: readonly MobileNavItem[];
-  currency: YgoCurrency;
-  hasUser: boolean;
 }
 
-export function MobileNavDrawer({ items, currency, hasUser }: Props) {
+export function MobileNavDrawer({ items }: Props) {
   const [open, setOpen] = useState(false);
   // Guard against hydration mismatches — the portal needs
   // document.body which only exists on the client.
   const [mounted, setMounted] = useState(false);
+  // Client-resolved signed-in state. Matches the SSR'd "signed-out"
+  // shell on first render; the Dashboard link appears after mount
+  // if a session exists. Session resolved via createBrowserSupabase
+  // so the parent Header stays free of cookies().
+  const [hasUser, setHasUser] = useState(false);
   const pathname = usePathname();
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createBrowserSupabase();
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (cancelled) return;
+        setHasUser(!!session?.user);
+      })
+      .catch(() => {
+        /* leave hasUser=false */
+      });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setHasUser(!!session?.user);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   // Close whenever the user navigates — pathname changes.
   useEffect(() => {
@@ -135,7 +159,7 @@ export function MobileNavDrawer({ items, currency, hasUser }: Props) {
 
         <div className={styles.panelFooter}>
           <span className={styles.panelFooterLabel}>Currency</span>
-          <CurrencyToggle initial={currency} />
+          <CurrencyToggle />
         </div>
       </aside>
     </>
