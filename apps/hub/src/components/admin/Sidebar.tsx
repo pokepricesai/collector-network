@@ -9,9 +9,10 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
   {
     label: 'Overview',
     items: [
-      { href: '/admin',       label: 'Dashboard' },
-      { href: '/admin/brief', label: 'Daily brief' },
-      { href: '/admin/sites', label: 'Sites' },
+      { href: '/admin',              label: 'Dashboard' },
+      { href: '/admin/intelligence', label: 'Intelligence' },
+      { href: '/admin/brief',        label: 'Daily brief' },
+      { href: '/admin/sites',        label: 'Sites' },
     ],
   },
   {

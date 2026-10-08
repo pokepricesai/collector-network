@@ -33,6 +33,7 @@ import { buildBrief } from '../brief/engine';
 import { generateIdeasForSite } from '../content/ideas';
 import { ingestImpactEpn, type IngestResult } from '../impact/ingest';
 import { ingestImpactInvoices, type InvoiceIngestResult } from '../impact/invoice-ingest';
+import { runIntelligenceEngine } from '../intelligence/engine';
 
 // The five sites are hard-coded here to keep the allowlist static.
 // Resolution to real UUIDs happens inside each run().
@@ -593,6 +594,48 @@ export const JOBS: Record<string, JobDefinition> = {
     description: 'Pulls /Invoices and upserts into network_affiliate_invoices. Invoices are settlement data — not counted as transaction revenue.',
     wrapsOuter: true,
     run: async (sb) => summariseInvoiceIngest(await ingestImpactInvoices(sb)),
+  },
+
+  // ─── Intelligence inbox refresh ─────────────────────────────
+  //
+  // Deterministic. No AI. Reads upstream opportunities, revenue,
+  // GSC rollups, job runs, content ideas, sitemap snapshots → upserts
+  // network_intelligence_items. No cron registered yet (Phase 1):
+  // depends on daily GSC + GA4 + impact-epn syncs having run first,
+  // so operators trigger it manually from /admin/jobs or
+  // /admin/intelligence until the dependency ordering is proven.
+  'intelligence.refresh': {
+    slug: 'intelligence.refresh',
+    jobName: 'intelligence.refresh',
+    group: 'analysis',
+    label: 'Intelligence inbox refresh',
+    description: 'Re-runs the deterministic intelligence engine. Upserts network_intelligence_items from upstream signals; auto-resolves items whose condition no longer applies. No AI, no external action.',
+    wrapsOuter: true,
+    run: async (sb) => {
+      const r = await runIntelligenceEngine(sb);
+      return {
+        rowsInserted: r.items_upserted,
+        rowsUpdated:  r.items_resolved_auto,
+        rowsExamined: r.items_upserted + r.items_resolved_auto,
+        summary: {
+          rules_executed: r.rules_executed,
+          rules_failed:   r.rules_failed,
+          items_upserted: r.items_upserted,
+          items_resolved_auto: r.items_resolved_auto,
+          items_reopened: r.items_reopened,
+          duration_ms:    r.duration_ms,
+          per_rule:       r.per_rule,
+        },
+        metadata: {
+          rules_executed: r.rules_executed,
+          rules_failed:   r.rules_failed,
+          items_upserted: r.items_upserted,
+          items_resolved_auto: r.items_resolved_auto,
+          items_reopened: r.items_reopened,
+          duration_ms:    r.duration_ms,
+        },
+      };
+    },
   },
 
   'brief.build': {
