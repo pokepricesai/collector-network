@@ -57,6 +57,10 @@ export interface IntelligenceInboxResult {
     risks: number;
     tasks_created: number;
   };
+  // Populated when the query failed (transient / schema cache / RLS
+  // misconfiguration). The page surfaces it instead of crashing out
+  // the whole admin shell. Null = query succeeded.
+  error: string | null;
 }
 
 export async function listIntelligenceInbox(
@@ -84,20 +88,63 @@ export async function listIntelligenceInbox(
   }
 
   const { data, error } = await q;
-  if (error) throw new Error(`[intelligence/queries] list: ${error.message}`);
-  const rows = ((data ?? []) as unknown) as IntelligenceRowRead[];
+  // Transient failures (PostgREST schema cache stale after a rename,
+  // RLS misconfiguration, DB restart) must not take down the whole
+  // admin shell. Return an empty result + a surfaced error string so
+  // the page can render the empty state with an inline notice.
+  if (error) {
+    console.error('[intelligence/queries] list failed:', error.message);
+    return {
+      rows: [],
+      summary: emptySummary(),
+      error: error.message,
+    };
+  }
+  const rawRows = ((data ?? []) as unknown) as Array<Partial<IntelligenceRowRead>>;
 
-  const summary = {
-    total: rows.length,
-    by_category: {} as Record<string, number>,
-    by_signal_kind: {} as Record<string, number>,
-    by_status: {} as Record<string, number>,
-    critical: 0,
-    high: 0,
-    opportunities: 0,
-    risks: 0,
-    tasks_created: 0,
-  };
+  // Per-row defensive normalisation. One malformed row (missing
+  // required field, invalid enum from an in-flight migration) MUST
+  // NOT break the page — skip the row and keep rendering.
+  const rows: IntelligenceRowRead[] = [];
+  for (const r of rawRows) {
+    if (typeof r.id !== 'string' || !r.id) continue;
+    if (typeof r.title !== 'string') continue;
+    if (typeof r.status !== 'string') continue;
+    if (typeof r.signal_kind !== 'string') continue;
+    if (typeof r.priority_score !== 'number') continue;
+    rows.push({
+      id: r.id,
+      site_id: r.site_id ?? null,
+      category: (r.category ?? 'seo') as IntelligenceCategory,
+      type: r.type ?? '',
+      signal_kind: r.signal_kind as IntelligenceSignalKind,
+      title: r.title,
+      summary: r.summary ?? '',
+      recommended_action: r.recommended_action ?? '',
+      evidence: (r.evidence ?? {}) as Record<string, unknown>,
+      expected_upside: (r.expected_upside ?? null) as Record<string, unknown> | null,
+      source_type: r.source_type ?? '',
+      source_id: r.source_id ?? null,
+      source_key: r.source_key ?? '',
+      impact_score:     Number(r.impact_score     ?? 0),
+      confidence_score: Number(r.confidence_score ?? 0),
+      urgency_score:    Number(r.urgency_score    ?? 0),
+      effort_score:     Number(r.effort_score     ?? 0),
+      priority_score:   Number(r.priority_score),
+      status: r.status as IntelligenceStatus,
+      task_id: r.task_id ?? null,
+      first_detected_at: r.first_detected_at ?? '',
+      last_detected_at:  r.last_detected_at ?? '',
+      snoozed_until: r.snoozed_until ?? null,
+      resolved_at:   r.resolved_at ?? null,
+      dismissed_at:  r.dismissed_at ?? null,
+      metadata: (r.metadata ?? {}) as Record<string, unknown>,
+      network_sites: r.network_sites ?? null,
+    });
+  }
+
+  const summary = emptySummary();
+  summary.total = rows.length;
   for (const r of rows) {
     summary.by_category[r.category] = (summary.by_category[r.category] ?? 0) + 1;
     summary.by_signal_kind[r.signal_kind] = (summary.by_signal_kind[r.signal_kind] ?? 0) + 1;
@@ -108,5 +155,19 @@ export async function listIntelligenceInbox(
     if (r.signal_kind === 'risk' || r.signal_kind === 'warning') summary.risks += 1;
     if (r.status === 'task_created' && r.task_id) summary.tasks_created += 1;
   }
-  return { rows, summary };
+  return { rows, summary, error: null };
+}
+
+function emptySummary(): IntelligenceInboxResult['summary'] {
+  return {
+    total: 0,
+    by_category: {},
+    by_signal_kind: {},
+    by_status: {},
+    critical: 0,
+    high: 0,
+    opportunities: 0,
+    risks: 0,
+    tasks_created: 0,
+  };
 }

@@ -60,7 +60,7 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
     siteParam === 'network' ? null :
     (siteParam as SiteSlug);
 
-  const { rows, summary } = await listIntelligenceInbox(sb, {
+  const { rows, summary, error: queryError } = await listIntelligenceInbox(sb, {
     site_slug,
     category: categoryParam || null,
     statuses: statusesByView[statusParam] ?? statusesByView['active']!,
@@ -122,9 +122,19 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
         </div>
       </Panel>
 
-      {rows.length === 0 && (
+      {queryError && (
+        <Notice tone="warning">
+          <strong>Could not load intelligence items.</strong>{' '}
+          Error: <code>{queryError}</code>. The admin shell has been kept online. Refresh in a few seconds (PostgREST
+          schema caches reload after column/enum renames) or inspect the Supabase logs.
+        </Notice>
+      )}
+
+      {!queryError && rows.length === 0 && (
         <Notice tone="info">
-          No items for the current filters. Try widening the site/category filters, or press <strong>Refresh now</strong> at the top to re-run the engine.
+          {statusParam === 'active'
+            ? <>No intelligence items yet. Click <strong>Refresh now</strong> at the top to generate the first batch, or wait for the scheduled run.</>
+            : <>No items for the current filters. Try widening the site/category filters.</>}
         </Notice>
       )}
 
@@ -136,14 +146,21 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
 }
 
 function IntelligenceCard({ rank, row }: { rank: number; row: IntelligenceRowRead }) {
-  const band = priorityBand(row.priority_score);
+  const band = priorityBand(row.priority_score ?? 0);
   const signalBadge = row.signal_kind === 'opportunity' ? 'info'
                    : row.signal_kind === 'positive'    ? 'success'
                    : row.signal_kind === 'risk'        ? 'failed'
                    : row.signal_kind === 'warning'     ? 'warning'
                    :                                      'disabled';
   const siteLabel = row.network_sites?.slug ?? 'network';
-  const upside = row.expected_upside as null | { label?: string; rationale?: string };
+  // expected_upside is jsonb — defend against unexpected shapes
+  // (e.g. a string or array sneaking in from a legacy row).
+  const upside: { label?: string; rationale?: string } | null =
+    row.expected_upside && typeof row.expected_upside === 'object' && !Array.isArray(row.expected_upside)
+      ? (row.expected_upside as { label?: string; rationale?: string })
+      : null;
+  const upsideLabel     = typeof upside?.label === 'string' ? upside.label : null;
+  const upsideRationale = typeof upside?.rationale === 'string' ? upside.rationale : null;
   return (
     <Panel
       title={`#${rank} · ${siteLabel} · ${row.title}`}
@@ -151,27 +168,29 @@ function IntelligenceCard({ rank, row }: { rank: number; row: IntelligenceRowRea
       actions={<PriorityPill band={band} value={row.priority_score} />}
     >
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-        <StatusBadge state={signalBadge} label={row.signal_kind} />
+        <StatusBadge state={signalBadge} label={row.signal_kind ?? 'unknown'} />
         {row.status === 'task_created' && <StatusBadge state="success" label={`task · ${row.task_id?.slice(0, 8) ?? ''}`} />}
-        {row.status === 'snoozed' && row.snoozed_until && <StatusBadge state="warning" label={`snoozed until ${new Date(row.snoozed_until).toISOString().slice(0, 10)}`} />}
+        {row.status === 'snoozed' && row.snoozed_until && (
+          <StatusBadge state="warning" label={`snoozed until ${safeDate(row.snoozed_until)}`} />
+        )}
       </div>
 
-      <p style={{ fontSize: 13.5, lineHeight: 1.55, margin: '0 0 8px' }}>{row.summary}</p>
+      <p style={{ fontSize: 13.5, lineHeight: 1.55, margin: '0 0 8px' }}>{row.summary || '(no summary)'}</p>
       <p style={{ fontSize: 13, lineHeight: 1.55, margin: '0 0 10px', color: 'var(--admin-text-muted)' }}>
-        <strong>Recommendation:</strong> {row.recommended_action}
+        <strong>Recommendation:</strong> {row.recommended_action || '(no recommendation)'}
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 10 }}>
-        <ScoreKV label="Impact" value={row.impact_score} />
-        <ScoreKV label="Confidence" value={row.confidence_score} />
-        <ScoreKV label="Urgency" value={row.urgency_score} />
-        <ScoreKV label="Effort" value={row.effort_score} />
+        <ScoreKV label="Impact" value={row.impact_score ?? 0} />
+        <ScoreKV label="Confidence" value={row.confidence_score ?? 0} />
+        <ScoreKV label="Urgency" value={row.urgency_score ?? 0} />
+        <ScoreKV label="Effort" value={row.effort_score ?? 0} />
       </div>
 
-      {upside?.label && (
+      {upsideLabel && (
         <p style={{ fontSize: 12.5, margin: '0 0 10px', color: 'var(--admin-text-muted)' }}>
-          <strong>Potential:</strong> {upside.label}
-          {upside.rationale && <> <span className="col-dim">({upside.rationale})</span></>}
+          <strong>Potential:</strong> {upsideLabel}
+          {upsideRationale && <> <span className="col-dim">({upsideRationale})</span></>}
         </p>
       )}
 
@@ -199,7 +218,7 @@ function IntelligenceCard({ rank, row }: { rank: number; row: IntelligenceRowRea
         <div style={{ marginTop: 8 }}>
           <h4 className="admin-eyebrow" style={{ marginBottom: 4 }}>Evidence</h4>
           <pre style={{ background: 'var(--admin-surface-strong)', padding: 10, borderRadius: 6, fontSize: 11, maxHeight: 260, overflow: 'auto' }}>
-            {JSON.stringify(row.evidence, null, 2)}
+            {safeStringify(row.evidence)}
           </pre>
           <h4 className="admin-eyebrow" style={{ marginTop: 10, marginBottom: 4 }}>Source</h4>
           <div style={{ fontSize: 12 }}>
@@ -302,6 +321,20 @@ function FilterLink({ href, active, children }: { href: string; active: boolean;
       }}
     >{children}</Link>
   );
+}
+
+function safeStringify(v: unknown): string {
+  try { return JSON.stringify(v ?? {}, null, 2); } catch { return '{}'; }
+}
+
+function safeDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return iso;
+  }
 }
 
 function buildHref(current: Record<string, string | undefined>, next: { site: string; category: string; status: string }): string {
