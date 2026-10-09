@@ -17,7 +17,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { gscQueryAll } from './gsc';
-import { ga4RunReport } from './ga4';
+import { ga4RunReport, ga4RunCountryReport } from './ga4';
 
 export interface GooglePropertyRow {
   id: string;
@@ -379,6 +379,117 @@ export async function syncAllGa4(sb: SupabaseClient, today: Date): Promise<{
       last_attempt_at: new Date().toISOString(),
       error_summary: null,
     }).eq('provider', 'ga4');
+  }
+  return { properties: props.length, totals, errors };
+}
+
+// --- GA4 country-dimensioned sync --------------------------------
+//
+// Writes to network_ga4_country_daily. Independent of the site-daily
+// sync so a country-dimension API call never blocks the main
+// aggregate ingestion. Idempotent per (site_id, date, country).
+export async function syncGa4CountryProperty(
+  sb: SupabaseClient,
+  prop: GooglePropertyRow,
+  startDate: string,
+  endDate: string,
+): Promise<{ rows: number; latest_date: string | null; countries: number }> {
+  if (startDate > endDate) return { rows: 0, latest_date: null, countries: 0 };
+  const rows = await ga4RunCountryReport(prop.property_id, startDate, endDate);
+  const dbRows = rows.map((r) => ({
+    site_id: prop.site_id,
+    date: r.date,
+    country: r.country,
+    active_users: r.activeUsers,
+    new_users: r.newUsers,
+    sessions: r.sessions,
+    engaged_sessions: r.engagedSessions,
+    screen_page_views: r.screenPageViews,
+  }));
+  if (dbRows.length > 0) {
+    const CHUNK = 500;
+    for (let i = 0; i < dbRows.length; i += CHUNK) {
+      const slice = dbRows.slice(i, i + CHUNK);
+      const { error } = await sb
+        .from('network_ga4_country_daily')
+        .upsert(slice as never, { onConflict: 'site_id,date,country' });
+      if (error) throw new Error(`[sync/ga4/country] upsert: ${error.message}`);
+    }
+  }
+  const latest = rows.reduce<string | null>((acc, r) => (!acc || r.date > acc ? r.date : acc), null);
+  const uniqueCountries = new Set(rows.map((r) => r.country)).size;
+  return { rows: dbRows.length, latest_date: latest, countries: uniqueCountries };
+}
+
+export async function syncAllGa4Country(
+  sb: SupabaseClient,
+  today: Date,
+  windowDays = 2,
+): Promise<{
+  properties: number;
+  totals: { rows: number };
+  errors: Array<{ property: string; error: string }>;
+}> {
+  const props = await loadActiveProperties(sb, 'ga4');
+  const totals = { rows: 0 };
+  const errors: Array<{ property: string; error: string }> = [];
+  const endIso   = today.toISOString().slice(0, 10);
+  const startIso = new Date(today.getTime() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  for (const p of props) {
+    const jobId = await startJob(sb, 'ga4.country.incremental', p.site_id, {
+      property_id: p.property_id, start: startIso, end: endIso,
+    });
+    try {
+      const r = await syncGa4CountryProperty(sb, p, startIso, endIso);
+      totals.rows += r.rows;
+      await completeJob(sb, jobId, r.rows, r.rows, 0, {
+        property_id: p.property_id, latest_date: r.latest_date, countries: r.countries,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await failJob(sb, jobId, msg);
+      errors.push({ property: p.property_id, error: msg });
+    }
+  }
+  return { properties: props.length, totals, errors };
+}
+
+// 90-day country backfill. Called from the admin manual job
+// `ga4.country.backfill_90d`. Chunks into 15-day windows so one GA4
+// Data API response stays well under the 200k-row cap.
+export async function backfillGa4Country90d(sb: SupabaseClient, today: Date): Promise<{
+  properties: number;
+  totals: { rows: number };
+  errors: Array<{ property: string; error: string }>;
+}> {
+  const props = await loadActiveProperties(sb, 'ga4');
+  const totals = { rows: 0 };
+  const errors: Array<{ property: string; error: string }> = [];
+  const endMs = today.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const chunks: Array<{ start: string; end: string }> = [];
+  for (let d = 90; d > 0; d -= 15) {
+    const chunkEnd   = new Date(endMs - (d - 15) * dayMs - dayMs).toISOString().slice(0, 10);
+    const chunkStart = new Date(endMs - d * dayMs).toISOString().slice(0, 10);
+    chunks.push({ start: chunkStart, end: chunkEnd });
+  }
+  for (const p of props) {
+    const jobId = await startJob(sb, 'ga4.country.backfill_90d', p.site_id, {
+      property_id: p.property_id, chunks: chunks.length,
+    });
+    try {
+      let rows = 0;
+      for (const c of chunks) {
+        const r = await syncGa4CountryProperty(sb, p, c.start, c.end);
+        rows += r.rows;
+      }
+      totals.rows += rows;
+      await completeJob(sb, jobId, rows, rows, 0, { property_id: p.property_id, chunks: chunks.length });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await failJob(sb, jobId, msg);
+      errors.push({ property: p.property_id, error: msg });
+    }
   }
   return { properties: props.length, totals, errors };
 }

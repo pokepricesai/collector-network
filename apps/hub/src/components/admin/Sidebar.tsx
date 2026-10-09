@@ -45,8 +45,9 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
   {
     label: 'System',
     items: [
-      { href: '/admin/integrations', label: 'Integrations' },
-      { href: '/admin/settings',     label: 'Settings' },
+      { href: '/admin/integrations',           label: 'Integrations' },
+      { href: '/admin/analytics/exclusions',   label: 'Traffic exclusions' },
+      { href: '/admin/settings',               label: 'Settings' },
     ],
   },
 ];

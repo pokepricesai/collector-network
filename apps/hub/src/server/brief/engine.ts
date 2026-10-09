@@ -74,10 +74,11 @@ export async function fetchDayTotals(sb: SupabaseClient, date: string): Promise<
     .from('network_gsc_site_daily')
     .select('date, clicks, impressions, pages_with_impressions, pages_with_clicks, position_avg')
     .eq('date', date);
-  const { data: gaRows } = await sb
-    .from('network_ga4_site_daily')
-    .select('active_users, sessions')
-    .eq('date', date);
+  // Reporting-traffic (Singapore-excluded by default). Falls back to
+  // raw network_ga4_site_daily if country breakdown is missing for
+  // this date.
+  const { getReportingTrafficDaily } = await import('@/server/reporting/traffic');
+  const gaRows = await getReportingTrafficDaily(sb, { site_id: null, from: date, to: date });
   let clicks = 0, impressions = 0, pwi = 0, pwc = 0;
   let posWeightNum = 0, posWeightDen = 0;
   for (const r of (gscRows ?? []) as Array<{ clicks: number; impressions: number; pages_with_impressions: number; pages_with_clicks: number; position_avg: number | null }>) {
@@ -89,7 +90,7 @@ export async function fetchDayTotals(sb: SupabaseClient, date: string): Promise<
     }
   }
   let users = 0, sessions = 0;
-  for (const r of (gaRows ?? []) as Array<{ active_users: number; sessions: number }>) {
+  for (const r of gaRows) {
     users += r.active_users; sessions += r.sessions;
   }
   return {

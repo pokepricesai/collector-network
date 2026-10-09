@@ -21,7 +21,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceRoleSupabase } from '../admin/service-role';
-import { syncAllGsc, syncAllGa4 } from '../google/sync';
+import { syncAllGsc, syncAllGa4, syncAllGa4Country, backfillGa4Country90d } from '../google/sync';
 import { generateOpportunities } from '../opportunities/engine';
 import { runSitemapCheck, recordSitemapSnapshot, type SiteDescriptor } from '../sitemaps/engine';
 import { buildInspectionQueue, processInspectionQueue } from '../inspection/engine';
@@ -362,6 +362,34 @@ export const JOBS: Record<string, JobDefinition> = {
     wrapsOuter: false,
     run: async (sb) => {
       const r = await syncAllGa4(sb, new Date());
+      return { rowsInserted: r.totals.rows, summary: r as unknown as Record<string, unknown> };
+    },
+  },
+  // Country-dimensioned GA4. Separate job because the API payload is
+  // ~N× larger (one row per country per day) and we want errors here
+  // not to abort the main site-daily sync.
+  'ga4.country.sync': {
+    slug: 'ga4.country.sync',
+    jobName: 'ga4.country.incremental',
+    group: 'ingest',
+    label: 'GA4 country-dimension sync',
+    description: 'Pulls GA4 traffic broken down by country into network_ga4_country_daily. Powers the Singapore-exclusion reporting layer. 3-day sliding window.',
+    wrapsOuter: false,
+    run: async (sb) => {
+      const r = await syncAllGa4Country(sb, new Date(), 3);
+      return { rowsInserted: r.totals.rows, summary: r as unknown as Record<string, unknown> };
+    },
+  },
+  'ga4.country.backfill_90d': {
+    slug: 'ga4.country.backfill_90d',
+    jobName: 'ga4.country.backfill_90d',
+    group: 'ingest',
+    label: 'GA4 country-dimension 90-day backfill',
+    description: 'One-shot: fetches 90 days of per-country GA4 breakdown for all five sites. 15-day chunks. Idempotent on (site, date, country).',
+    requiresConfirmation: true,
+    wrapsOuter: false,
+    run: async (sb) => {
+      const r = await backfillGa4Country90d(sb, new Date());
       return { rowsInserted: r.totals.rows, summary: r as unknown as Record<string, unknown> };
     },
   },

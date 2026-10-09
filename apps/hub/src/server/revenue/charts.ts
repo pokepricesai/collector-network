@@ -226,10 +226,14 @@ export async function revenuePerThousandUsers(
   const [rows, usersData] = await Promise.all([
     fetchEpnRows(sb, range),
     (async () => {
-      let q = sb.from('network_ga4_site_daily').select('date, active_users').order('date', { ascending: true });
-      if (since) q = q.gte('date', since);
-      const { data } = await q.limit(50_000);
-      return (data ?? []) as Array<{ date: string; active_users: number }>;
+      // Reporting-traffic denominator: country-dimensioned, Singapore
+      // excluded. Falls back automatically to raw site_daily for
+      // dates with no country breakdown yet.
+      const to   = new Date().toISOString().slice(0, 10);
+      const from = since ?? '2024-01-01';
+      const { getReportingTrafficDaily } = await import('@/server/reporting/traffic');
+      const rows = await getReportingTrafficDaily(sb, { site_id: null, from, to });
+      return rows.map((r) => ({ date: r.date, active_users: r.active_users }));
     })(),
   ]);
 

@@ -136,7 +136,7 @@ export default async function OverviewPage() {
         title="What should we work on today?"
         description={
           anyConnected
-            ? `Executive view across the five Collector Network platforms. GSC data through ${gscMaxDate ?? '—'}; GA4 through ${ga4MaxDate ?? '—'}.`
+            ? `Executive view across the five Collector Network platforms. GSC data through ${gscMaxDate ?? '—'}; GA4 through ${ga4MaxDate ?? '—'}. Traffic metrics exclude Singapore bot/spam traffic.`
             : 'Executive view. Google Search Console + Analytics are configured but have not yet completed their first sync — run /api/sync/backfill?kind=gsc and ?kind=ga4 to populate.'
         }
       />

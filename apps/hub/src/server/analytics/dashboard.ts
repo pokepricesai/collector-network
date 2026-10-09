@@ -5,6 +5,7 @@ import 'server-only';
 // RLS applies naturally.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getReportingTrafficWindow } from '@/server/reporting/traffic';
 
 export interface DashboardTotals {
   activeUsers: number;
@@ -52,9 +53,16 @@ const EMPTY: DashboardTotals = {
 };
 
 export async function fetchNetworkTotal(sb: SupabaseClient, w: RangeWindow): Promise<DashboardTotals> {
-  const { data, error } = await sb.rpc('network_dashboard_total', {
-    p_start: iso(w.start), p_end: iso(w.end),
-  });
+  const [rpcResult, reporting] = await Promise.all([
+    sb.rpc('network_dashboard_total', {
+      p_start: iso(w.start), p_end: iso(w.end),
+    }),
+    // Reporting-traffic (Singapore-excluded by default) overrides the
+    // active_users/sessions coming from the raw RPC. GSC fields stay
+    // authoritative because GSC data is NOT filtered.
+    getReportingTrafficWindow(sb, { site_id: null, from: iso(w.start), to: iso(w.end) }),
+  ]);
+  const { data, error } = rpcResult;
   if (error) throw new Error(`[dashboard] total: ${error.message}`);
   const row = (data as unknown as Array<{
     active_users: number; sessions: number;
@@ -62,10 +70,10 @@ export async function fetchNetworkTotal(sb: SupabaseClient, w: RangeWindow): Pro
     pages_with_impressions: number; pages_with_clicks: number;
     avg_position: number | null;
   }> | null)?.[0];
-  if (!row) return EMPTY;
+  if (!row) return { ...EMPTY, activeUsers: reporting.active_users, sessions: reporting.sessions };
   return {
-    activeUsers: Number(row.active_users ?? 0),
-    sessions: Number(row.sessions ?? 0),
+    activeUsers: reporting.active_users,
+    sessions:    reporting.sessions,
     googleClicks: Number(row.google_clicks ?? 0),
     googleImpressions: Number(row.google_impressions ?? 0),
     pagesWithImpressions: Number(row.pages_with_impressions ?? 0),
@@ -86,16 +94,25 @@ export async function fetchSiteLevel(sb: SupabaseClient, w: RangeWindow): Promis
     pages_with_impressions: number; pages_with_clicks: number;
     avg_position: number | null;
   }>;
-  return rows.map((r) => ({
-    siteId: r.site_id, slug: r.slug,
-    activeUsers: Number(r.active_users ?? 0),
-    sessions: Number(r.sessions ?? 0),
-    googleClicks: Number(r.google_clicks ?? 0),
-    googleImpressions: Number(r.google_impressions ?? 0),
-    pagesWithImpressions: Number(r.pages_with_impressions ?? 0),
-    pagesWithClicks: Number(r.pages_with_clicks ?? 0),
-    avgPosition: r.avg_position == null ? null : Number(r.avg_position),
-  }));
+  // Overlay reporting-traffic per site. One extra RPC per site keeps
+  // the code simple; the per-site aggregation is cheap because the
+  // country table is small.
+  const perSite = await Promise.all(
+    rows.map(async (r) => {
+      const rep = await getReportingTrafficWindow(sb, { site_id: r.site_id, from: iso(w.start), to: iso(w.end) });
+      return {
+        siteId: r.site_id, slug: r.slug,
+        activeUsers: rep.active_users,
+        sessions:    rep.sessions,
+        googleClicks: Number(r.google_clicks ?? 0),
+        googleImpressions: Number(r.google_impressions ?? 0),
+        pagesWithImpressions: Number(r.pages_with_impressions ?? 0),
+        pagesWithClicks: Number(r.pages_with_clicks ?? 0),
+        avgPosition: r.avg_position == null ? null : Number(r.avg_position),
+      } as SiteLevel;
+    }),
+  );
+  return perSite;
 }
 
 export interface FreshnessRow {
