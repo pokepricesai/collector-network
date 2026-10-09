@@ -8,6 +8,7 @@ import 'server-only';
 // operating on net_minor only.
 
 import type { IntelligenceRule, RuleContext, RuleOutput, SiteSlug } from '../types';
+import { getReportingTrafficWindow } from '@/server/reporting/traffic';
 
 interface DailyRow {
   for_date: string;      // ISO
@@ -104,7 +105,7 @@ export const revenueMovementRule: IntelligenceRule = {
         site_slug,
         category: 'revenue',
         type: up ? 'revenue_up' : 'revenue_down',
-        tone: up ? 'positive' : 'risk',
+        signal_kind: up ? 'positive' : 'risk',
         title: `${up ? '📈' : '📉'} ${currency} revenue ${up ? 'up' : 'down'} ${Math.abs(changePct).toFixed(0)}% · ${site_slug ?? 'site'}`,
         summary: `${currency} net revenue ${up ? 'rose' : 'fell'} from ${fmtMoney(t.b, currency)} to ${fmtMoney(t.a, currency)} comparing 28d-recent vs prior 28d.`,
         recommended_action: up
@@ -192,7 +193,7 @@ export const trafficWithoutRevenueRule: IntelligenceRule = {
         site_slug: site.slug,
         category: 'monetisation',
         type: 'traffic_without_revenue',
-        tone: 'opportunity',
+        signal_kind: 'opportunity',
         title: `Traffic without revenue · ${site.slug}`,
         summary: `${clicks.toLocaleString()} organic clicks in the last 28d but only ${fmtMoney(rev, 'minor')} tracked in network_revenue_daily. Revenue per click is near zero.`,
         recommended_action: 'Audit affiliate wiring + conversion flow. Verify EPN SharedId mapping, check click-tracking is live, review placements, confirm the ledger has not fallen behind.',
@@ -201,6 +202,119 @@ export const trafficWithoutRevenueRule: IntelligenceRule = {
           revenue_net_minor_28d: rev,
           rpc_minor: rpcInMinor,
           currency: 'unmixed_minor',
+        },
+        impact,
+        confidence,
+        urgency,
+        effort,
+        expected_upside: null,
+      });
+    }
+    return out;
+  },
+};
+
+// I. Revenue efficiency — RPKU (revenue per 1,000 reporting-active-
+// user-days) movement vs prior 28d, per currency, per site. Uses
+// the Singapore-excluded reporting-traffic helper as the
+// denominator. Honest about "active-user-days" vs "unique users".
+export const revenueEfficiencyRule: IntelligenceRule = {
+  id: 'revenue.efficiency_movement',
+  description: 'Revenue per 1,000 reporting active-user-days moved materially vs prior 28d.',
+  categoriesScanned: ['revenue', 'monetisation'],
+  async run(ctx: RuleContext): Promise<RuleOutput[]> {
+    const dayMs  = 24 * 60 * 60 * 1000;
+    const now    = new Date(ctx.runAt);
+    const endA   = new Date(now.getTime() - 1 * dayMs);
+    const startA = new Date(endA.getTime() - 28 * dayMs);
+    const endB   = new Date(startA.getTime() - 1 * dayMs);
+    const startB = new Date(endB.getTime() - 28 * dayMs);
+    const sinceA = startA.toISOString().slice(0, 10);
+    const untilA = endA.toISOString().slice(0, 10);
+    const sinceB = startB.toISOString().slice(0, 10);
+    const untilB = endB.toISOString().slice(0, 10);
+
+    // Revenue per site, per currency, for both windows.
+    const { data } = await ctx.sb
+      .from('network_revenue_daily')
+      .select('for_date, site_id, currency, net_minor')
+      .gte('for_date', sinceB)
+      .lte('for_date', untilA)
+      .limit(10000);
+    const rows = ((data ?? []) as Array<{ for_date: string; site_id: string | null; currency: string; net_minor: number }>);
+    const bucket = new Map<string, { a: number; b: number }>();
+    for (const r of rows) {
+      if (!r.site_id) continue;
+      const d = new Date(r.for_date).getTime();
+      const inA = d >= startA.getTime() && d <= endA.getTime();
+      const inB = d >= startB.getTime() && d <= endB.getTime();
+      if (!inA && !inB) continue;
+      const key = `${r.site_id}|${r.currency}`;
+      const b = bucket.get(key) ?? { a: 0, b: 0 };
+      if (inA) b.a += Number(r.net_minor ?? 0);
+      if (inB) b.b += Number(r.net_minor ?? 0);
+      bucket.set(key, b);
+    }
+
+    const out: RuleOutput[] = [];
+    const siteUserCache = new Map<string, { a: number; b: number }>();
+    for (const [key, rev] of bucket) {
+      const [site_id, currency] = key.split('|') as [string, string];
+      if (!siteUserCache.has(site_id)) {
+        const [winA, winB] = await Promise.all([
+          getReportingTrafficWindow(ctx.sb, { site_id, from: sinceA, to: untilA }),
+          getReportingTrafficWindow(ctx.sb, { site_id, from: sinceB, to: untilB }),
+        ]);
+        siteUserCache.set(site_id, {
+          a: winA.active_users,
+          b: winB.active_users,
+        });
+      }
+      const users = siteUserCache.get(site_id)!;
+      // Need a sample floor so RPKU doesn't swing wildly on tiny
+      // user counts.
+      if (users.a < 200 || users.b < 200) continue;
+      if (rev.a < 100 && rev.b < 100) continue;
+
+      const rpkuA = users.a > 0 ? (rev.a / users.a) * 1000 : 0;
+      const rpkuB = users.b > 0 ? (rev.b / users.b) * 1000 : 0;
+      if (rpkuB <= 0 && rpkuA <= 0) continue;
+      const changePct = rpkuB > 0 ? ((rpkuA - rpkuB) / rpkuB) * 100 : 100;
+      if (Math.abs(changePct) < 20) continue;
+
+      const up = rpkuA > rpkuB;
+      const site_slug = findSiteSlug(ctx, site_id);
+      const impact     = clamp(30 + Math.min(50, Math.abs(changePct) * 0.4));
+      const confidence = clamp(60 + Math.min(25, Math.log10(Math.max(1, users.a / 100)) * 10));
+      const urgency    = up ? 30 : clamp(45 + Math.min(30, Math.abs(changePct) / 2));
+      const effort     = up ? 40 : 55;
+
+      out.push({
+        source_type: 'revenue',
+        source_id: null,
+        source_key: `revenue:efficiency:${site_slug ?? site_id}:${currency}`,
+        site_id,
+        site_slug,
+        category: 'monetisation',
+        type: up ? 'rpku_up' : 'rpku_down',
+        signal_kind: up ? 'positive' : 'risk',
+        title: `${up ? '📈' : '📉'} RPKU ${up ? 'up' : 'down'} ${Math.abs(changePct).toFixed(0)}% · ${site_slug ?? 'site'} · ${currency}`,
+        summary: `${currency} revenue per 1,000 reporting active-user-days ${up ? 'rose' : 'fell'} from ${fmtMoney(Math.round(rpkuB), currency)} to ${fmtMoney(Math.round(rpkuA), currency)} vs prior 28d. Denominator excludes Singapore bot/spam traffic.`,
+        recommended_action: up
+          ? 'Identify what changed in placement/intent-match/offer mix. Reinforce the winning path.'
+          : 'Audit affiliate placements, offer freshness, click-tracking integrity, and traffic quality. Rule out revenue-ingest lag first (operates on net_minor).',
+        evidence: {
+          currency,
+          rpku_recent_minor: Math.round(rpkuA),
+          rpku_prior_minor: Math.round(rpkuB),
+          change_pct: changePct,
+          net_minor_recent: rev.a,
+          net_minor_prior:  rev.b,
+          reporting_active_user_days_recent: users.a,
+          reporting_active_user_days_prior:  users.b,
+          window_recent: { from: sinceA, to: untilA },
+          window_prior:  { from: sinceB, to: untilB },
+          traffic_denominator: 'Singapore-excluded',
         },
         impact,
         confidence,

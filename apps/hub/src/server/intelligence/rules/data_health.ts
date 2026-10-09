@@ -106,7 +106,7 @@ export const stalejobRule: IntelligenceRule = {
         site_slug: siteSlug,
         category: 'data_health',
         type: isFailing ? 'failed_job' : 'stale_job',
-        tone: isFailing ? 'risk' : 'warning',
+        signal_kind: isFailing ? 'risk' : 'warning',
         title,
         summary,
         recommended_action: isFailing

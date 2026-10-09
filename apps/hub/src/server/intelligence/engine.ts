@@ -130,7 +130,7 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
         title: s.title,
         summary: s.summary,
         recommended_action: s.recommended_action,
-        tone: s.tone,
+        signal_kind: s.signal_kind,
         type: s.type,
         category: s.category,
       }).eq('id', existing.id);
@@ -144,7 +144,7 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
       site_id: s.site_id,
       category: s.category,
       type: s.type,
-      tone: s.tone,
+      signal_kind: s.signal_kind,
       title: s.title,
       summary: s.summary,
       recommended_action: s.recommended_action,

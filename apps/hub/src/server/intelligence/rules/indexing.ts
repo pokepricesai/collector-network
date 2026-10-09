@@ -64,7 +64,7 @@ export const indexingCoverageRule: IntelligenceRule = {
         site_slug,
         category: 'indexing',
         type: isError ? 'sitemap_error' : isWarning ? 'sitemap_warning' : 'coverage_deterioration',
-        tone: isError ? 'risk' : 'warning',
+        signal_kind: isError ? 'risk' : 'warning',
         title: `${site_name} · ${isError ? 'sitemap error' : isWarning ? 'sitemap warning' : 'coverage deterioration'}`,
         summary: isError || isWarning
           ? `Latest sitemap snapshot status ${latest.status.toUpperCase()}: ${latest.error_summary ?? '(no error_summary logged)'}. ${latest.issue_count} issue(s) across ${latest.submitted_count} submitted URLs.`

@@ -137,11 +137,11 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
 
 function IntelligenceCard({ rank, row }: { rank: number; row: IntelligenceRowRead }) {
   const band = priorityBand(row.priority_score);
-  const toneBadge = row.tone === 'opportunity' ? 'info'
-                 : row.tone === 'positive'    ? 'success'
-                 : row.tone === 'risk'        ? 'failed'
-                 : row.tone === 'warning'     ? 'warning'
-                 :                               'disabled';
+  const signalBadge = row.signal_kind === 'opportunity' ? 'info'
+                   : row.signal_kind === 'positive'    ? 'success'
+                   : row.signal_kind === 'risk'        ? 'failed'
+                   : row.signal_kind === 'warning'     ? 'warning'
+                   :                                      'disabled';
   const siteLabel = row.network_sites?.slug ?? 'network';
   const upside = row.expected_upside as null | { label?: string; rationale?: string };
   return (
@@ -151,7 +151,7 @@ function IntelligenceCard({ rank, row }: { rank: number; row: IntelligenceRowRea
       actions={<PriorityPill band={band} value={row.priority_score} />}
     >
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-        <StatusBadge state={toneBadge} label={row.tone} />
+        <StatusBadge state={signalBadge} label={row.signal_kind} />
         {row.status === 'task_created' && <StatusBadge state="success" label={`task · ${row.task_id?.slice(0, 8) ?? ''}`} />}
         {row.status === 'snoozed' && row.snoozed_until && <StatusBadge state="warning" label={`snoozed until ${new Date(row.snoozed_until).toISOString().slice(0, 10)}`} />}
       </div>

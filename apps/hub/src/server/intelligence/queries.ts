@@ -4,14 +4,14 @@ import 'server-only';
 // through here so the page component stays declarative.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { IntelligenceCategory, IntelligenceStatus, IntelligenceTone, SiteSlug } from './types';
+import type { IntelligenceCategory, IntelligenceStatus, IntelligenceSignalKind, SiteSlug } from './types';
 
 export interface IntelligenceRowRead {
   id: string;
   site_id: string | null;
   category: IntelligenceCategory;
   type: string;
-  tone: IntelligenceTone;
+  signal_kind: IntelligenceSignalKind;
   title: string;
   summary: string;
   recommended_action: string;
@@ -49,7 +49,7 @@ export interface IntelligenceInboxResult {
   summary: {
     total: number;
     by_category: Record<string, number>;
-    by_tone: Record<string, number>;
+    by_signal_kind: Record<string, number>;
     by_status: Record<string, number>;
     critical: number;
     high: number;
@@ -65,7 +65,7 @@ export async function listIntelligenceInbox(
 ): Promise<IntelligenceInboxResult> {
   const statuses = filters.statuses ?? ['open', 'task_created'];
   let q = sb.from('network_intelligence_items')
-    .select('id, site_id, category, type, tone, title, summary, recommended_action, evidence, expected_upside, source_type, source_id, source_key, impact_score, confidence_score, urgency_score, effort_score, priority_score, status, task_id, first_detected_at, last_detected_at, snoozed_until, resolved_at, dismissed_at, metadata, network_sites(slug, name)')
+    .select('id, site_id, category, type, signal_kind, title, summary, recommended_action, evidence, expected_upside, source_type, source_id, source_key, impact_score, confidence_score, urgency_score, effort_score, priority_score, status, task_id, first_detected_at, last_detected_at, snoozed_until, resolved_at, dismissed_at, metadata, network_sites(slug, name)')
     .in('status', statuses)
     .order('priority_score', { ascending: false })
     .order('last_detected_at', { ascending: false })
@@ -90,7 +90,7 @@ export async function listIntelligenceInbox(
   const summary = {
     total: rows.length,
     by_category: {} as Record<string, number>,
-    by_tone: {} as Record<string, number>,
+    by_signal_kind: {} as Record<string, number>,
     by_status: {} as Record<string, number>,
     critical: 0,
     high: 0,
@@ -100,12 +100,12 @@ export async function listIntelligenceInbox(
   };
   for (const r of rows) {
     summary.by_category[r.category] = (summary.by_category[r.category] ?? 0) + 1;
-    summary.by_tone[r.tone] = (summary.by_tone[r.tone] ?? 0) + 1;
+    summary.by_signal_kind[r.signal_kind] = (summary.by_signal_kind[r.signal_kind] ?? 0) + 1;
     summary.by_status[r.status] = (summary.by_status[r.status] ?? 0) + 1;
     if (r.priority_score >= 85) summary.critical += 1;
     else if (r.priority_score >= 70) summary.high += 1;
-    if (r.tone === 'opportunity' || r.tone === 'positive') summary.opportunities += 1;
-    if (r.tone === 'risk' || r.tone === 'warning') summary.risks += 1;
+    if (r.signal_kind === 'opportunity' || r.signal_kind === 'positive') summary.opportunities += 1;
+    if (r.signal_kind === 'risk' || r.signal_kind === 'warning') summary.risks += 1;
     if (r.status === 'task_created' && r.task_id) summary.tasks_created += 1;
   }
   return { rows, summary };

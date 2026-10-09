@@ -18,12 +18,15 @@ export type IntelligenceCategory =
   | 'indexing'
   | 'growth';
 
-export type IntelligenceTone =
+export type IntelligenceSignalKind =
   | 'opportunity'
   | 'risk'
   | 'warning'
   | 'positive'
   | 'informational';
+
+// Backwards-compatible alias while any external callers migrate.
+export type IntelligenceTone = IntelligenceSignalKind;
 
 export type IntelligenceStatus =
   | 'open'
@@ -57,7 +60,7 @@ export interface RuleOutput {
   site_slug: SiteSlug | null;  // for prompt/convenience
   category: IntelligenceCategory;
   type: string;                // e.g. 'striking_distance', 'stale_job'
-  tone: IntelligenceTone;
+  signal_kind: IntelligenceSignalKind;
   title: string;
   summary: string;
   recommended_action: string;
