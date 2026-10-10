@@ -52,11 +52,13 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
   const startedAt = Date.now();
   const runAt     = new Date(startedAt).toISOString();
 
-  // Resolve site list once.
+  // Resolve site list once. network_sites uses a `status` column
+  // ('active' | 'parked' | 'planned' | 'archived') — there is no
+  // boolean `is_active`. Filter on status='active' instead.
   const { data: siteRows, error: siteErr } = await sb
     .from('network_sites')
     .select('id, slug, name')
-    .eq('is_active', true);
+    .eq('status', 'active');
   if (siteErr) throw new Error(`[intelligence/engine] fetch sites: ${siteErr.message}`);
   const sites = ((siteRows ?? []) as Array<{ id: string; slug: SiteSlug; name: string }>);
   const siteBySlug: RuleContext['siteBySlug'] = {
