@@ -80,24 +80,28 @@ async function fetchOpenOpps(ctx: RuleContext): Promise<OppRow[]> {
   return rows;
 }
 
-// Probe GSC coverage for a site so we can distinguish "no upstream
+// Probe GSC coverage per site so we can distinguish "no upstream
 // data" from "upstream data too thin to generate opportunities".
-// Cached on the context so repeated SEO rules share the lookup.
+// Uses HEAD count queries (one per registered site) to avoid
+// pulling a large row set — pokemon alone has >80k rows in the
+// last 35 days and would truncate the smaller sites off the end
+// of a naive LIMIT scan. Cached on the context so repeated SEO
+// rules share the lookup.
 async function fetchSiteGscCoverage(
   ctx: RuleContext,
 ): Promise<Set<string>> {
   const cached = (ctx as unknown as { __gscSiteCoverage?: Set<string> }).__gscSiteCoverage;
   if (cached) return cached;
-  // Pull one row per site_id that has ANY query-level GSC data in
-  // the last 35 days. Group in-memory to avoid an RPC function.
   const since = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const { data } = await ctx.sb
-    .from('network_gsc_url_query_daily')
-    .select('site_id')
-    .gte('date', since)
-    .limit(50000);
   const set = new Set<string>();
-  for (const r of ((data ?? []) as Array<{ site_id: string }>)) set.add(r.site_id);
+  await Promise.all(ctx.sites.map(async (s) => {
+    const { count } = await ctx.sb
+      .from('network_gsc_url_query_daily')
+      .select('site_id', { count: 'exact', head: true })
+      .gte('date', since)
+      .eq('site_id', s.id);
+    if ((count ?? 0) > 0) set.add(s.id);
+  }));
   (ctx as unknown as { __gscSiteCoverage?: Set<string> }).__gscSiteCoverage = set;
   return set;
 }
