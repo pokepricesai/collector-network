@@ -57,6 +57,7 @@ interface ExistingRow {
   status: 'open' | 'task_created' | 'snoozed' | 'resolved' | 'dismissed';
   priority_score: number;
   dismissed_priority: number | null;
+  resolved_reason: string | null;
   task_id: string | null;
 }
 
@@ -72,24 +73,6 @@ function aggregateStatus(diags: RuleScopeDiagnostic[]): RuleOutcomeStatus {
 export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineRunResult> {
   const startedAt = Date.now();
   const runAt     = new Date(startedAt).toISOString();
-
-  // Open a job_runs row immediately so a crash halfway through is
-  // still visible to the operator. We'll update it at the end.
-  let jobRunId: string | null = null;
-  try {
-    const { data } = await sb.from('network_job_runs').insert({
-      job_name: JOB_NAME,
-      job_type: 'engine',
-      site_id: null,
-      status: 'running',
-      started_at: runAt,
-      metadata: { phase: '1.1' },
-    }).select('id').single();
-    jobRunId = (data as null | { id: string })?.id ?? null;
-  } catch {
-    // Non-fatal — persistence failure must not block the engine.
-    jobRunId = null;
-  }
 
   // Resolve site list once. network_sites uses `status` not
   // `is_active`; filter on status='active'.
@@ -156,7 +139,7 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
   if (sourceKeys.length > 0) {
     const { data } = await sb
       .from('network_intelligence_items')
-      .select('id, source_key, status, priority_score, dismissed_priority, task_id')
+      .select('id, source_key, status, priority_score, dismissed_priority, resolved_reason, task_id')
       .in('source_key', sourceKeys);
     for (const r of ((data ?? []) as ExistingRow[])) existingBySourceKey.set(r.source_key, r);
   }
@@ -167,6 +150,36 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
   let items_reopened = 0;
   for (const s of scored) {
     const existing = existingBySourceKey.get(s.source_key);
+    // Resolved-for-invalid-source-data reopens unconditionally when
+    // the rule's gates now pass. That resolution reason specifically
+    // means "data was malformed, keep the audit trail, let it come
+    // back if it ever qualifies." The dismissed-row delta logic
+    // does NOT apply here — the operator never dismissed this one.
+    if (existing && existing.status === 'resolved' && existing.resolved_reason === 'invalid_source_data') {
+      await sb.from('network_intelligence_items').update({
+        status: 'open',
+        resolved_at: null,
+        resolved_reason: null,
+        last_detected_at: runAt,
+        impact_score: s.impact,
+        confidence_score: s.confidence,
+        urgency_score: s.urgency,
+        effort_score: s.effort,
+        priority_score: s.priority,
+        evidence: s.evidence as unknown as Record<string, unknown>,
+        expected_upside: s.expected_upside as unknown as Record<string, unknown> | null,
+        title: s.title,
+        summary: s.summary,
+        recommended_action: s.recommended_action,
+        signal_kind: s.signal_kind,
+        type: s.type,
+        category: s.category,
+      }).eq('id', existing.id);
+      items_reopened += 1;
+      items_upserted += 1;
+      items_updated  += 1;
+      continue;
+    }
     if (existing && existing.status === 'dismissed') {
       const prevPriority = existing.dismissed_priority ?? existing.priority_score;
       if (s.priority < prevPriority + REOPEN_PRIORITY_DELTA) continue;
@@ -270,7 +283,7 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
 
   const finishedAt = new Date();
   const result: EngineRunResult = {
-    run_id: jobRunId ?? '',
+    run_id: '',
     started_at: runAt,
     finished_at: finishedAt.toISOString(),
     duration_ms: Date.now() - startedAt,
@@ -287,40 +300,46 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
     per_rule: perRule,
   };
 
-  // Persist the completion record.
-  if (jobRunId) {
-    const anyFailed = result.rules_failed > 0;
-    const finalStatus = anyFailed ? 'warning' : 'success';
-    try {
-      await sb.from('network_job_runs').update({
-        status: finalStatus,
-        finished_at: result.finished_at,
-        rows_examined: rowsExaminedTotal,
-        rows_inserted: items_inserted,
-        rows_updated: items_updated,
-        rows_rejected: rowsSkippedInvalidTotal,
-        error_summary: anyFailed
-          ? perRule.filter((r) => r.failed).map((r) => `${r.rule_id}: ${r.error ?? ''}`).join(' | ').slice(0, 500)
-          : null,
-        metadata: {
-          phase: '1.1',
-          duration_ms: result.duration_ms,
-          rules_registered: result.rules_registered,
-          rules_executed: result.rules_executed,
-          rules_failed: result.rules_failed,
-          items_upserted,
-          items_inserted,
-          items_updated,
-          items_resolved_auto,
-          items_reopened,
-          rows_examined_total: rowsExaminedTotal,
-          rows_skipped_invalid_total: rowsSkippedInvalidTotal,
-          per_rule: perRule,
-        },
-      }).eq('id', jobRunId);
-    } catch {
-      // Non-fatal: engine succeeded, just the persistence update failed.
-    }
+  // Persist the completion record. network_job_status enum only
+  // carries success/warning/failed (no 'running'), so we insert
+  // once at the end rather than updating a pre-run row. Crash
+  // records are available in Vercel logs.
+  const anyFailed = result.rules_failed > 0;
+  const finalStatus = anyFailed ? 'warning' : 'success';
+  const { data: inserted, error: insErr } = await sb.from('network_job_runs').insert({
+    job_name: JOB_NAME,
+    job_type: 'engine',
+    site_id: null,
+    status: finalStatus,
+    started_at: runAt,
+    finished_at: result.finished_at,
+    rows_examined: rowsExaminedTotal,
+    rows_inserted: items_inserted,
+    rows_updated: items_updated,
+    rows_rejected: rowsSkippedInvalidTotal,
+    error_summary: anyFailed
+      ? perRule.filter((r) => r.failed).map((r) => `${r.rule_id}: ${r.error ?? ''}`).join(' | ').slice(0, 500)
+      : null,
+    metadata: {
+      phase: '1.1',
+      duration_ms: result.duration_ms,
+      rules_registered: result.rules_registered,
+      rules_executed: result.rules_executed,
+      rules_failed: result.rules_failed,
+      items_upserted,
+      items_inserted,
+      items_updated,
+      items_resolved_auto,
+      items_reopened,
+      rows_examined_total: rowsExaminedTotal,
+      rows_skipped_invalid_total: rowsSkippedInvalidTotal,
+      per_rule: perRule,
+    },
+  }).select('id').single();
+  if (insErr) {
+    console.error('[intelligence/engine] job_runs insert failed:', insErr.message);
+  } else if (inserted) {
+    result.run_id = (inserted as { id: string }).id;
   }
 
   return result;
