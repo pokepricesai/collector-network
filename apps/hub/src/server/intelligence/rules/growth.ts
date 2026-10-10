@@ -3,17 +3,27 @@ import 'server-only';
 // GROWTH rules — compare per-site 28d GSC clicks vs prior 28d.
 // Positive AND negative movement counts. Requires enough sample
 // (>= 200 clicks across the recent window) to avoid noise.
+//
+// Phase 1.1 — per-site diagnostics so operators can tell NO_DATA
+// from NO_SIGNAL from SKIPPED.
 
-import type { IntelligenceRule, RuleContext, RuleOutput } from '../types';
+import type {
+  IntelligenceRule, RuleContext, RuleOutput, RuleRunResult, RuleScopeDiagnostic, SiteSlug,
+} from '../types';
 import { getReportingTrafficWindow } from '@/server/reporting/traffic';
 
 interface GscRow { site_id: string; date: string; clicks: number }
 
+const CLICKS_SAMPLE_FLOOR = 200;
+const MIN_CHANGE_PCT      = 20;
+
 export const siteGrowthRule: IntelligenceRule = {
   id: 'growth.site_clicks',
-  description: 'Per-site organic clicks moved materially vs prior 28d.',
+  description: `Per-site organic clicks moved ≥${MIN_CHANGE_PCT}% vs prior 28d with ≥${CLICKS_SAMPLE_FLOOR} recent-window clicks.`,
   categoriesScanned: ['growth'],
-  async run(ctx: RuleContext): Promise<RuleOutput[]> {
+  async run(ctx: RuleContext): Promise<RuleRunResult> {
+    const outputs: RuleOutput[] = [];
+    const diags: RuleScopeDiagnostic[] = [];
     const dayMs = 24 * 60 * 60 * 1000;
     const now   = new Date(ctx.runAt);
     const endA  = new Date(now.getTime() - 1 * dayMs);
@@ -29,7 +39,9 @@ export const siteGrowthRule: IntelligenceRule = {
       .gte('date', since)
       .lte('date', until)
       .limit(200000);
-    if (error) throw new Error(`[rules/growth] fetch gsc: ${error.message}`);
+    if (error) {
+      return { outputs: [], diagnostics: [{ scope: 'network', status: 'error', items_emitted: 0, error: error.message }] };
+    }
     const rows = ((data ?? []) as GscRow[]);
 
     const bySite = new Map<string, { a: number; b: number }>();
@@ -41,20 +53,27 @@ export const siteGrowthRule: IntelligenceRule = {
       bySite.set(r.site_id, bucket);
     }
 
-    const out: RuleOutput[] = [];
     for (const site of ctx.sites) {
       const b = bySite.get(site.id);
-      if (!b) continue;
-      if (b.a < 200) continue;                                       // sample floor
+      const d: RuleScopeDiagnostic = { scope: site.slug, status: 'no_data', items_emitted: 0 };
+      if (!b) { d.reason = 'no GSC rows for this site in the comparison window'; diags.push(d); continue; }
+      d.rows_examined = (b.a > 0 ? 1 : 0) + (b.b > 0 ? 1 : 0);
+      if (b.a < CLICKS_SAMPLE_FLOOR) {
+        d.status = 'no_signal'; d.reason = `recent-window clicks ${b.a} < sample floor ${CLICKS_SAMPLE_FLOOR}`;
+        diags.push(d); continue;
+      }
       const changeAbs = b.a - b.b;
       const changePct = b.b > 0 ? (changeAbs / b.b) * 100 : (b.a > 0 ? 100 : 0);
-      if (Math.abs(changePct) < 20) continue;
+      if (Math.abs(changePct) < MIN_CHANGE_PCT) {
+        d.status = 'no_signal'; d.reason = `movement ${changePct.toFixed(1)}% below ±${MIN_CHANGE_PCT}%`;
+        diags.push(d); continue;
+      }
       const up = changeAbs > 0;
       const impact     = clamp(35 + Math.min(45, Math.abs(changePct) * 0.4));
       const confidence = clamp(60 + Math.min(25, Math.log10(Math.max(1, b.a / 100)) * 10));
       const urgency    = up ? 25 : clamp(45 + Math.min(30, Math.abs(changePct) / 2));
       const effort     = up ? 20 : 55;
-      out.push({
+      outputs.push({
         source_type: 'traffic',
         source_id: null,
         source_key: `growth:site_clicks:${site.slug}`,
@@ -82,21 +101,24 @@ export const siteGrowthRule: IntelligenceRule = {
         effort,
         expected_upside: null,
       });
+      d.status = 'signals_found'; d.items_emitted = 1; diags.push(d);
     }
-    return out;
+
+    return { outputs, diagnostics: diags };
   },
 };
 
 // L (GA4 variant) — site traffic growth using Singapore-excluded
 // reporting active-user-days. Parallel to siteGrowthRule which uses
 // GSC clicks; both are legitimate signals and surface independently
-// (different source_key prefixes). Honest about "active-user-days"
-// not "unique users".
+// (different source_key prefixes).
 export const siteGrowthReportingRule: IntelligenceRule = {
   id: 'growth.site_reporting_traffic',
   description: 'Per-site reporting active-user-days (Singapore-excluded) moved materially vs prior 28d.',
   categoriesScanned: ['growth'],
-  async run(ctx: RuleContext): Promise<RuleOutput[]> {
+  async run(ctx: RuleContext): Promise<RuleRunResult> {
+    const outputs: RuleOutput[] = [];
+    const diags: RuleScopeDiagnostic[] = [];
     const dayMs = 24 * 60 * 60 * 1000;
     const now   = new Date(ctx.runAt);
     const endA  = new Date(now.getTime() - 1 * dayMs);
@@ -108,30 +130,36 @@ export const siteGrowthReportingRule: IntelligenceRule = {
     const sinceB = startB.toISOString().slice(0, 10);
     const untilB = endB.toISOString().slice(0, 10);
 
-    const out: RuleOutput[] = [];
     for (const site of ctx.sites) {
+      const d: RuleScopeDiagnostic = { scope: site.slug, status: 'no_data', items_emitted: 0 };
       const [winA, winB] = await Promise.all([
         getReportingTrafficWindow(ctx.sb, { site_id: site.id, from: sinceA, to: untilA }),
         getReportingTrafficWindow(ctx.sb, { site_id: site.id, from: sinceB, to: untilB }),
       ]);
-      // Sample floor.
-      if (winA.active_users < 300) continue;
-      // Only surface when BOTH windows have country-dimensioned
-      // coverage. Fallback-only comparisons are already handled by
-      // the GSC-based rule and would double-count noise.
-      if (winA.days_filtered === 0 || winB.days_filtered === 0) continue;
-
+      if (winA.active_users === 0 && winB.active_users === 0) {
+        d.reason = 'no reporting active-user-days for either window'; diags.push(d); continue;
+      }
+      if (winA.active_users < 300) {
+        d.status = 'no_signal'; d.reason = `recent-window active-user-days ${winA.active_users} < floor 300`;
+        diags.push(d); continue;
+      }
+      if (winA.days_filtered === 0 || winB.days_filtered === 0) {
+        d.status = 'skipped'; d.reason = 'country-dimensioned coverage missing in one window';
+        diags.push(d); continue;
+      }
       const changeAbs = winA.active_users - winB.active_users;
       const changePct = winB.active_users > 0 ? (changeAbs / winB.active_users) * 100 : 0;
-      if (Math.abs(changePct) < 20) continue;
-
+      if (Math.abs(changePct) < MIN_CHANGE_PCT) {
+        d.status = 'no_signal'; d.reason = `movement ${changePct.toFixed(1)}% below ±${MIN_CHANGE_PCT}%`;
+        diags.push(d); continue;
+      }
       const up = changeAbs > 0;
       const impact     = clamp(35 + Math.min(45, Math.abs(changePct) * 0.4));
       const confidence = clamp(60 + Math.min(25, Math.log10(Math.max(1, winA.active_users / 100)) * 10));
       const urgency    = up ? 25 : clamp(45 + Math.min(30, Math.abs(changePct) / 2));
       const effort     = up ? 20 : 55;
 
-      out.push({
+      outputs.push({
         source_type: 'traffic',
         source_id: null,
         source_key: `growth:site_reporting_traffic:${site.slug}`,
@@ -162,8 +190,10 @@ export const siteGrowthReportingRule: IntelligenceRule = {
         effort,
         expected_upside: null,
       });
+      d.status = 'signals_found'; d.items_emitted = 1; diags.push(d);
     }
-    return out;
+
+    return { outputs, diagnostics: diags };
   },
 };
 

@@ -6,12 +6,18 @@ import 'server-only';
 // of gross/refunds/net minor-unit amounts per (date, site, source,
 // currency). Avoids pending vs confirmed accounting mistakes by
 // operating on net_minor only.
+//
+// Phase 1.1: per-site diagnostics so operators can see whether a
+// site has NO_DATA (ledger empty for the window) vs NO_SIGNAL
+// (ledger has data, movement below material threshold).
 
-import type { IntelligenceRule, RuleContext, RuleOutput, SiteSlug } from '../types';
+import type {
+  IntelligenceRule, RuleContext, RuleOutput, RuleRunResult, RuleScopeDiagnostic, SiteSlug,
+} from '../types';
 import { getReportingTrafficWindow } from '@/server/reporting/traffic';
 
 interface DailyRow {
-  for_date: string;      // ISO
+  for_date: string;
   site_id: string | null;
   source_id: string;
   currency: string;
@@ -27,19 +33,12 @@ interface GscRow {
   clicks: number;
 }
 
-// Compare net revenue in the most recent complete 28d window against
-// the prior 28d. Flag material movement per site + currency. A
-// movement needs ≥ a minimum absolute amount AND ≥ a minimum % to
-// avoid noise.
 export const revenueMovementRule: IntelligenceRule = {
   id: 'revenue.material_movement',
   description: 'Site revenue up or down materially vs prior 28d.',
   categoriesScanned: ['revenue'],
-  async run(ctx: RuleContext): Promise<RuleOutput[]> {
+  async run(ctx: RuleContext): Promise<RuleRunResult> {
     const now = new Date(ctx.runAt);
-    // Prior 28d ends 1 day before the recent window starts to avoid
-    // overlap. Both windows close at today - 1 (so immature today's
-    // partial data doesn't bias the comparison).
     const dayMs   = 24 * 60 * 60 * 1000;
     const endA    = new Date(now.getTime() - 1 * dayMs);
     const startA  = new Date(endA.getTime() - 28 * dayMs);
@@ -55,14 +54,17 @@ export const revenueMovementRule: IntelligenceRule = {
       .gte('for_date', since)
       .lte('for_date', until)
       .limit(10000);
-    if (error) throw new Error(`[rules/revenue] fetch daily: ${error.message}`);
+    if (error) {
+      return { outputs: [], diagnostics: [{ scope: 'network', status: 'error', items_emitted: 0, error: error.message }] };
+    }
     const rows = ((data ?? []) as DailyRow[]);
 
-    // Group by (site_id, currency). Compare A vs B.
     interface Totals { a: number; b: number; a_days: number; b_days: number }
     const buckets = new Map<string, Totals>();
+    const sitesSeen = new Set<string>();
     for (const r of rows) {
-      if (r.site_id == null) continue;                      // ignore unassigned
+      if (r.site_id == null) continue;
+      sitesSeen.add(r.site_id);
       const d = new Date(r.for_date).getTime();
       const inA = d >= startA.getTime() && d <= endA.getTime();
       const inB = d >= startB.getTime() && d <= endB.getTime();
@@ -74,22 +76,19 @@ export const revenueMovementRule: IntelligenceRule = {
       buckets.set(key, t);
     }
 
-    const out: RuleOutput[] = [];
+    const outputs: RuleOutput[] = [];
+    const emittedForSite = new Set<string>();
+    const noSignalForSite = new Set<string>();
     for (const [key, t] of buckets) {
       const [site_id, currency] = key.split('|') as [string, string];
       const site_slug = findSiteSlug(ctx, site_id);
-      // Need at least some observations in both windows to compare.
-      if (t.a_days < 5 || t.b_days < 5) continue;
+      if (t.a_days < 5 || t.b_days < 5) { noSignalForSite.add(site_id); continue; }
       const changeMinor = t.a - t.b;
       const changePct   = t.b > 0 ? (changeMinor / t.b) * 100 : (t.a > 0 ? 100 : 0);
       const absMinor    = Math.abs(changeMinor);
-      // Threshold: materially different means >= 25% change AND >=
-      // 10 (minor units × 100 = whole currency units; here 10 is 10
-      // GBP/USD/EUR). Both windows need to have made at least ~5
-      // currency units each to avoid dividing by near-zero.
-      if (changePct < 25 && changePct > -25) continue;
-      if (absMinor < 1000) continue;
-      if (t.a < 500 && t.b < 500) continue;
+      if (changePct < 25 && changePct > -25) { noSignalForSite.add(site_id); continue; }
+      if (absMinor < 1000) { noSignalForSite.add(site_id); continue; }
+      if (t.a < 500 && t.b < 500) { noSignalForSite.add(site_id); continue; }
 
       const up = changeMinor > 0;
       const impact     = clamp(30 + Math.min(50, absMinor / 1000));
@@ -97,7 +96,7 @@ export const revenueMovementRule: IntelligenceRule = {
       const urgency    = clamp(up ? 30 : 55 + Math.min(30, Math.abs(changePct) / 2));
       const effort     = up ? 40 : 55;
 
-      out.push({
+      outputs.push({
         source_type: 'revenue',
         source_id: null,
         source_key: `revenue:movement:${site_slug ?? site_id}:${currency}`,
@@ -126,20 +125,28 @@ export const revenueMovementRule: IntelligenceRule = {
         effort,
         expected_upside: null,
       });
+      emittedForSite.add(site_id);
     }
-    return out;
+
+    const diags: RuleScopeDiagnostic[] = [];
+    for (const site of ctx.sites) {
+      if (emittedForSite.has(site.id)) {
+        diags.push({ scope: site.slug, status: 'signals_found', items_emitted: 1 });
+      } else if (sitesSeen.has(site.id)) {
+        diags.push({ scope: site.slug, status: 'no_signal', items_emitted: 0, reason: 'ledger has data; movement below ±25% / £10 / 5-day material thresholds' });
+      } else {
+        diags.push({ scope: site.slug, status: 'no_data', items_emitted: 0, reason: 'no network_revenue_daily rows for this site in the comparison window' });
+      }
+    }
+    return { outputs, diagnostics: diags };
   },
 };
 
-// H. Traffic without revenue. Flag sites with meaningful GSC clicks
-// but very low revenue in the same 28d window. Conservative: skip
-// when GSC clicks aren't > 400 for the window; skip for Pokemon
-// (external monetisation, revenue not in this ledger).
 export const trafficWithoutRevenueRule: IntelligenceRule = {
   id: 'monetisation.traffic_without_revenue',
-  description: 'Site has traffic but minimal revenue in the canonical ledger.',
+  description: 'Site has traffic but minimal revenue in the canonical ledger (excludes pokemon which runs a separate pipeline).',
   categoriesScanned: ['monetisation'],
-  async run(ctx: RuleContext): Promise<RuleOutput[]> {
+  async run(ctx: RuleContext): Promise<RuleRunResult> {
     const dayMs = 24 * 60 * 60 * 1000;
     const now   = new Date(ctx.runAt);
     const endA  = new Date(now.getTime() - 1 * dayMs);
@@ -147,7 +154,6 @@ export const trafficWithoutRevenueRule: IntelligenceRule = {
     const since = startA.toISOString().slice(0, 10);
     const until = endA.toISOString().slice(0, 10);
 
-    // Fetch clicks by site.
     const { data: clickRows } = await ctx.sb
       .from('network_gsc_url_daily')
       .select('site_id, date, clicks')
@@ -159,7 +165,6 @@ export const trafficWithoutRevenueRule: IntelligenceRule = {
       clicksBySite.set(r.site_id, (clicksBySite.get(r.site_id) ?? 0) + Number(r.clicks ?? 0));
     }
 
-    // Fetch revenue by site (any currency).
     const { data: revRows } = await ctx.sb
       .from('network_revenue_daily')
       .select('site_id, net_minor')
@@ -171,21 +176,34 @@ export const trafficWithoutRevenueRule: IntelligenceRule = {
       revBySite.set(r.site_id, (revBySite.get(r.site_id) ?? 0) + Number(r.net_minor ?? 0));
     }
 
-    const out: RuleOutput[] = [];
+    const outputs: RuleOutput[] = [];
+    const diags: RuleScopeDiagnostic[] = [];
     for (const site of ctx.sites) {
-      // Pokemon runs its own affiliate pipeline that is NOT yet in
-      // network_revenue_daily. Skip to avoid false positives.
-      if (site.slug === 'pokemon') continue;
+      const d: RuleScopeDiagnostic = { scope: site.slug, status: 'no_data', items_emitted: 0 };
+      if (site.slug === 'pokemon') {
+        d.status = 'skipped'; d.reason = 'pokemon runs a separate affiliate pipeline not yet in network_revenue_daily';
+        diags.push(d); continue;
+      }
       const clicks = clicksBySite.get(site.id) ?? 0;
       const rev    = revBySite.get(site.id) ?? 0;
-      if (clicks < 400) continue;                         // low sample
-      if (rev >= 10_000) continue;                        // non-trivial revenue
-      const rpcInMinor = clicks > 0 ? rev / clicks : 0;    // revenue per click (minor)
+      if (clicks === 0) {
+        d.status = 'no_data'; d.reason = 'no GSC clicks in last 28d for this site';
+        diags.push(d); continue;
+      }
+      if (clicks < 400) {
+        d.status = 'no_signal'; d.reason = `clicks ${clicks} below sample floor 400`;
+        diags.push(d); continue;
+      }
+      if (rev >= 10_000) {
+        d.status = 'no_signal'; d.reason = `revenue ${rev} minor already non-trivial`;
+        diags.push(d); continue;
+      }
+      const rpcInMinor = clicks > 0 ? rev / clicks : 0;
       const impact     = clamp(30 + Math.min(50, Math.log10(clicks) * 12));
       const confidence = clamp(55 + Math.min(25, Math.log10(clicks) * 6));
       const urgency    = 40;
       const effort     = 60;
-      out.push({
+      outputs.push({
         source_type: 'traffic',
         source_id: null,
         source_key: `monetisation:traffic_without_revenue:${site.slug}`,
@@ -209,20 +227,17 @@ export const trafficWithoutRevenueRule: IntelligenceRule = {
         effort,
         expected_upside: null,
       });
+      d.status = 'signals_found'; d.items_emitted = 1; diags.push(d);
     }
-    return out;
+    return { outputs, diagnostics: diags };
   },
 };
 
-// I. Revenue efficiency — RPKU (revenue per 1,000 reporting-active-
-// user-days) movement vs prior 28d, per currency, per site. Uses
-// the Singapore-excluded reporting-traffic helper as the
-// denominator. Honest about "active-user-days" vs "unique users".
 export const revenueEfficiencyRule: IntelligenceRule = {
   id: 'revenue.efficiency_movement',
   description: 'Revenue per 1,000 reporting active-user-days moved materially vs prior 28d.',
   categoriesScanned: ['revenue', 'monetisation'],
-  async run(ctx: RuleContext): Promise<RuleOutput[]> {
+  async run(ctx: RuleContext): Promise<RuleRunResult> {
     const dayMs  = 24 * 60 * 60 * 1000;
     const now    = new Date(ctx.runAt);
     const endA   = new Date(now.getTime() - 1 * dayMs);
@@ -234,7 +249,6 @@ export const revenueEfficiencyRule: IntelligenceRule = {
     const sinceB = startB.toISOString().slice(0, 10);
     const untilB = endB.toISOString().slice(0, 10);
 
-    // Revenue per site, per currency, for both windows.
     const { data } = await ctx.sb
       .from('network_revenue_daily')
       .select('for_date, site_id, currency, net_minor')
@@ -243,8 +257,10 @@ export const revenueEfficiencyRule: IntelligenceRule = {
       .limit(10000);
     const rows = ((data ?? []) as Array<{ for_date: string; site_id: string | null; currency: string; net_minor: number }>);
     const bucket = new Map<string, { a: number; b: number }>();
+    const sitesSeen = new Set<string>();
     for (const r of rows) {
       if (!r.site_id) continue;
+      sitesSeen.add(r.site_id);
       const d = new Date(r.for_date).getTime();
       const inA = d >= startA.getTime() && d <= endA.getTime();
       const inB = d >= startB.getTime() && d <= endB.getTime();
@@ -256,7 +272,8 @@ export const revenueEfficiencyRule: IntelligenceRule = {
       bucket.set(key, b);
     }
 
-    const out: RuleOutput[] = [];
+    const outputs: RuleOutput[] = [];
+    const emittedForSite = new Set<string>();
     const siteUserCache = new Map<string, { a: number; b: number }>();
     for (const [key, rev] of bucket) {
       const [site_id, currency] = key.split('|') as [string, string];
@@ -265,17 +282,11 @@ export const revenueEfficiencyRule: IntelligenceRule = {
           getReportingTrafficWindow(ctx.sb, { site_id, from: sinceA, to: untilA }),
           getReportingTrafficWindow(ctx.sb, { site_id, from: sinceB, to: untilB }),
         ]);
-        siteUserCache.set(site_id, {
-          a: winA.active_users,
-          b: winB.active_users,
-        });
+        siteUserCache.set(site_id, { a: winA.active_users, b: winB.active_users });
       }
       const users = siteUserCache.get(site_id)!;
-      // Need a sample floor so RPKU doesn't swing wildly on tiny
-      // user counts.
       if (users.a < 200 || users.b < 200) continue;
       if (rev.a < 100 && rev.b < 100) continue;
-
       const rpkuA = users.a > 0 ? (rev.a / users.a) * 1000 : 0;
       const rpkuB = users.b > 0 ? (rev.b / users.b) * 1000 : 0;
       if (rpkuB <= 0 && rpkuA <= 0) continue;
@@ -289,7 +300,7 @@ export const revenueEfficiencyRule: IntelligenceRule = {
       const urgency    = up ? 30 : clamp(45 + Math.min(30, Math.abs(changePct) / 2));
       const effort     = up ? 40 : 55;
 
-      out.push({
+      outputs.push({
         source_type: 'revenue',
         source_id: null,
         source_key: `revenue:efficiency:${site_slug ?? site_id}:${currency}`,
@@ -322,8 +333,16 @@ export const revenueEfficiencyRule: IntelligenceRule = {
         effort,
         expected_upside: null,
       });
+      emittedForSite.add(site_id);
     }
-    return out;
+
+    const diags: RuleScopeDiagnostic[] = [];
+    for (const site of ctx.sites) {
+      if (emittedForSite.has(site.id)) diags.push({ scope: site.slug, status: 'signals_found', items_emitted: 1 });
+      else if (sitesSeen.has(site.id)) diags.push({ scope: site.slug, status: 'no_signal', items_emitted: 0, reason: 'ledger has data but either user sample or RPKU movement below threshold' });
+      else diags.push({ scope: site.slug, status: 'no_data', items_emitted: 0, reason: 'no revenue + traffic data available for both windows' });
+    }
+    return { outputs, diagnostics: diags };
   },
 };
 

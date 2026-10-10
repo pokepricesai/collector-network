@@ -24,20 +24,32 @@ import 'server-only';
 //
 //   DISMISSED REAPPEARS:
 //     Only if the new priority exceeds the dismissed_priority
-//     snapshot by >= 25 points. Otherwise the dismissed row stays
-//     dismissed and we skip the upsert.
+//     snapshot by >= 25 points.
 //
 //   SNOOZED STILL SNOOZED:
 //     Row remains hidden. last_detected_at + scores still refresh
 //     on upsert so when the snooze expires the operator sees current
 //     evidence.
+//
+// Phase 1.1 — the engine now:
+//
+//   • Expects each rule to return RuleRunResult (outputs +
+//     diagnostics) rather than a bare array.
+//   • Persists a durable record of EVERY run in network_job_runs
+//     (job_name='intelligence.refresh') with the full per-rule
+//     diagnostics in `metadata`, so operators can retroactively
+//     answer "why did rule X emit zero items?".
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { INTELLIGENCE_RULES } from './rules';
 import { computePriority } from './scoring';
-import type { EngineRunResult, IntelligenceCategory, RuleContext, RuleOutput, SiteSlug, ScoredItem } from './types';
+import type {
+  EngineRunResult, IntelligenceCategory, RuleContext, RuleRunResult, RuleOutcomeStatus,
+  RuleScopeDiagnostic, SiteSlug, ScoredItem,
+} from './types';
 
 const REOPEN_PRIORITY_DELTA = 25;
+const JOB_NAME = 'intelligence.refresh';
 
 interface ExistingRow {
   id: string;
@@ -48,13 +60,39 @@ interface ExistingRow {
   task_id: string | null;
 }
 
+function aggregateStatus(diags: RuleScopeDiagnostic[]): RuleOutcomeStatus {
+  if (diags.length === 0) return 'no_data';
+  if (diags.some((d) => d.status === 'error')) return 'error';
+  if (diags.some((d) => d.status === 'signals_found')) return 'signals_found';
+  if (diags.every((d) => d.status === 'skipped')) return 'skipped';
+  if (diags.some((d) => d.status === 'no_signal')) return 'no_signal';
+  return 'no_data';
+}
+
 export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineRunResult> {
   const startedAt = Date.now();
   const runAt     = new Date(startedAt).toISOString();
 
-  // Resolve site list once. network_sites uses a `status` column
-  // ('active' | 'parked' | 'planned' | 'archived') — there is no
-  // boolean `is_active`. Filter on status='active' instead.
+  // Open a job_runs row immediately so a crash halfway through is
+  // still visible to the operator. We'll update it at the end.
+  let jobRunId: string | null = null;
+  try {
+    const { data } = await sb.from('network_job_runs').insert({
+      job_name: JOB_NAME,
+      job_type: 'engine',
+      site_id: null,
+      status: 'running',
+      started_at: runAt,
+      metadata: { phase: '1.1' },
+    }).select('id').single();
+    jobRunId = (data as null | { id: string })?.id ?? null;
+  } catch {
+    // Non-fatal — persistence failure must not block the engine.
+    jobRunId = null;
+  }
+
+  // Resolve site list once. network_sites uses `status` not
+  // `is_active`; filter on status='active'.
   const { data: siteRows, error: siteErr } = await sb
     .from('network_sites')
     .select('id, slug, name')
@@ -68,33 +106,51 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
 
   const ctx: RuleContext = { sb, runAt, sites, siteBySlug };
 
-  // Run every rule. Any rule failure is isolated — the rest of the
-  // engine proceeds.
   const perRule: EngineRunResult['per_rule'] = [];
-  const emitted: RuleOutput[] = [];
+  const allOutputs: Array<RuleRunResult['outputs'][number]> = [];
   const categoriesScanned = new Set<IntelligenceCategory>();
+  let rowsExaminedTotal = 0;
+  let rowsSkippedInvalidTotal = 0;
   for (const rule of INTELLIGENCE_RULES) {
     try {
-      const rows = await rule.run(ctx);
-      perRule.push({ rule_id: rule.id, emitted: rows.length, failed: false });
-      emitted.push(...rows);
+      const result = await rule.run(ctx);
+      const emitted = result.outputs.length;
+      const status  = aggregateStatus(result.diagnostics);
+      perRule.push({
+        rule_id: rule.id,
+        aggregated_status: status,
+        emitted,
+        diagnostics: result.diagnostics,
+        failed: false,
+      });
+      for (const d of result.diagnostics) {
+        if (typeof d.rows_examined === 'number') rowsExaminedTotal += d.rows_examined;
+        if (typeof d.rows_skipped_invalid === 'number') rowsSkippedInvalidTotal += d.rows_skipped_invalid;
+      }
+      allOutputs.push(...result.outputs);
       for (const c of rule.categoriesScanned) categoriesScanned.add(c);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      perRule.push({ rule_id: rule.id, emitted: 0, failed: true, error: msg });
+      perRule.push({
+        rule_id: rule.id,
+        aggregated_status: 'error',
+        emitted: 0,
+        diagnostics: [{ scope: 'network', status: 'error', items_emitted: 0, error: msg }],
+        failed: true,
+        error: msg,
+      });
     }
   }
 
-  // Score + sort for deterministic order (purely cosmetic for the
-  // engine; the UI re-sorts from the DB anyway).
-  const scored: ScoredItem[] = emitted.map((r) => ({
+  // Score + sort for deterministic order (cosmetic; the UI re-sorts
+  // from the DB anyway).
+  const scored: ScoredItem[] = allOutputs.map((r) => ({
     ...r,
     priority: computePriority({ impact: r.impact, confidence: r.confidence, urgency: r.urgency, effort: r.effort }),
   }));
 
   // Load current state of EVERY source_key the engine is about to
-  // write, plus any currently-open row in the scanned categories
-  // (we need those to drive stale resolution).
+  // write.
   const sourceKeys = Array.from(new Set(scored.map((s) => s.source_key)));
   const existingBySourceKey = new Map<string, ExistingRow>();
   if (sourceKeys.length > 0) {
@@ -105,15 +161,15 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
     for (const r of ((data ?? []) as ExistingRow[])) existingBySourceKey.set(r.source_key, r);
   }
 
-  // Upsert.
   let items_upserted = 0;
+  let items_inserted = 0;
+  let items_updated  = 0;
   let items_reopened = 0;
   for (const s of scored) {
     const existing = existingBySourceKey.get(s.source_key);
     if (existing && existing.status === 'dismissed') {
       const prevPriority = existing.dismissed_priority ?? existing.priority_score;
       if (s.priority < prevPriority + REOPEN_PRIORITY_DELTA) continue;
-      // Material improvement in priority — re-open.
       await sb.from('network_intelligence_items').update({
         status: 'open',
         resolved_at: null,
@@ -138,10 +194,10 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
       }).eq('id', existing.id);
       items_reopened += 1;
       items_upserted += 1;
+      items_updated  += 1;
       continue;
     }
 
-    // Standard upsert on source_key.
     const payload = {
       site_id: s.site_id,
       category: s.category,
@@ -168,19 +224,15 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
       ignoreDuplicates: false,
     });
     if (error) {
-      // Fall back to a defensive update-then-insert if upsert hits
-      // RLS or a column mismatch. Logged but not fatal.
       console.error('[intelligence/engine] upsert failed:', s.source_key, error.message);
       continue;
     }
     items_upserted += 1;
+    if (existing) items_updated += 1;
+    else items_inserted += 1;
   }
 
-  // Stale resolution: any OPEN row whose category is in the scanned
-  // set and whose last_detected_at is strictly before this run's
-  // run-at is auto-resolved. We ignore 'task_created' — that's an
-  // operator-active state — so a resolved underlying condition
-  // doesn't silently delete the task context.
+  // Stale resolution.
   let items_resolved_auto = 0;
   const scannedList = Array.from(categoriesScanned);
   if (scannedList.length > 0) {
@@ -201,7 +253,7 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
     }
   }
 
-  // Snooze expiry: items whose snoozed_until has passed → back to open.
+  // Snooze expiry.
   const { data: wakeRows } = await sb
     .from('network_intelligence_items')
     .select('id')
@@ -216,16 +268,60 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
     }).in('id', wakeIds);
   }
 
-  return {
-    run_id: '',
-    started_at: new Date(startedAt).toISOString(),
-    finished_at: new Date().toISOString(),
+  const finishedAt = new Date();
+  const result: EngineRunResult = {
+    run_id: jobRunId ?? '',
+    started_at: runAt,
+    finished_at: finishedAt.toISOString(),
     duration_ms: Date.now() - startedAt,
+    rules_registered: INTELLIGENCE_RULES.length,
     rules_executed: perRule.filter((r) => !r.failed).length,
     rules_failed: perRule.filter((r) => r.failed).length,
     items_upserted,
+    items_inserted,
+    items_updated,
     items_resolved_auto,
     items_reopened,
+    rows_examined_total: rowsExaminedTotal,
+    rows_skipped_invalid_total: rowsSkippedInvalidTotal,
     per_rule: perRule,
   };
+
+  // Persist the completion record.
+  if (jobRunId) {
+    const anyFailed = result.rules_failed > 0;
+    const finalStatus = anyFailed ? 'warning' : 'success';
+    try {
+      await sb.from('network_job_runs').update({
+        status: finalStatus,
+        finished_at: result.finished_at,
+        rows_examined: rowsExaminedTotal,
+        rows_inserted: items_inserted,
+        rows_updated: items_updated,
+        rows_rejected: rowsSkippedInvalidTotal,
+        error_summary: anyFailed
+          ? perRule.filter((r) => r.failed).map((r) => `${r.rule_id}: ${r.error ?? ''}`).join(' | ').slice(0, 500)
+          : null,
+        metadata: {
+          phase: '1.1',
+          duration_ms: result.duration_ms,
+          rules_registered: result.rules_registered,
+          rules_executed: result.rules_executed,
+          rules_failed: result.rules_failed,
+          items_upserted,
+          items_inserted,
+          items_updated,
+          items_resolved_auto,
+          items_reopened,
+          rows_examined_total: rowsExaminedTotal,
+          rows_skipped_invalid_total: rowsSkippedInvalidTotal,
+          per_rule: perRule,
+        },
+      }).eq('id', jobRunId);
+    } catch {
+      // Non-fatal: engine succeeded, just the persistence update failed.
+    }
+  }
+
+  return result;
 }

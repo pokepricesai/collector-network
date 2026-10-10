@@ -77,15 +77,44 @@ export interface ScoredItem extends RuleOutput {
   priority: number;            // 0..100
 }
 
+// Rule outcome semantics. Zero emitted rows is not sufficient
+// diagnostic information — each rule's execution MUST explicitly
+// declare WHY no items (or some items) came out. Signal quality
+// depends on being able to distinguish "nothing to say" from "we
+// have no usable data" from "we skipped malformed rows".
+export type RuleOutcomeStatus =
+  | 'signals_found'   // ≥1 item emitted for this scope
+  | 'no_signal'       // enough valid data was examined, nothing qualified
+  | 'no_data'         // the source table was empty / had no rows for the scope
+  | 'skipped'         // scope deliberately bypassed (e.g. parked site, upstream dep)
+  | 'error';          // the rule itself threw while running
+
+export interface RuleScopeDiagnostic {
+  scope: 'network' | SiteSlug;
+  status: RuleOutcomeStatus;
+  rows_examined?: number;
+  rows_skipped_invalid?: number;
+  items_emitted: number;
+  reason?: string;
+  error?: string;
+}
+
+export interface RuleRunResult {
+  outputs: RuleOutput[];
+  diagnostics: RuleScopeDiagnostic[];
+}
+
 // Rule contract: pure read-only. Receives the Supabase service-role
 // client + the current run-at timestamp (so items from the same run
 // share last_detected_at and the engine can detect stale items
-// deterministically).
+// deterministically). Rules MUST return a RuleRunResult so the
+// engine can persist per-scope outcome diagnostics in
+// network_job_runs.metadata.
 export interface IntelligenceRule {
   id: string;                  // short slug for logging
   description: string;
   categoriesScanned: IntelligenceCategory[];  // what the engine considers "scanned" for stale resolution
-  run(ctx: RuleContext): Promise<RuleOutput[]>;
+  run(ctx: RuleContext): Promise<RuleRunResult>;
 }
 
 export interface RuleContext {
@@ -96,16 +125,31 @@ export interface RuleContext {
   siteBySlug: Record<SiteSlug, { id: string; slug: SiteSlug; name: string } | undefined>;
 }
 
-// Engine run result for logging.
+// Engine run result for logging + persistence to network_job_runs.
+// The per_rule entries carry each rule's RuleRunResult diagnostics
+// so the operator can distinguish NO_SIGNAL from NO_DATA from
+// SKIPPED from ERROR without re-running the engine.
 export interface EngineRunResult {
   run_id: string;
   started_at: string;
   finished_at: string;
   duration_ms: number;
+  rules_registered: number;
   rules_executed: number;
   rules_failed: number;
   items_upserted: number;
+  items_inserted: number;
+  items_updated: number;
   items_resolved_auto: number;
   items_reopened: number;
-  per_rule: Array<{ rule_id: string; emitted: number; failed: boolean; error?: string }>;
+  rows_examined_total: number;
+  rows_skipped_invalid_total: number;
+  per_rule: Array<{
+    rule_id: string;
+    aggregated_status: RuleOutcomeStatus;
+    emitted: number;
+    diagnostics: RuleScopeDiagnostic[];
+    failed: boolean;
+    error?: string;
+  }>;
 }
