@@ -67,6 +67,7 @@ function aggregateStatus(diags: RuleScopeDiagnostic[]): RuleOutcomeStatus {
   if (diags.some((d) => d.status === 'signals_found')) return 'signals_found';
   if (diags.every((d) => d.status === 'skipped')) return 'skipped';
   if (diags.some((d) => d.status === 'no_signal')) return 'no_signal';
+  if (diags.some((d) => d.status === 'insufficient_data')) return 'insufficient_data';
   return 'no_data';
 }
 

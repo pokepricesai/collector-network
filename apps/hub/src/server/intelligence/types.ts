@@ -83,11 +83,14 @@ export interface ScoredItem extends RuleOutput {
 // depends on being able to distinguish "nothing to say" from "we
 // have no usable data" from "we skipped malformed rows".
 export type RuleOutcomeStatus =
-  | 'signals_found'   // ≥1 item emitted for this scope
-  | 'no_signal'       // enough valid data was examined, nothing qualified
-  | 'no_data'         // the source table was empty / had no rows for the scope
-  | 'skipped'         // scope deliberately bypassed (e.g. parked site, upstream dep)
-  | 'error';          // the rule itself threw while running
+  | 'signals_found'       // ≥1 item emitted for this scope
+  | 'no_signal'           // enough valid data was examined, nothing qualified
+  | 'no_data'             // the source table was empty / had no rows for the scope
+  | 'insufficient_data'   // upstream signal exists but is below the volume
+                          //   needed for the rule's thresholds (e.g. a site
+                          //   has GSC coverage but no query clears 50 impr)
+  | 'skipped'             // scope deliberately bypassed (e.g. parked site, upstream dep)
+  | 'error';              // the rule itself threw while running
 
 export interface RuleScopeDiagnostic {
   scope: 'network' | SiteSlug;
