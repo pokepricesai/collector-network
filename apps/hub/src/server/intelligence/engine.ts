@@ -308,7 +308,10 @@ export async function runIntelligenceEngine(sb: SupabaseClient): Promise<EngineR
   const finalStatus = anyFailed ? 'warning' : 'success';
   const { data: inserted, error: insErr } = await sb.from('network_job_runs').insert({
     job_name: JOB_NAME,
-    job_type: 'engine',
+    // CHECK constraint network_job_runs_job_type_check restricts
+    // job_type to import/export/maintenance/sync/analysis/automation.
+    // The intelligence engine is pure analysis over existing tables.
+    job_type: 'analysis',
     site_id: null,
     status: finalStatus,
     started_at: runAt,
