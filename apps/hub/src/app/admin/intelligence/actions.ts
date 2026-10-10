@@ -37,6 +37,27 @@ export async function createTaskFromItemAction(formData: FormData): Promise<void
     item.priority_score >= 70 ? 'high' :
     item.priority_score >= 45 ? 'normal' : 'low';
 
+  // Duplicate prevention: if a task already carries this
+  // intelligence_item_id in its evidence AND is still open, reuse
+  // it rather than inserting a sibling.
+  const { data: existing } = await sb
+    .from('network_tasks')
+    .select('id, status')
+    .contains('evidence', { intelligence_item_id: item.id })
+    .in('status', ['open', 'in_progress', 'waiting'])
+    .limit(1);
+  const existingOpen = (existing ?? []) as Array<{ id: string; status: string }>;
+  if (existingOpen.length > 0) {
+    const existingId = existingOpen[0]!.id;
+    await sb.from('network_intelligence_items').update({
+      status: 'task_created',
+      task_id: existingId,
+    }).eq('id', item.id);
+    revalidatePath('/admin/intelligence');
+    revalidatePath('/admin/tasks');
+    return;
+  }
+
   const { data: insRow, error } = await sb
     .from('network_tasks')
     .insert({
@@ -44,6 +65,10 @@ export async function createTaskFromItemAction(formData: FormData): Promise<void
       title: item.title.slice(0, 240),
       description: `${item.summary}\n\nRecommended action: ${item.recommended_action}`,
       task_type: 'intelligence',
+      // Intelligence-sourced tasks are improvements. Fixes come
+      // from the operator noticing something broken.
+      task_kind: 'improvement',
+      task_source: 'intelligence',
       priority: taskPriority,
       status: 'open',
       recommended_action: item.recommended_action,

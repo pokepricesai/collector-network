@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import type { AdminIdentity } from '@/server/admin/require-admin';
 import type { NetworkSite } from '@/server/admin/sites';
 import { SiteSwitcher } from './SiteSwitcher';
 import { Sidebar } from './Sidebar';
+import { QuickAddTask } from './QuickAddTask';
 
 // Server component. Composes the permanent admin shell:
 // collapsible left sidebar + sticky top bar with site switcher +
@@ -28,7 +28,11 @@ export function AdminShell({
           <div className="admin-topbar-left">
             <SiteSwitcher sites={sites} activeSlug={activeSlug} pathname={pathname} />
           </div>
-          <div className="admin-topbar-right">
+          <div className="admin-topbar-right" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <QuickAddTask
+              sites={sites.map((s) => ({ slug: s.slug, name: s.name }))}
+              defaultSiteSlug={activeSlug !== 'network' ? activeSlug : undefined}
+            />
             <div className="admin-identity" title={admin.email}>
               <span className="admin-identity-role">{admin.role}</span>
               <span className="admin-identity-name">

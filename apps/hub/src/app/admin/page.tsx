@@ -10,6 +10,7 @@ import {
 } from '@/server/analytics/dashboard';
 import { formatDelta, formatInt, formatPct, formatRelative } from '@/lib/format';
 import Link from 'next/link';
+import { fetchTaskSummary, listHighPriorityTasks } from '@/server/tasks/queries';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -28,12 +29,14 @@ export default async function OverviewPage() {
   const prior28 = priorWindow(window28);
   const window7 = windowDaysAgo(today, 7);
 
-  const [curr28, prior28Totals, curr7, siteLevel, freshness] = await Promise.all([
+  const [curr28, prior28Totals, curr7, siteLevel, freshness, taskSummary, topTasks] = await Promise.all([
     fetchNetworkTotal(sb, window28),
     fetchNetworkTotal(sb, prior28),
     fetchNetworkTotal(sb, window7),
     fetchSiteLevel(sb, window28),
     fetchFreshness(sb),
+    fetchTaskSummary(sb),
+    listHighPriorityTasks(sb, 5),
   ]);
 
   // Phase-2 counts for the dashboard quick-glance panel.
@@ -188,6 +191,28 @@ export default async function OverviewPage() {
               </div>
             ))}
           </div>
+        )}
+      </Panel>
+
+      <Panel title="Open tasks" actions={<Link href="/admin/tasks" className="ui-btn ui-btn--secondary ui-btn--sm">View all</Link>}>
+        <div className="metric-grid metric-grid--compact">
+          <MetricCard label="Total open" value={formatInt(taskSummary.total_open)} helper={`${formatInt(taskSummary.network_scope)} network · ${formatInt(taskSummary.total_open - taskSummary.network_scope)} site-scoped`} />
+          <MetricCard label="Fixes"       value={formatInt(taskSummary.fixes)} />
+          <MetricCard label="Improvements" value={formatInt(taskSummary.improvements)} />
+          <MetricCard label="High priority" value={formatInt(taskSummary.high_priority)} helper="critical + high" />
+          <MetricCard label="Manual"       value={formatInt(taskSummary.manual)} helper="jotted-down" />
+          <MetricCard label="Intelligence" value={formatInt(taskSummary.intelligence)} helper="from inbox" />
+        </div>
+        {topTasks.length > 0 && (
+          <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {topTasks.map((t) => (
+              <li key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '4px 0', borderTop: '1px solid var(--admin-border)' }}>
+                <StatusBadge state={t.priority === 'critical' ? 'critical' : 'high'} />
+                <Link href="/admin/tasks" style={{ flex: 1, textDecoration: 'none', color: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</Link>
+                <span className="col-dim" style={{ fontSize: 11 }}>{t.task_source}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </Panel>
 
