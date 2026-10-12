@@ -135,11 +135,11 @@ export default async function OverviewPage() {
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin">
       <SectionHeader
-        eyebrow="Overview"
-        title="What should we work on today?"
+        eyebrow="Collector Network OS"
+        title="Network Overview"
         description={
           anyConnected
-            ? `Executive view across the five Collector Network platforms. GSC data through ${gscMaxDate ?? '—'}; GA4 through ${ga4MaxDate ?? '—'}. Traffic metrics exclude Singapore bot/spam traffic.`
+            ? <>Executive view across the five Collector Network platforms. GSC data through <strong>{gscMaxDate ?? '—'}</strong>; GA4 through <strong>{ga4MaxDate ?? '—'}</strong>. Traffic metrics exclude Singapore bot/spam traffic. Day-by-day priorities live on <Link href="/admin/brief" style={{ fontWeight: 600 }}>Morning Brief</Link>.</>
             : 'Executive view. Google Search Console + Analytics are configured but have not yet completed their first sync — run /api/sync/backfill?kind=gsc and ?kind=ga4 to populate.'
         }
       />
@@ -163,72 +163,67 @@ export default async function OverviewPage() {
             }
           />
         ))}
-        {notYetConnected.map((m) => (
-          <MetricCard key={m.label} label={m.label} state="not-connected" helper={m.helper} />
-        ))}
+        {/* Not-yet-connected placeholder metrics (Affiliate revenue,
+            Operating cost, Indexed pages, X followers) removed from
+            primary KPI strip during the polish pass. Revenue is live
+            on /admin/revenue; the rest will reappear when their
+            feeds are wired. */}
       </div>
 
-      <Panel
-        title="Today's priorities"
-        eyebrow={cachedBriefRow ? `Brief for ${(cachedBriefRow as { for_date: string }).for_date}` : 'Daily brief'}
-        actions={<Link className="status-badge status-opportunity" href="/admin/brief">Open brief →</Link>}
-      >
-        {cachedActions.length === 0 ? (
-          <div className="admin-empty admin-empty--muted">
-            <div className="admin-empty-title">No actions queued.</div>
-            <div className="admin-empty-desc">Trigger <code>/api/sync/brief</code> after a GSC sync to populate.</div>
+      {taskSummary.inbox_open === 0 ? (
+        <Panel title="Open tasks" actions={<Link href="/admin/tasks" className="ui-btn ui-btn--secondary ui-btn--sm">View all</Link>}>
+          <div style={{ fontSize: 13, color: 'var(--admin-text-muted)' }}>
+            Operator inbox is clear.{taskSummary.system > 0 && <> {formatInt(taskSummary.system)} system-generated items available in <Link href="/admin/tasks?source=system">System</Link>.</>}
           </div>
-        ) : (
-          <div style={{ display: 'grid', gap: 6 }}>
-            {cachedActions.map((a) => (
-              <div key={a.id} style={{ padding: '8px 12px', border: '1px solid #E6E6E6', borderRadius: 6, display: 'flex', gap: 10, alignItems: 'center' }}>
-                <StatusBadge state={a.priority} />
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Link href={a.link} style={{ fontWeight: 600, fontSize: 13 }}>{a.title}</Link>
-                  <span className="col-dim" style={{ fontSize: 11 }}>{a.description}</span>
-                </div>
-                <Link className="status-badge status-not_connected" href={a.link}>Open →</Link>
-              </div>
-            ))}
+        </Panel>
+      ) : (
+        <Panel title="Open tasks" actions={<Link href="/admin/tasks" className="ui-btn ui-btn--secondary ui-btn--sm">View all</Link>}>
+          <div className="metric-grid metric-grid--compact">
+            <MetricCard label="Operator inbox" value={formatInt(taskSummary.inbox_open)} helper="manual + intelligence" />
+            <MetricCard label="Fixes"          value={formatInt(taskSummary.inbox_fixes)} />
+            <MetricCard label="Improvements"   value={formatInt(taskSummary.inbox_improvements)} />
+            <MetricCard label="High priority"  value={formatInt(taskSummary.inbox_high_priority)} helper="critical + high" />
           </div>
-        )}
-      </Panel>
+          {taskSummary.system > 0 && (
+            <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', marginTop: 8 }}>
+              Plus {formatInt(taskSummary.system)} system-generated items hidden by default — see <Link href="/admin/tasks?source=system" style={{ textDecoration: 'underline' }}>System</Link> or <Link href="/admin/tasks?source=all" style={{ textDecoration: 'underline' }}>All sources</Link>.
+            </div>
+          )}
+          {topTasks.length > 0 && (
+            <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {topTasks.map((t) => (
+                <li key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '4px 0', borderTop: '1px solid var(--admin-border)' }}>
+                  <StatusBadge state={t.priority === 'critical' ? 'critical' : 'high'} />
+                  <Link href="/admin/tasks" style={{ flex: 1, textDecoration: 'none', color: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</Link>
+                  <span className="col-dim" style={{ fontSize: 11 }}>{t.task_source}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      )}
 
-      <Panel title="Open tasks" actions={<Link href="/admin/tasks" className="ui-btn ui-btn--secondary ui-btn--sm">View all</Link>}>
-        <div className="metric-grid metric-grid--compact">
-          <MetricCard label="Operator inbox" value={formatInt(taskSummary.inbox_open)} helper="manual + intelligence" />
-          <MetricCard label="Fixes"          value={formatInt(taskSummary.inbox_fixes)} helper="in inbox" />
-          <MetricCard label="Improvements"   value={formatInt(taskSummary.inbox_improvements)} helper="in inbox" />
-          <MetricCard label="High priority"  value={formatInt(taskSummary.inbox_high_priority)} helper="critical + high" />
-          <MetricCard label="Manual"         value={formatInt(taskSummary.manual)} helper="jotted-down" />
-          <MetricCard label="Intelligence"   value={formatInt(taskSummary.intelligence)} helper="from inbox" />
+      <Panel title="SEO workload" eyebrow="Opportunities + current issues">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+          <div>
+            <div className="admin-eyebrow" style={{ fontSize: 10, marginBottom: 6 }}>Opportunities</div>
+            <div className="metric-grid metric-grid--compact">
+              <MetricCard label="SEO opportunities"  value={formatInt(openOppsCount ?? 0)} helper="deterministic, open" />
+              <MetricCard label="Internal-link opps" value={formatInt(openIlCount ?? 0)} />
+              <MetricCard label="Page opportunities" value={formatInt(openPageOppsCount ?? 0)} />
+            </div>
+          </div>
+          <div>
+            <div className="admin-eyebrow" style={{ fontSize: 10, marginBottom: 6 }}>Current issues &amp; activity</div>
+            <div className="metric-grid metric-grid--compact">
+              <MetricCard label="Sitemap issues (all)" value={formatInt(openSitemapIssues ?? 0)} helper="URL-level inspection; most are historical info/warning" />
+              <MetricCard label="Indexing issues"      value={formatInt(openIndexingIssues ?? 0)} helper="inspected as not-indexed" />
+              <MetricCard label="SEO changes (7d)"     value={formatInt(recentSeoChanges ?? 0)} />
+            </div>
+          </div>
         </div>
-        {taskSummary.system > 0 && (
-          <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', marginTop: 8 }}>
-            Plus {formatInt(taskSummary.system)} system-generated items hidden by default — see <Link href="/admin/tasks?source=system" style={{ textDecoration: 'underline' }}>System</Link> or <Link href="/admin/tasks?source=all" style={{ textDecoration: 'underline' }}>All sources</Link>.
-          </div>
-        )}
-        {topTasks.length > 0 && (
-          <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {topTasks.map((t) => (
-              <li key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '4px 0', borderTop: '1px solid var(--admin-border)' }}>
-                <StatusBadge state={t.priority === 'critical' ? 'critical' : 'high'} />
-                <Link href="/admin/tasks" style={{ flex: 1, textDecoration: 'none', color: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</Link>
-                <span className="col-dim" style={{ fontSize: 11 }}>{t.task_source}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      <Panel title="SEO workload" eyebrow="Open items">
-        <div className="metric-grid metric-grid--compact">
-          <MetricCard label="SEO opportunities" value={formatInt(openOppsCount ?? 0)} helper="deterministic, open" />
-          <MetricCard label="Internal-link opps" value={formatInt(openIlCount ?? 0)} />
-          <MetricCard label="Page opportunities" value={formatInt(openPageOppsCount ?? 0)} />
-          <MetricCard label="Sitemap issues"    value={formatInt(openSitemapIssues ?? 0)} helper="unresolved" />
-          <MetricCard label="Indexing issues"   value={formatInt(openIndexingIssues ?? 0)} helper="inspected as not-indexed" />
-          <MetricCard label="SEO changes (7d)"  value={formatInt(recentSeoChanges ?? 0)} />
+        <div style={{ fontSize: 11, color: 'var(--admin-text-muted)', marginTop: 8 }}>
+          Site-level sitemap errors (as detected by Intelligence) appear in <Link href="/admin/intelligence?category=indexing">Intelligence</Link>. The counts here are the full historical open rows from <code>network_sitemap_issues</code>.
         </div>
       </Panel>
 
@@ -250,24 +245,40 @@ export default async function OverviewPage() {
             { key: 'impr',   header: 'Impressions',   className: 'col-num', render: (s) => s.gscConnected ? formatInt(s.googleImpressions) : <span className="col-dim">Not connected</span> },
             { key: 'ctr',    header: 'CTR',           className: 'col-num', render: (s) => s.gscConnected && s.googleImpressions > 0 ? formatPct(s.googleClicks / s.googleImpressions) : <span className="col-dim">—</span> },
             { key: 'pos',    header: 'Avg pos',       className: 'col-num', render: (s) => s.gscConnected && s.avgPosition != null ? s.avgPosition.toFixed(1) : <span className="col-dim">—</span> },
-            { key: 'health', header: 'Health',        render: (s) => <StatusBadge state={s.status} /> },
+            { key: 'status', header: 'Lifecycle',     render: (s) => <StatusBadge state={s.status} /> },
           ]}
           rows={rows}
         />
       </Panel>
 
-      <Panel title="Data freshness" eyebrow="Sources">
-        <Table
-          columns={[
-            { key: 'site',   header: 'Site',          render: (r: typeof freshRows[number]) => r.slug },
-            { key: 'source', header: 'Source',        render: (r) => r.kind.toUpperCase() },
-            { key: 'prop',   header: 'Property',      render: (r) => <code>{r.propertyId}</code> },
-            { key: 'data',   header: 'Data through',  render: (r) => r.lastDataDate ?? <span className="col-dim">—</span> },
-            { key: 'synced', header: 'Last synced',   render: (r) => formatRelative(r.lastSyncAt) },
-            { key: 'status', header: 'Status',        render: (r) => <StatusBadge state={r.status as 'active'} /> },
-          ]}
-          rows={freshRows}
-        />
+      <Panel title="Data freshness" eyebrow="Sources backing this view" actions={<Link href="/admin/health" className="ui-btn ui-btn--secondary ui-btn--sm">Full health view</Link>}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+          {(() => {
+            // Compress per-site rows into source-level freshness so
+            // operators see Fresh/Aging/Stale at a glance.
+            const bySource = new Map<string, { kind: string; latest: string | null }>();
+            for (const f of freshness) {
+              const key = f.kind;
+              const prev = bySource.get(key);
+              if (!prev || (f.lastDataDate && (!prev.latest || f.lastDataDate > prev.latest))) {
+                bySource.set(key, { kind: f.kind, latest: f.lastDataDate ?? prev?.latest ?? null });
+              }
+            }
+            return Array.from(bySource.values()).map((s) => {
+              const ageHours = s.latest ? (Date.now() - new Date(s.latest).getTime()) / (1000 * 60 * 60) : null;
+              const state = ageHours == null ? 'never' : ageHours <= 48 ? 'fresh' : ageHours <= 120 ? 'aging' : 'stale';
+              const label = s.latest ? `through ${s.latest}` : 'never';
+              const bg = state === 'fresh' ? 'var(--success-soft, #e6f7ec)' : state === 'aging' ? 'var(--warning-soft, #fff3e0)' : 'var(--admin-surface)';
+              const fg = state === 'fresh' ? 'var(--success)' : state === 'aging' ? 'var(--warning)' : state === 'stale' ? 'var(--failed)' : 'var(--admin-text-muted)';
+              return (
+                <div key={s.kind} style={{ padding: '6px 10px', border: `1px solid ${fg}`, borderRadius: 999, background: bg, color: fg, fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ textTransform: 'uppercase' }}>{s.kind}</span>
+                  <span style={{ fontWeight: 400 }}>· {state} · {label}</span>
+                </div>
+              );
+            });
+          })()}
+        </div>
       </Panel>
     </AdminShell>
   );
