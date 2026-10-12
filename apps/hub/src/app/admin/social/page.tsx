@@ -48,13 +48,16 @@ export default async function SocialDashboard() {
   const ideas = (ideasPreview ?? []) as Array<{ id: string; working_title: string; priority: string; origin_type: string; summary: string | null }>;
   const costRows = ((costSum ?? []) as Array<{ operation: string; est_cost_usd: number; input_tokens: number; output_tokens: number }>);
   const costTotal = costRows.reduce((a, r) => a + Number(r.est_cost_usd ?? 0), 0);
+  const accountRows = ((accounts ?? []) as Array<{ platform: string; handle: string; display_name: string; oauth_state: string; is_primary: boolean }>);
+  const primary = accountRows.find((a) => a.is_primary) ?? accountRows[0];
+  const publishingBlocked = !primary || primary.oauth_state !== 'connected';
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/social">
       <SectionHeader
         eyebrow="Social"
         title="Today"
-        description="Approve-only workflow. AI drafts live posts from evidence (articles, movers, brief). Nothing publishes publicly without explicit sign-off. Current primary account: Luke | Collector Network (X)."
+        description="Approve-only workflow. AI drafts live posts from evidence (articles, movers, brief). Nothing publishes publicly without explicit sign-off."
         actions={
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Link className="status-badge status-opportunity" href="/admin/social/ideas">Ideas →</Link>
@@ -64,6 +67,25 @@ export default async function SocialDashboard() {
           </div>
         }
       />
+
+      {publishingBlocked && (
+        <div style={{
+          padding: '12px 14px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--failed-soft, #FBE5E7)',
+          border: '1px solid var(--failed, #c0392b)',
+          color: 'var(--failed, #c0392b)',
+          display: 'flex', flexDirection: 'column', gap: 4,
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>X not connected · Publishing blocked</div>
+          <div style={{ fontSize: 12.5, color: 'var(--admin-text)' }}>
+            {primary
+              ? <>Primary account <strong>{primary.display_name} (@{primary.handle})</strong> is in <code>{primary.oauth_state}</code> state. Drafts can still be reviewed and approved, but nothing will actually publish until an operator re-authorises OAuth.</>
+              : 'No primary X account is configured. Social drafting is available for review but publishing is impossible until an account is connected.'}
+            {' '}Visit <Link href="/admin/integrations">Integrations</Link> to connect.
+          </div>
+        </div>
+      )}
 
       <div className="metric-grid">
         <MetricCard label="Ideas · new" value={formatInt(openIdeas ?? 0)} helper="awaiting draft" />
