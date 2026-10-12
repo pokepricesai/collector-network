@@ -1,12 +1,17 @@
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { EmptyState, Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
+import { Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
 import { EmptyPanelNotice } from '@/components/admin/EmptyPanelNotice';
+import { FreshnessBadge, freshnessState, relativeLabel } from '@/components/admin/FreshnessBadge';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { fetchFreshness } from '@/server/analytics/dashboard';
 import { formatRelative } from '@/lib/format';
 import { jobDisplayName, siteDisplayName } from '@/lib/display-names';
+
+// Health answers one question: "Is the plumbing healthy right now?"
+// It is NOT a full job history (that lives on /admin/jobs) nor a
+// detailed BigQuery readiness view (that lives in Integrations).
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -38,124 +43,172 @@ export default async function HealthPage() {
     .order('started_at', { ascending: false })
     .limit(50);
 
-  // Phase-2 health signals: BigQuery readiness, sitemap errors.
-  const [{ data: bqReady }, { data: sitemapRecent }] = await Promise.all([
-    sb.from('network_bigquery_readiness')
-      .select('site_id, gsc_export_status, ga4_export_status, gcp_project_id, last_checked_at, notes, network_sites!inner(slug, name)'),
-    sb.from('network_sitemap_snapshots')
-      .select('site_id, snapshot_at, status, issue_count, submitted_count, network_sites!inner(slug)')
-      .order('snapshot_at', { ascending: false })
-      .limit(50),
-  ]);
-  const bqRows = (bqReady ?? []) as unknown as Array<{ site_id: string; gsc_export_status: string; ga4_export_status: string; gcp_project_id: string | null; last_checked_at: string | null; notes: string | null; network_sites: { slug: string; name: string } }>;
-  const sitemapRows = (sitemapRecent ?? []) as unknown as Array<{ site_id: string; snapshot_at: string; status: string; issue_count: number; submitted_count: number; network_sites: { slug: string } }>;
-  // Latest sitemap per site.
+  // Latest sitemap snapshot per site.
+  const { data: sitemapRecent } = await sb.from('network_sitemap_snapshots')
+    .select('site_id, snapshot_at, status, issue_count, submitted_count, error_summary')
+    .order('snapshot_at', { ascending: false })
+    .limit(50);
+  const sitemapRows = (sitemapRecent ?? []) as Array<{ site_id: string; snapshot_at: string; status: string; issue_count: number; submitted_count: number; error_summary: string | null }>;
   const latestSitemapBySite = new Map<string, typeof sitemapRows[number]>();
   for (const r of sitemapRows) if (!latestSitemapBySite.has(r.site_id)) latestSitemapBySite.set(r.site_id, r);
 
   const rows = (jobs ?? []) as JobRow[];
 
-  // Alert state — any freshness entry whose last_data_date is >5 days
-  // behind "yesterday" (GSC) or >3 days behind (GA4) is stale.
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const staleRows = freshness.filter((f) => {
-    if (!f.lastDataDate) return false; // never-synced is handled separately
-    const d = new Date(f.lastDataDate);
-    const diffDays = Math.round((yesterday.getTime() - d.getTime()) / 86400000);
-    const threshold = f.kind === 'gsc' ? 5 : 3;
-    return diffDays > threshold;
-  });
-  const neverSyncedRows = freshness.filter((f) => !f.lastDataDate);
+  // Per-source freshness (collapse the per-property rows).
+  interface SourceFreshness {
+    source: 'GSC' | 'GA4';
+    through: string | null;
+    state: 'fresh' | 'aging' | 'stale' | 'never';
+    propertyCount: number;
+  }
+  const bySource = new Map<string, SourceFreshness>();
+  for (const f of freshness) {
+    const key = f.kind.toUpperCase();
+    const prev = bySource.get(key);
+    const latest = f.lastDataDate ?? null;
+    const current = prev ?? {
+      source: key as 'GSC' | 'GA4',
+      through: null,
+      state: 'never' as const,
+      propertyCount: 0,
+    };
+    current.propertyCount += 1;
+    if (latest && (!current.through || latest > current.through)) current.through = latest;
+    bySource.set(key, current);
+  }
+  // Resolve state per source: GSC fresh ≤5d, aging ≤8d; GA4 ≤2d, ≤4d.
+  for (const [k, s] of bySource) {
+    const thresholds = k === 'GSC' ? { freshHours: 72, agingHours: 120 } : { freshHours: 48, agingHours: 96 };
+    const ageIso = s.through ? new Date(s.through).toISOString() : null;
+    s.state = freshnessState(ageIso, thresholds);
+    bySource.set(k, s);
+  }
+
+  // Active issues panel: core failures + stale sources + sitemap errors.
+  const corePending = rows.filter((j) => j.status === 'failed' && (j.job_name === 'gsc.incremental' || j.job_name === 'ga4.incremental' || j.job_name === 'impact.epn.sync' || j.job_name === 'intelligence.refresh')).slice(0, 10);
+  const sitemapErrorList = Array.from(latestSitemapBySite.entries())
+    .filter(([_, s]) => s.status === 'error')
+    .map(([site_id, s]) => ({ site_id, snapshot: s }));
+  const staleSources = Array.from(bySource.values()).filter((s) => s.state === 'stale' || s.state === 'never');
+  const allHealthy = corePending.length === 0 && sitemapErrorList.length === 0 && staleSources.length === 0;
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/health">
       <SectionHeader
-        eyebrow="Health"
+        eyebrow="Operations"
         title="Network health"
-        description="Sync job runs, source freshness and stale-feed alerts across the five Collector Network platforms."
+        description="Is the plumbing healthy right now? Core job state + source freshness + sitemap health. Full job history lives on Jobs; BigQuery readiness lives on Integrations."
       />
 
-      {(staleRows.length > 0 || neverSyncedRows.length > 0) && (
-        <Panel title="Freshness alerts" eyebrow="Attention">
-          <div style={{ display: 'grid', gap: 8 }}>
-            {neverSyncedRows.map((r) => (
-              <div key={`ns-${r.siteId}-${r.kind}`} style={{ padding: '8px 10px', background: '#FBE5E7', border: '1px solid #E8B1B7', borderRadius: 6, fontSize: 12 }}>
-                <strong>{r.slug}</strong> · {r.kind.toUpperCase()} · never synced. Property <code>{r.propertyId}</code> is configured but has no data yet.
+      <Panel title={allHealthy ? 'All systems healthy' : 'Active issues'}>
+        {allHealthy ? (
+          <EmptyPanelNotice>
+            Core syncs are current, sitemap snapshots are OK, and no core jobs failed on their latest run.
+          </EmptyPanelNotice>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {corePending.length > 0 && (
+              <div style={{ padding: '10px 12px', background: 'var(--failed-soft, #FBE5E7)', border: '1px solid var(--failed, #c0392b)', borderRadius: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Core jobs failing</div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 12 }}>
+                  {corePending.map((j) => (
+                    <li key={j.id}>
+                      {jobDisplayName(j.job_name)} {j.site_id ? `· ${siteDisplayName(sitesById.get(j.site_id)?.slug, 'Network')}` : ''} — {j.error_summary?.slice(0, 160) ?? 'no error summary logged'}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            ))}
-            {staleRows.map((r) => (
-              <div key={`sr-${r.siteId}-${r.kind}`} style={{ padding: '8px 10px', background: '#FFF4E5', border: '1px solid #F0CFA0', borderRadius: 6, fontSize: 12 }}>
-                <strong>{r.slug}</strong> · {r.kind.toUpperCase()} · data through {r.lastDataDate} (last synced {formatRelative(r.lastSyncAt)}). Behind the expected freshness threshold.
+            )}
+            {sitemapErrorList.length > 0 && (
+              <div style={{ padding: '10px 12px', background: 'var(--failed-soft, #FBE5E7)', border: '1px solid var(--failed, #c0392b)', borderRadius: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Sitemap errors</div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 12 }}>
+                  {sitemapErrorList.map(({ site_id, snapshot }) => (
+                    <li key={`sm-${site_id}`}>
+                      {siteDisplayName(sitesById.get(site_id)?.slug, 'Site')} — {snapshot.issue_count} issue{snapshot.issue_count === 1 ? '' : 's'} across {snapshot.submitted_count} submitted URLs. {snapshot.error_summary ?? ''}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            ))}
+            )}
+            {staleSources.length > 0 && (
+              <div style={{ padding: '10px 12px', background: 'var(--warning-soft, #FFF4E5)', border: '1px solid var(--warning, #e67e22)', borderRadius: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Stale sources</div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 12 }}>
+                  {staleSources.map((s) => (
+                    <li key={s.source}>
+                      {s.source} — latest data through {s.through ?? 'never'}; expected to run daily.
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-        </Panel>
-      )}
-
-      <Panel title="Source freshness" eyebrow="Feeds">
-        <Table
-          columns={[
-            { key: 'site',   header: 'Site',         render: (r: typeof freshness[number] & { id: string }) => r.slug },
-            { key: 'kind',   header: 'Source',       render: (r) => r.kind.toUpperCase() },
-            { key: 'prop',   header: 'Property',     render: (r) => <code>{r.propertyId}</code> },
-            { key: 'date',   header: 'Data through', render: (r) => r.lastDataDate ?? <span className="col-dim">—</span> },
-            { key: 'sync',   header: 'Last sync',    render: (r) => formatRelative(r.lastSyncAt) },
-            { key: 'status', header: 'Status',       render: (r) => <StatusBadge state={r.status as 'active'} /> },
-          ]}
-          rows={freshness.map((f, i) => ({ ...f, id: `${f.siteId}-${f.kind}-${i}` }))}
-        />
+        )}
       </Panel>
 
-      <Panel title="BigQuery readiness" eyebrow="GCP exports">
-        <Table
-          columns={[
-            { key: 'site',   header: 'Site',       render: (r: typeof bqRows[number]) => r.network_sites.name },
-            { key: 'project',header: 'GCP project',render: (r) => r.gcp_project_id ? <code style={{ fontSize: 11 }}>{r.gcp_project_id}</code> : <span className="col-dim">—</span> },
-            { key: 'gsc',    header: 'GSC export', render: (r) => <StatusBadge state={r.gsc_export_status === 'connected' ? 'connected' : r.gsc_export_status === 'error' ? 'error' : 'not_connected'} label={r.gsc_export_status.replace(/_/g, ' ')} /> },
-            { key: 'ga4',    header: 'GA4 export', render: (r) => <StatusBadge state={r.ga4_export_status === 'connected' ? 'connected' : r.ga4_export_status === 'error' ? 'error' : 'not_connected'} label={r.ga4_export_status.replace(/_/g, ' ')} /> },
-            { key: 'checked',header: 'Checked',    render: (r) => formatRelative(r.last_checked_at) },
-            { key: 'notes',  header: 'Notes',      render: (r) => <span style={{ fontSize: 11 }} className="col-dim">{r.notes ?? '—'}</span> },
-          ]}
-          rows={bqRows.map((r, i) => ({ ...r, id: `${r.site_id}-${i}` }))}
-          empty={<EmptyState title="No BigQuery exports configured yet." tone="muted" />}
-        />
+      <Panel title="Source freshness" eyebrow="Daily sync feeds">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+          {Array.from(bySource.values()).map((s) => (
+            <div key={s.source} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 10, border: '1px solid var(--admin-border)', borderRadius: 6, minWidth: 180 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <strong style={{ fontSize: 13 }}>{s.source}</strong>
+                <FreshnessBadge state={s.state} />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--admin-text-muted)' }}>
+                {s.through ? `through ${s.through}` : 'never synced'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--admin-text-subtle)' }}>
+                {s.propertyCount} propert{s.propertyCount === 1 ? 'y' : 'ies'}
+              </div>
+            </div>
+          ))}
+        </div>
+        <details style={{ marginTop: 10, fontSize: 11, color: 'var(--admin-text-muted)' }}>
+          <summary style={{ cursor: 'pointer' }}>Per-property detail</summary>
+          <Table
+            columns={[
+              { key: 'site',   header: 'Site',         render: (r: typeof freshness[number] & { id: string }) => siteDisplayName(r.slug, 'Network') },
+              { key: 'kind',   header: 'Source',       render: (r) => r.kind.toUpperCase() },
+              { key: 'date',   header: 'Data through', render: (r) => r.lastDataDate ?? <span className="col-dim">—</span> },
+              { key: 'sync',   header: 'Last sync',    render: (r) => formatRelative(r.lastSyncAt) },
+              { key: 'prop',   header: 'Property',     render: (r) => <code style={{ fontSize: 10 }}>{r.propertyId}</code> },
+            ]}
+            rows={freshness.map((f, i) => ({ ...f, id: `${f.siteId}-${f.kind}-${i}` }))}
+          />
+        </details>
       </Panel>
 
-      <Panel title="Sitemap health" eyebrow="Latest snapshot per site">
+      <Panel title="Sitemap health" eyebrow="Latest snapshot per site" actions={<Link href="/admin/seo/sitemaps" className="ui-btn ui-btn--secondary ui-btn--sm">Open sitemaps</Link>}>
         <Table
           columns={[
-            { key: 'site',  header: 'Site',     render: (r: typeof bqRows[number]) => r.network_sites.name },
-            { key: 'state', header: 'Snapshot', render: (r) => {
-              const s = latestSitemapBySite.get(r.site_id);
-              return s ? <StatusBadge state={s.status === 'ok' ? 'connected' : s.status === 'warning' ? 'warning' : 'failed'} label={s.status} /> : <span className="col-dim">no snapshot</span>;
+            { key: 'site',  header: 'Site',     render: (s: typeof sites[number]) => siteDisplayName(s.slug, 'Network') },
+            { key: 'state', header: 'Snapshot', render: (s) => {
+              const snap = latestSitemapBySite.get(s.id);
+              return snap ? <StatusBadge state={snap.status === 'ok' ? 'connected' : snap.status === 'warning' ? 'warning' : 'failed'} label={snap.status} /> : <span className="col-dim">no snapshot</span>;
             } },
-            { key: 'subm',  header: 'Submitted URLs', className: 'col-num', render: (r) => {
-              const s = latestSitemapBySite.get(r.site_id);
-              return s ? s.submitted_count.toLocaleString() : '—';
+            { key: 'subm',  header: 'Submitted URLs', className: 'col-num', render: (s) => {
+              const snap = latestSitemapBySite.get(s.id);
+              return snap ? snap.submitted_count.toLocaleString() : '—';
             } },
-            { key: 'iss',   header: 'Issues', className: 'col-num', render: (r) => {
-              const s = latestSitemapBySite.get(r.site_id);
-              return s ? s.issue_count.toLocaleString() : '—';
+            { key: 'iss',   header: 'Issues', className: 'col-num', render: (s) => {
+              const snap = latestSitemapBySite.get(s.id);
+              return snap ? snap.issue_count.toLocaleString() : '—';
             } },
-            { key: 'when',  header: 'When', render: (r) => {
-              const s = latestSitemapBySite.get(r.site_id);
-              return s ? formatRelative(s.snapshot_at) : '—';
+            { key: 'when',  header: 'When', render: (s) => {
+              const snap = latestSitemapBySite.get(s.id);
+              return snap ? <FreshnessBadge state={freshnessState(snap.snapshot_at, { freshHours: 48, agingHours: 72 })} label={relativeLabel(snap.snapshot_at)} /> : <span className="col-dim">—</span>;
             } },
           ]}
-          rows={bqRows.map((r, i) => ({ ...r, id: `sm-${r.site_id}-${i}` }))}
+          rows={sites.map((s) => ({ ...s, id: s.id }))}
         />
       </Panel>
 
       <Panel
-        title="Recent job runs"
-        eyebrow={`${rows.length} runs`}
+        title="Core job status"
+        eyebrow={`Latest ${Math.min(10, rows.length)} runs`}
         actions={<Link href="/admin/jobs" className="ui-btn ui-btn--secondary ui-btn--sm">Open Jobs</Link>}
       >
-        {/* Full job-control lives on /admin/jobs. This panel only
-            shows the last 10 recent runs as a quick audit; drilling
-            in happens on the Jobs page. */}
         {rows.length === 0 ? (
           <EmptyPanelNotice>No jobs have run yet.</EmptyPanelNotice>
         ) : (
@@ -165,12 +218,14 @@ export default async function HealthPage() {
               { key: 'site',   header: 'Site',      render: (j) => <span className="col-dim">{j.site_id ? siteDisplayName(sitesById.get(j.site_id)?.slug, 'Network') : 'Network'}</span> },
               { key: 'status', header: 'Status',    render: (j) => <StatusBadge state={j.status} /> },
               { key: 'started',header: 'Started',   render: (j) => formatRelative(j.started_at) },
-              { key: 'took',   header: 'Took',      className: 'col-num', render: (j) => j.finished_at ? `${Math.round((new Date(j.finished_at).getTime() - new Date(j.started_at).getTime()) / 1000)}s` : '…' },
-              { key: 'err',    header: 'Detail',    render: (j) => j.error_summary ? <span style={{ color: 'var(--failed, #8A1C27)', fontSize: 11 }}>{j.error_summary.slice(0, 100)}</span> : <span className="col-dim" style={{ fontSize: 11 }}>+{j.rows_inserted} / ~{j.rows_updated}</span> },
+              { key: 'detail', header: 'Detail',    render: (j) => j.error_summary ? <span style={{ color: 'var(--failed, #8A1C27)', fontSize: 11 }}>{j.error_summary.slice(0, 100)}</span> : <span className="col-dim" style={{ fontSize: 11 }}>+{j.rows_inserted} / ~{j.rows_updated}</span> },
             ]}
             rows={rows.slice(0, 10)}
           />
         )}
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--admin-text-muted)' }}>
+          BigQuery readiness + export configuration moved to <Link href="/admin/integrations">Integrations</Link>.
+        </div>
       </Panel>
     </AdminShell>
   );
