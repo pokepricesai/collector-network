@@ -1,5 +1,30 @@
 import type { NextConfig } from 'next';
 
+// Launch gate — mirrors src/lib/site-url.ts resolution so the HTTP
+// response headers and the page `<meta robots>` cannot disagree:
+//
+//   • Explicit SITE_LAUNCHED=false → hold pre-launch (kill switch).
+//   • Explicit SITE_LAUNCHED=true (BOM, surrounding quotes and
+//     whitespace tolerated — these are a known Vercel env export
+//     artefact) → launched.
+//   • Otherwise → launched when VERCEL_ENV==='production', else
+//     pre-launch (previews + local dev stay noindex automatically).
+//
+// Previously the strict equality `process.env['SITE_LAUNCHED'] !== 'true'`
+// mis-classified a quoted/BOM-prefixed `"true"` as pre-launch, so
+// the X-Robots-Tag header kept emitting `noindex, nofollow` even
+// though the page metadata resolved to `index, follow`. The HTTP
+// header takes precedence over the meta, which quietly held GSC
+// coverage at zero.
+function isSiteLaunched(): boolean {
+  const raw = (process.env['SITE_LAUNCHED'] ?? '')
+    .replace(/[﻿​\s"]+/g, '')
+    .toLowerCase();
+  if (raw === 'false') return false;
+  if (raw === 'true') return true;
+  return process.env['VERCEL_ENV'] === 'production';
+}
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   typescript: {
@@ -22,7 +47,7 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    const preLaunch = process.env['SITE_LAUNCHED'] !== 'true';
+    const preLaunch = !isSiteLaunched();
     const baseline = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

@@ -37,12 +37,22 @@ export interface TaskRow {
 
 export const TASK_OPEN_STATUSES: TaskStatus[] = ['open', 'in_progress', 'waiting'];
 
+// Default operator inbox: manual + intelligence only. System-
+// generated tasks (SEO engines, routing jobs, legacy automation)
+// stay accessible but hidden from the default view so the inbox
+// doesn't feel like a wall of legacy automation.
+export const OPERATOR_INBOX_SOURCES: TaskSourceCategory[] = ['manual', 'intelligence'];
+
 export interface TaskFilter {
   // null = network-scope only, undefined = any (including network).
   // Caller resolves slug→site_id upstream to keep this read-only.
   site_id?: string | null;
   task_kind?: TaskKind;
+  // Single-source filter — exact match.
   task_source?: TaskSourceCategory;
+  // Multi-source filter — IN clause. Takes precedence over
+  // task_source when both are present (callers normally pick one).
+  task_sources?: TaskSourceCategory[];
   statuses?: TaskStatus[];
   limit?: number;
 }
@@ -62,7 +72,8 @@ export async function listTasks(
   if (filter.site_id === null) q = q.is('site_id', null);
   else if (filter.site_id) q = q.eq('site_id', filter.site_id);
   if (filter.task_kind) q = q.eq('task_kind', filter.task_kind);
-  if (filter.task_source) q = q.eq('task_source', filter.task_source);
+  if (filter.task_sources && filter.task_sources.length > 0) q = q.in('task_source', filter.task_sources);
+  else if (filter.task_source) q = q.eq('task_source', filter.task_source);
   const { data, error } = await q;
   if (error) {
     console.error('[tasks/queries] listTasks:', error.message);
@@ -81,62 +92,81 @@ export async function countOpenTasks(
   if (filter.site_id === null) q = q.is('site_id', null);
   else if (filter.site_id) q = q.eq('site_id', filter.site_id);
   if (filter.task_kind) q = q.eq('task_kind', filter.task_kind);
-  if (filter.task_source) q = q.eq('task_source', filter.task_source);
+  if (filter.task_sources && filter.task_sources.length > 0) q = q.in('task_source', filter.task_sources);
+  else if (filter.task_source) q = q.eq('task_source', filter.task_source);
   const { count } = await q;
   return count ?? 0;
 }
 
-// Compact summary used by the dashboard panel.
+// Compact summary used by the dashboard panel. Separates the
+// "operator inbox" counts (manual + intelligence — what the human
+// is currently triaging) from the system backlog, so the dashboard
+// headline reflects actual working queue size rather than the full
+// 100+ legacy automation count.
 export interface TaskSummary {
+  // Operator-inbox view (manual + intelligence).
+  inbox_open: number;
+  inbox_fixes: number;
+  inbox_improvements: number;
+  inbox_high_priority: number;
+  // Totals across all sources.
   total_open: number;
-  fixes: number;
-  improvements: number;
+  // Per-source breakdown so the UI can show a chip bar.
   manual: number;
   intelligence: number;
   system: number;
   network_scope: number;
-  high_priority: number;
 }
 
 export async function fetchTaskSummary(sb: SupabaseClient): Promise<TaskSummary> {
-  const [total, fixes, improvements, manual, intelligence, system, network, high] = await Promise.all([
-    countOpenTasks(sb),
-    countOpenTasks(sb, { task_kind: 'fix' }),
-    countOpenTasks(sb, { task_kind: 'improvement' }),
-    countOpenTasks(sb, { task_source: 'manual' }),
-    countOpenTasks(sb, { task_source: 'intelligence' }),
-    countOpenTasks(sb, { task_source: 'system' }),
-    countOpenTasks(sb, { site_id: null }),
+  const [inbox, inboxFixes, inboxImpr, inboxHigh, total, manual, intelligence, system, network] = await Promise.all([
+    countOpenTasks(sb, { task_sources: OPERATOR_INBOX_SOURCES }),
+    countOpenTasks(sb, { task_sources: OPERATOR_INBOX_SOURCES, task_kind: 'fix' }),
+    countOpenTasks(sb, { task_sources: OPERATOR_INBOX_SOURCES, task_kind: 'improvement' }),
     (async () => {
       const { count } = await sb.from('network_tasks')
         .select('id', { count: 'exact', head: true })
         .in('status', TASK_OPEN_STATUSES)
-        .in('priority', ['critical', 'high']);
+        .in('priority', ['critical', 'high'])
+        .in('task_source', OPERATOR_INBOX_SOURCES);
       return count ?? 0;
     })(),
+    countOpenTasks(sb),
+    countOpenTasks(sb, { task_source: 'manual' }),
+    countOpenTasks(sb, { task_source: 'intelligence' }),
+    countOpenTasks(sb, { task_source: 'system' }),
+    countOpenTasks(sb, { site_id: null }),
   ]);
   return {
+    inbox_open: inbox,
+    inbox_fixes: inboxFixes,
+    inbox_improvements: inboxImpr,
+    inbox_high_priority: inboxHigh,
     total_open: total,
-    fixes, improvements,
     manual, intelligence, system,
     network_scope: network,
-    high_priority: high,
   };
 }
 
 // Top-N highest-priority open tasks (dashboard preview + future
 // Morning Brief). Priority order: critical > high > normal > low,
-// then newest first.
+// then newest first. By default the preview is scoped to the
+// OPERATOR_INBOX_SOURCES (manual + intelligence) so the dashboard
+// doesn't look like a wall of system-generated backlog. Callers
+// that want everything can pass sources=undefined.
 export async function listHighPriorityTasks(
   sb: SupabaseClient,
   limit = 5,
+  sources: TaskSourceCategory[] | undefined = OPERATOR_INBOX_SOURCES,
 ): Promise<TaskRow[]> {
-  const { data } = await sb.from('network_tasks')
+  let q = sb.from('network_tasks')
     .select(SELECT_COLS)
     .in('status', TASK_OPEN_STATUSES)
     .in('priority', ['critical', 'high'])
     .order('created_at', { ascending: false })
     .limit(limit);
+  if (sources && sources.length > 0) q = q.in('task_source', sources);
+  const { data } = await q;
   return ((data ?? []) as TaskRow[]);
 }
 

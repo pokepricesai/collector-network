@@ -41,11 +41,20 @@ export async function createManualTaskAction(formData: FormData): Promise<void> 
     site_id = (data as null | { id: string })?.id ?? null;
   }
 
+  // task_type stays domain-neutral for manual rows. The existing
+  // network_tasks writers use task_type as an automation routing
+  // hint ('intelligence', 'commercial', 'internal_link',
+  // 'seo_opportunity', 'seo_improve', 'seo_rewrite') and
+  // content/routing.ts filters tasks via `.eq('task_type', ...)`.
+  // Writing 'fix'/'improvement' into task_type would pollute that
+  // vocabulary with values from a different (operator-facing)
+  // classification. We keep task_type='manual' as the clean label
+  // and let task_kind carry the fix/improvement distinction.
   await sb.from('network_tasks').insert({
     site_id,
     title: title.slice(0, 240),
     description: notes || null,
-    task_type: kind,              // 'fix' or 'improvement' doubles as a legacy task_type label for manual rows
+    task_type: 'manual',
     task_kind: kind,
     task_source: 'manual',
     priority,

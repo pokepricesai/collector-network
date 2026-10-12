@@ -196,13 +196,18 @@ export default async function OverviewPage() {
 
       <Panel title="Open tasks" actions={<Link href="/admin/tasks" className="ui-btn ui-btn--secondary ui-btn--sm">View all</Link>}>
         <div className="metric-grid metric-grid--compact">
-          <MetricCard label="Total open" value={formatInt(taskSummary.total_open)} helper={`${formatInt(taskSummary.network_scope)} network · ${formatInt(taskSummary.total_open - taskSummary.network_scope)} site-scoped`} />
-          <MetricCard label="Fixes"       value={formatInt(taskSummary.fixes)} />
-          <MetricCard label="Improvements" value={formatInt(taskSummary.improvements)} />
-          <MetricCard label="High priority" value={formatInt(taskSummary.high_priority)} helper="critical + high" />
-          <MetricCard label="Manual"       value={formatInt(taskSummary.manual)} helper="jotted-down" />
-          <MetricCard label="Intelligence" value={formatInt(taskSummary.intelligence)} helper="from inbox" />
+          <MetricCard label="Operator inbox" value={formatInt(taskSummary.inbox_open)} helper="manual + intelligence" />
+          <MetricCard label="Fixes"          value={formatInt(taskSummary.inbox_fixes)} helper="in inbox" />
+          <MetricCard label="Improvements"   value={formatInt(taskSummary.inbox_improvements)} helper="in inbox" />
+          <MetricCard label="High priority"  value={formatInt(taskSummary.inbox_high_priority)} helper="critical + high" />
+          <MetricCard label="Manual"         value={formatInt(taskSummary.manual)} helper="jotted-down" />
+          <MetricCard label="Intelligence"   value={formatInt(taskSummary.intelligence)} helper="from inbox" />
         </div>
+        {taskSummary.system > 0 && (
+          <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', marginTop: 8 }}>
+            Plus {formatInt(taskSummary.system)} system-generated items hidden by default — see <Link href="/admin/tasks?source=system" style={{ textDecoration: 'underline' }}>System</Link> or <Link href="/admin/tasks?source=all" style={{ textDecoration: 'underline' }}>All sources</Link>.
+          </div>
+        )}
         {topTasks.length > 0 && (
           <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {topTasks.map((t) => (

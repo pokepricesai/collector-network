@@ -3,7 +3,7 @@ import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { EmptyState, Notice, Panel, SectionHeader, StatusBadge } from '@/components/admin/admin-ui';
-import { listTasks, type TaskKind, type TaskSourceCategory } from '@/server/tasks/queries';
+import { listTasks, OPERATOR_INBOX_SOURCES, type TaskKind, type TaskSourceCategory } from '@/server/tasks/queries';
 import { completeTaskAction, reopenTaskAction } from './actions';
 import type { SiteSlug } from '@/server/intelligence/types';
 
@@ -35,11 +35,21 @@ const KIND_FILTERS: Array<{ label: string; value: '' | TaskKind }> = [
   { label: 'Improvement', value: 'improvement' },
 ];
 
-const SOURCE_FILTERS: Array<{ label: string; value: '' | TaskSourceCategory }> = [
-  { label: 'All sources',   value: '' },
+// Source chip meaning:
+//   ''        → default operator inbox (manual + intelligence);
+//               system-generated backlog is hidden to keep the view
+//               focused on what the human is actually triaging.
+//   'manual'  → manual quick-adds only.
+//   'intelligence' → intelligence-generated items only.
+//   'system'  → system-generated items only (SEO engines, routing
+//               jobs, legacy automation).
+//   'all'     → everything, including system.
+const SOURCE_FILTERS: Array<{ label: string; value: '' | TaskSourceCategory | 'all' }> = [
+  { label: 'Inbox',         value: '' },
   { label: 'Manual',        value: 'manual' },
   { label: 'Intelligence',  value: 'intelligence' },
   { label: 'System',        value: 'system' },
+  { label: 'All sources',   value: 'all' },
 ];
 
 export default async function TasksPage({ searchParams }: PageProps) {
@@ -50,7 +60,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   const siteParam = (params.site ?? '') as '' | 'network' | SiteSlug;
   const kindParam = (params.kind ?? '') as '' | TaskKind;
-  const sourceParam = (params.source ?? '') as '' | TaskSourceCategory;
+  const sourceParam = (params.source ?? '') as '' | TaskSourceCategory | 'all';
   const view = (params.view === 'completed' ? 'completed' : 'open');
 
   const site_id: string | null | undefined =
@@ -58,25 +68,38 @@ export default async function TasksPage({ searchParams }: PageProps) {
     siteParam === 'network' ? null :
     sites.find((s) => s.slug === siteParam)?.id ?? undefined;
 
+  // Default (sourceParam==='') = operator inbox = manual + intelligence.
+  // 'all' explicitly shows everything including the system backlog.
+  const taskSources: TaskSourceCategory[] | undefined =
+    sourceParam === 'all' ? undefined
+    : sourceParam === '' ? OPERATOR_INBOX_SOURCES
+    : [sourceParam];
+
   const rows = await listTasks(sb, {
     site_id,
     task_kind: kindParam || undefined,
-    task_source: sourceParam || undefined,
+    task_sources: taskSources,
     statuses: view === 'completed' ? ['completed'] : ['open', 'in_progress', 'waiting'],
     limit: view === 'completed' ? 100 : 500,
   });
 
+  const sourceLabel =
+    sourceParam === 'all'    ? 'all sources'
+    : sourceParam === 'system'       ? 'system-generated'
+    : sourceParam === 'intelligence' ? 'intelligence-generated'
+    : sourceParam === 'manual'       ? 'manual'
+    :                                  'manual + intelligence';
   const headline = view === 'completed'
     ? `${rows.length} completed · showing most recent 100`
-    : rows.length === 0 ? 'Nothing to do right now.'
-      : `${rows.length} open task${rows.length === 1 ? '' : 's'}.`;
+    : rows.length === 0 ? `Nothing to do right now in the ${sourceLabel} view.`
+      : `${rows.length} open task${rows.length === 1 ? '' : 's'} · ${sourceLabel}.`;
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/tasks">
       <SectionHeader
         eyebrow="Collector Network OS · Operations"
         title="Tasks"
-        description={<>{headline} Manual, Intelligence-generated, and system-generated tasks share this inbox.</>}
+        description={<>{headline} Default view hides system-generated backlog — use the <strong>System</strong> or <strong>All sources</strong> chips below to see it.</>}
       />
 
       <Panel title="Filters" eyebrow="GET params; shareable">
@@ -240,6 +263,8 @@ function buildHref(args: { site: string; kind: string; source: string; view: str
   const sp = new URLSearchParams();
   if (args.site) sp.set('site', args.site);
   if (args.kind) sp.set('kind', args.kind);
+  // '' is the default operator inbox; both '' and 'all' are explicit
+  // first-class options. Only '' is omitted from the URL.
   if (args.source) sp.set('source', args.source);
   if (args.view && args.view !== 'open') sp.set('view', args.view);
   const qs = sp.toString();
