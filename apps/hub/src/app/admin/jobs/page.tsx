@@ -58,19 +58,41 @@ export default async function JobsPage() {
     return r.site_id ? `${r.job_name}|${r.site_id}` : r.job_name;
   }
   function keyForJob(j: typeof jobs[number]): string {
-    // Per-site jobs encode the site slug after the first dot:
-    //   sitemaps.pokemon, inspection.mtg, intel.ygo, ...
-    const siteSuffixMatch = j.slug.match(/^(?:sitemaps|inspection|intel)\.(\w+)$/);
+    // Per-site registry entries encode the site slug after the first
+    // dot: sitemaps.pokemon, inspection.mtg, intel.ygo, ideas.ygo, ...
+    const siteSuffixMatch = j.slug.match(/^(?:sitemaps|inspection|intel|ideas)\.(\w+)$/);
     if (siteSuffixMatch && siteSuffixMatch[1]) {
       const site = sites.find((s) => s.slug === siteSuffixMatch[1]);
       return site ? `${j.jobName}|${site.id}` : j.jobName;
     }
     return j.jobName;
   }
+  // Also index runs by job_name alone (ignoring site_id) so that
+  // network-wide registry entries (gsc.sync/ga4.sync) whose runs
+  // ALL happen to carry site_id (one record per site per sync) can
+  // still find their most recent run. Without this fallback the
+  // page used to show 'never' for GSC/GA4 even though runs existed.
+  const latestByJobName = new Map<string, JobRunRow>();
   for (const r of ((runs ?? []) as JobRunRow[])) {
     const k = keyForRun(r);
     if (r.status === 'running') runningBySlug.set(k, (runningBySlug.get(k) ?? 0) + 1);
     if (!latestBySlug.has(k)) latestBySlug.set(k, r);
+    if (!latestByJobName.has(r.job_name)) latestByJobName.set(r.job_name, r);
+  }
+  // Second pass: for any registry entry whose primary key missed,
+  // fall back to the latest run by job_name regardless of site.
+  function resolveLatest(j: typeof jobs[number]): JobRunRow | undefined {
+    const k = keyForJob(j);
+    return latestBySlug.get(k) ?? latestByJobName.get(j.jobName);
+  }
+  function resolveIsRunning(j: typeof jobs[number]): boolean {
+    const k = keyForJob(j);
+    if ((runningBySlug.get(k) ?? 0) > 0) return true;
+    // Fallback: any run of this jobName currently running.
+    for (const r of ((runs ?? []) as JobRunRow[])) {
+      if (r.status === 'running' && r.job_name === j.jobName) return true;
+    }
+    return false;
   }
 
   interface Row {
@@ -85,7 +107,6 @@ export default async function JobsPage() {
     isRunning: boolean;
   }
   const rows: Row[] = jobs.map((j) => {
-    const k = keyForJob(j);
     return {
       id: j.slug,
       slug: j.slug,
@@ -94,8 +115,8 @@ export default async function JobsPage() {
       group: j.group,
       description: j.description,
       requiresConfirmation: j.requiresConfirmation,
-      latest: latestBySlug.get(k),
-      isRunning: (runningBySlug.get(k) ?? 0) > 0,
+      latest: resolveLatest(j),
+      isRunning: resolveIsRunning(j),
     };
   });
 
