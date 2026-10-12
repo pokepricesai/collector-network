@@ -367,17 +367,21 @@ export default async function RevenuePage({ searchParams }: PageProps) {
       {/* ── RPKU efficiency with maturity caveat ───────────── */}
       {(() => {
         const chartCurrencies = Array.from(new Set(
-          rpkuPoints.flatMap((p) => Object.keys(p.rpku_minor_by_currency)),
+          rpkuPoints.flatMap((p) => Object.keys(p.rpku_attributed_minor_by_currency)),
         )).sort();
         if (chartCurrencies.length === 0 || rpkuPoints.length === 0) return null;
         return (
           <Panel
             title="Revenue efficiency"
-            eyebrow="Confirmed revenue per 1,000 active-user-days"
+            eyebrow="Revenue per 1,000 reporting active-user-days (Singapore-excluded)"
             actions={<span className="col-dim" style={{ fontSize: 11.5 }}>Denominator is a sum of daily actives — not deduplicated users</span>}
           >
-            <Notice tone="warning">
-              <strong>Maturity caveat:</strong> the current and most-recent months carry a large share of pending commission that has not yet been approved. Confirmed-RPKU for those months will look artificially low; it does <strong>not</strong> represent a monetisation collapse. Trust the status-mix chart above as the primary read, and treat recent-month RPKU as provisional.
+            <Notice tone="info">
+              <strong>Two series per currency.</strong> The solid line (<em>Confirmed</em>) is realised efficiency —
+              commission that has already been approved. The dashed line (<em>Attributed</em>) adds pending commission
+              that is awaiting approval. Months flagged <code>provisional</code> in the tooltip still carry significant
+              pending commission; the attributed line is honest about current efficiency without implying that
+              monetisation collapsed in recent months.
             </Notice>
             <div style={{ display: 'grid', gap: 20, gridTemplateColumns: `repeat(auto-fit, minmax(360px, 1fr))`, marginTop: 12 }}>
               {chartCurrencies.map((ccy) => (
@@ -389,6 +393,8 @@ export default async function RevenuePage({ searchParams }: PageProps) {
                       bucket: p.bucket,
                       users: p.users,
                       rpku_minor: p.rpku_minor_by_currency[ccy] ?? 0,
+                      rpku_attributed_minor: p.rpku_attributed_minor_by_currency[ccy] ?? 0,
+                      is_immature: p.is_immature,
                     }))}
                   />
                 </div>

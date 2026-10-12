@@ -287,10 +287,15 @@ export async function buildMorningBrief(
   today: Date = new Date(),
 ): Promise<MorningBrief> {
   const dayMs  = 24 * 60 * 60 * 1000;
+  // Window alignment: mirror server/analytics/dashboard.ts
+  // windowDaysAgo(today, 28). endA = yesterday; startA = endA - 27d.
+  // That gives a 28-day inclusive span [today-28, today-1] which
+  // matches every other operator metric on /admin and /admin/seo.
+  // Prior comparable window is [today-56, today-29].
   const endA   = new Date(today.getTime() - 1 * dayMs);
-  const startA = new Date(endA.getTime() - 28 * dayMs);
+  const startA = new Date(endA.getTime() - 27 * dayMs);
   const endB   = new Date(startA.getTime() - 1 * dayMs);
-  const startB = new Date(endB.getTime() - 28 * dayMs);
+  const startB = new Date(endB.getTime() - 27 * dayMs);
   const sinceA = startA.toISOString().slice(0, 10);
   const untilA = endA.toISOString().slice(0, 10);
   const sinceB = startB.toISOString().slice(0, 10);

@@ -192,31 +192,45 @@ export async function revenueBySource(
 
 export interface RevenuePerKUsersPoint {
   bucket: string;                   // 'YYYY-MM'
-  users: number;                    // network-wide active users
+  users: number;                    // Singapore-excluded reporting active-user-days
   confirmed_minor_by_currency: Record<string, number>;
-  rpku_minor_by_currency: Record<string, number>;   // revenue per 1000 users
+  pending_minor_by_currency:   Record<string, number>;
+  attributed_minor_by_currency: Record<string, number>; // confirmed + pending
+  // RPKU variants — same denominator, different numerators.
+  rpku_minor_by_currency:           Record<string, number>;   // confirmed per 1k
+  rpku_attributed_minor_by_currency: Record<string, number>;  // attributed per 1k
+  // Maturity flag — true when this month is still accumulating pending
+  // approvals (current month, or any month whose pending share is >=
+  // 20% of attributed OR less than ~45 days from today). The chart
+  // uses this to style the attributed line as provisional.
+  is_immature: boolean;
 }
 
 /**
- * Revenue-per-1000-users monthly series.
+ * Revenue-per-1000-active-user-days monthly series.
  *
- * Formula per month per currency:
- *   rpku_minor = (confirmed_revenue_minor / users) * 1000
+ * Formulae per month per currency:
+ *   rpku            = (confirmed_minor / users) * 1000     "realised"
+ *   rpku_attributed = (attributed_minor / users) * 1000    "incl. pending"
+ *   attributed      = confirmed + pending
  *
- * i.e. "how many minor-currency units of confirmed affiliate
- * commission did each 1,000 users produce this month". GBP and USD
- * are tracked independently — never summed.
+ * i.e. "how many minor-currency units of confirmed (or
+ * confirmed+pending) affiliate commission did each 1,000 reporting
+ * user-days produce this month". GBP and USD tracked independently.
  *
- * `users` is the sum of GA4 `active_users` across every row in
- * `network_ga4_site_daily` for the month. That is a sum of daily
- * actives, NOT monthly unique visitors (we don't have a monthly
- * dedupe table). A visitor who browsed on 3 different days counts
- * 3 times. The ratio trends correctly MoM because the overcount is
- * roughly proportional, but the absolute number should be read as
- * "per 1,000 session-days" if precision matters.
+ * `users` is Singapore-excluded reporting active-user-days from the
+ * network_reporting_traffic layer (NOT raw GA4). It is a sum of
+ * daily actives, not monthly unique visitors; read as "per 1,000
+ * session-days" if precision matters.
  *
- * If GA4 data is missing for a month, users = 0 and rpku is 0 for
- * that month — do not fabricate.
+ * The attributed series fixes the visual regression where recent
+ * months would collapse toward zero: pending commission that
+ * eventually approves is included in attributed, so the operator
+ * can see provisional-but-honest efficiency alongside the realised
+ * confirmed line.
+ *
+ * If GA4 data is missing for a month, users = 0 and both rpkus are
+ * 0 for that month — do not fabricate.
  */
 export async function revenuePerThousandUsers(
   sb: SupabaseClient,
@@ -244,28 +258,58 @@ export async function revenuePerThousandUsers(
   }
 
   const confirmedByMonth = new Map<string, Record<string, number>>();
+  const pendingByMonth   = new Map<string, Record<string, number>>();
   for (const r of rows) {
-    if (r.ledger_status !== 'confirmed') continue;
     const m = monthKey(r.occurred_on);
-    const bucket = confirmedByMonth.get(m) ?? {};
-    bucket[r.currency] = (bucket[r.currency] ?? 0) + r.amount_minor;
-    confirmedByMonth.set(m, bucket);
+    if (r.ledger_status === 'confirmed') {
+      const bucket = confirmedByMonth.get(m) ?? {};
+      bucket[r.currency] = (bucket[r.currency] ?? 0) + r.amount_minor;
+      confirmedByMonth.set(m, bucket);
+    } else if (r.ledger_status === 'pending') {
+      const bucket = pendingByMonth.get(m) ?? {};
+      bucket[r.currency] = (bucket[r.currency] ?? 0) + r.amount_minor;
+      pendingByMonth.set(m, bucket);
+    }
   }
 
-  const months = new Set<string>([...usersByMonth.keys(), ...confirmedByMonth.keys()]);
+  const currentMonthKey = monthKey(new Date().toISOString().slice(0, 10));
+  const months = new Set<string>([
+    ...usersByMonth.keys(), ...confirmedByMonth.keys(), ...pendingByMonth.keys(),
+  ]);
   const out: RevenuePerKUsersPoint[] = [];
   for (const bucket of Array.from(months).sort()) {
     const users = usersByMonth.get(bucket) ?? 0;
     const confirmed = confirmedByMonth.get(bucket) ?? {};
+    const pending   = pendingByMonth.get(bucket) ?? {};
+    const attributed: Record<string, number> = {};
     const rpku: Record<string, number> = {};
-    for (const [ccy, amt] of Object.entries(confirmed)) {
-      rpku[ccy] = users > 0 ? Math.round((amt / users) * 1000) : 0;
+    const rpkuAttributed: Record<string, number> = {};
+    const allCcys = new Set([...Object.keys(confirmed), ...Object.keys(pending)]);
+    for (const ccy of allCcys) {
+      const c = confirmed[ccy] ?? 0;
+      const p = pending[ccy] ?? 0;
+      const a = c + p;
+      attributed[ccy] = a;
+      rpku[ccy]           = users > 0 ? Math.round((c / users) * 1000) : 0;
+      rpkuAttributed[ccy] = users > 0 ? Math.round((a / users) * 1000) : 0;
     }
+    // Maturity rule: current month is always immature, prior month is
+    // immature if its pending share is >= 20% of attributed in GBP
+    // (the dominant currency). This mirrors how operators think about
+    // approval lag: ~30-60 days of pending is normal.
+    const gbpAttrib = attributed['GBP'] ?? 0;
+    const gbpPending = pending['GBP'] ?? 0;
+    const pendingShare = gbpAttrib > 0 ? gbpPending / gbpAttrib : 0;
+    const is_immature = bucket === currentMonthKey || pendingShare >= 0.20;
     out.push({
       bucket,
       users,
-      confirmed_minor_by_currency: confirmed,
-      rpku_minor_by_currency: rpku,
+      confirmed_minor_by_currency:  confirmed,
+      pending_minor_by_currency:    pending,
+      attributed_minor_by_currency: attributed,
+      rpku_minor_by_currency:            rpku,
+      rpku_attributed_minor_by_currency: rpkuAttributed,
+      is_immature,
     });
   }
   return out;
