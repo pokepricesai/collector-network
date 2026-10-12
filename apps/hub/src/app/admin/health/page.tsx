@@ -1,9 +1,12 @@
+import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { EmptyState, Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
+import { EmptyPanelNotice } from '@/components/admin/EmptyPanelNotice';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { fetchFreshness } from '@/server/analytics/dashboard';
 import { formatRelative } from '@/lib/format';
+import { jobDisplayName, siteDisplayName } from '@/lib/display-names';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -145,25 +148,29 @@ export default async function HealthPage() {
         />
       </Panel>
 
-      <Panel title="Recent job runs" eyebrow="Jobs">
-        <Table
-          columns={[
-            { key: 'name',   header: 'Job',       render: (j: JobRow) => <span style={{ fontWeight: 600 }}>{j.job_name}</span> },
-            { key: 'site',   header: 'Site',      render: (j) => <span className="col-dim">{j.site_id ? (sitesById.get(j.site_id)?.shortName ?? '—') : 'Network'}</span> },
-            { key: 'status', header: 'Status',    render: (j) => <StatusBadge state={j.status} /> },
-            { key: 'rows',   header: 'Rows',      className: 'col-num', render: (j) => `${j.rows_inserted + j.rows_updated}` },
-            { key: 'bq',     header: 'BQ bytes',  className: 'col-num', render: (j) => {
-              const m = j.metadata ?? {};
-              const fmt = (m as { bq_bytes_billed_fmt?: string }).bq_bytes_billed_fmt;
-              return fmt ? <span style={{ fontSize: 11 }}>{fmt}</span> : <span className="col-dim">—</span>;
-            } },
-            { key: 'started',header: 'Started',   render: (j) => formatRelative(j.started_at) },
-            { key: 'took',   header: 'Took',      className: 'col-num', render: (j) => j.finished_at ? `${Math.round((new Date(j.finished_at).getTime() - new Date(j.started_at).getTime()) / 1000)}s` : '…' },
-            { key: 'err',    header: 'Error',     render: (j) => j.error_summary ? <span style={{ color: '#8A1C27', fontSize: 11 }}>{j.error_summary.slice(0, 100)}</span> : <span className="col-dim">—</span> },
-          ]}
-          rows={rows}
-          empty={<EmptyState title="No jobs yet" description="Job runs appear here as GSC + GA4 syncs execute." tone="muted" />}
-        />
+      <Panel
+        title="Recent job runs"
+        eyebrow={`${rows.length} runs`}
+        actions={<Link href="/admin/jobs" className="ui-btn ui-btn--secondary ui-btn--sm">Open Jobs</Link>}
+      >
+        {/* Full job-control lives on /admin/jobs. This panel only
+            shows the last 10 recent runs as a quick audit; drilling
+            in happens on the Jobs page. */}
+        {rows.length === 0 ? (
+          <EmptyPanelNotice>No jobs have run yet.</EmptyPanelNotice>
+        ) : (
+          <Table
+            columns={[
+              { key: 'name',   header: 'Job',       render: (j: JobRow) => <span style={{ fontWeight: 600 }}>{jobDisplayName(j.job_name)}</span> },
+              { key: 'site',   header: 'Site',      render: (j) => <span className="col-dim">{j.site_id ? siteDisplayName(sitesById.get(j.site_id)?.slug, 'Network') : 'Network'}</span> },
+              { key: 'status', header: 'Status',    render: (j) => <StatusBadge state={j.status} /> },
+              { key: 'started',header: 'Started',   render: (j) => formatRelative(j.started_at) },
+              { key: 'took',   header: 'Took',      className: 'col-num', render: (j) => j.finished_at ? `${Math.round((new Date(j.finished_at).getTime() - new Date(j.started_at).getTime()) / 1000)}s` : '…' },
+              { key: 'err',    header: 'Detail',    render: (j) => j.error_summary ? <span style={{ color: 'var(--failed, #8A1C27)', fontSize: 11 }}>{j.error_summary.slice(0, 100)}</span> : <span className="col-dim" style={{ fontSize: 11 }}>+{j.rows_inserted} / ~{j.rows_updated}</span> },
+            ]}
+            rows={rows.slice(0, 10)}
+          />
+        )}
       </Panel>
     </AdminShell>
   );
