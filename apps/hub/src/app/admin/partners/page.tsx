@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { Panel, SectionHeader, StatusBadge, Table } from '@/components/admin/admin-ui';
+import { EmptyPanelNotice } from '@/components/admin/EmptyPanelNotice';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { listPartners } from '@/server/partners/queries';
@@ -32,32 +33,56 @@ export default async function PartnersPage({ searchParams }: PageProps) {
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/partners">
       <SectionHeader
-        eyebrow="Partners"
+        eyebrow="Commercial"
         title="Partner CRM"
         description="Prospects, active sponsors, grading-company contacts, LGS and marketplace integrations. Pipeline stages are human-driven — the system logs state, it never contacts anyone."
         actions={
           <span style={{ display: 'inline-flex', gap: 8 }}>
-            <Link className="status-badge status-active" href="/admin/partners/new">+ Partner</Link>
-            <Link className="status-badge status-info" href="/admin/partners/offers">Offer catalogue</Link>
-            <Link className="status-badge status-info" href="/admin/partners/sponsorships">Sponsorships</Link>
+            <Link className="ui-btn ui-btn--primary ui-btn--sm" href="/admin/partners/new">+ Partner</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/offers">Offer catalogue</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/sponsorships">Sponsorships</Link>
           </span>
         }
       />
-      <Panel title="Pipeline" eyebrow="Stage counts">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {PIPELINE_STAGES.map((s) => {
-            const n = stageCounts.get(s) ?? 0;
-            return (
-              <Link key={s} href={`/admin/partners?status=${s}`} style={{ textDecoration: 'none' }}>
-                <span className={`status-badge status-${s === 'won' ? 'success' : s === 'lost' ? 'failed' : s === 'archived' ? 'dismissed' : 'info'}`} style={{ cursor: 'pointer' }}>
-                  {s.replace(/_/g, ' ')} · {n}
-                </span>
-              </Link>
-            );
-          })}
-          <Link href="/admin/partners" style={{ marginLeft: 8, fontSize: 12 }}>reset</Link>
-        </div>
-      </Panel>
+      {stageCounts.size === 0 ? (
+        <Panel title="Pipeline">
+          <EmptyPanelNotice>
+            No partners yet. Click <strong>+ Partner</strong> at the top-right to add one, or jump to the <Link href="/admin/partners/offers">Offer catalogue</Link> and <Link href="/admin/partners/sponsorships">Sponsorships</Link>.
+          </EmptyPanelNotice>
+        </Panel>
+      ) : (
+        <Panel title="Pipeline" eyebrow="Stage counts">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {PIPELINE_STAGES.filter((s) => (stageCounts.get(s) ?? 0) > 0).map((s) => {
+              const n = stageCounts.get(s) ?? 0;
+              return (
+                <Link key={s} href={`/admin/partners?status=${s}`} style={{ textDecoration: 'none' }}>
+                  <span className={`status-badge status-${s === 'won' ? 'success' : s === 'lost' ? 'failed' : s === 'archived' ? 'dismissed' : 'info'}`} style={{ cursor: 'pointer' }}>
+                    {s.replace(/_/g, ' ')} · {n}
+                  </span>
+                </Link>
+              );
+            })}
+            {Array.from(stageCounts.entries()).some(([_, n]) => n > 0) && (
+              <Link href="/admin/partners" style={{ marginLeft: 8, fontSize: 12 }}>reset</Link>
+            )}
+          </div>
+          {PIPELINE_STAGES.every((s) => (stageCounts.get(s) ?? 0) === 0) === false && (
+            <details style={{ marginTop: 10, fontSize: 11, color: 'var(--admin-text-muted)' }}>
+              <summary style={{ cursor: 'pointer' }}>All stages (including empty)</summary>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {PIPELINE_STAGES.map((s) => (
+                  <Link key={`all-${s}`} href={`/admin/partners?status=${s}`} style={{ textDecoration: 'none' }}>
+                    <span className="status-badge status-dismissed" style={{ cursor: 'pointer', opacity: 0.65 }}>
+                      {s.replace(/_/g, ' ')} · {stageCounts.get(s) ?? 0}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </details>
+          )}
+        </Panel>
+      )}
       <Panel title={`Partners (${partners.length})`} eyebrow={sp.status ? `Filter: ${sp.status}` : 'All stages'}>
         <Table
           rows={partners}

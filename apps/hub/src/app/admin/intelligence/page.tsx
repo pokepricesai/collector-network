@@ -1,11 +1,14 @@
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { Notice, Panel, SectionHeader, StatusBadge } from '@/components/admin/admin-ui';
+import { EmptyPanelNotice } from '@/components/admin/EmptyPanelNotice';
+import { FreshnessBadge, freshnessState, relativeLabel } from '@/components/admin/FreshnessBadge';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { listIntelligenceInbox, type IntelligenceRowRead } from '@/server/intelligence/queries';
 import { PRIORITY_FORMULA_LABEL, priorityBand } from '@/server/intelligence/scoring';
 import type { IntelligenceCategory, IntelligenceStatus, SiteSlug } from '@/server/intelligence/types';
+import { intelTypeLabel, siteDisplayName } from '@/lib/display-names';
 import {
   createTaskFromItemAction, snoozeItemAction, dismissItemAction, resolveItemAction, refreshIntelligenceAction,
 } from './actions';
@@ -14,13 +17,13 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const SITE_FILTERS: Array<{ label: string; value: '' | 'network' | SiteSlug }> = [
-  { label: 'All sites',       value: '' },
-  { label: 'Network-wide',    value: 'network' },
-  { label: 'Pokemon',         value: 'pokemon' },
-  { label: 'MTG',             value: 'mtg' },
-  { label: 'YGO',             value: 'ygo' },
-  { label: 'One Piece',       value: 'onepiece' },
-  { label: 'Lorcana',         value: 'lorcana' },
+  { label: 'All',           value: '' },
+  { label: 'Network-wide',  value: 'network' },
+  { label: 'PokePrices',    value: 'pokemon' },
+  { label: 'MTGPrices',     value: 'mtg' },
+  { label: 'YGOPrices',     value: 'ygo' },
+  { label: 'OnePiecePrices',value: 'onepiece' },
+  { label: 'LorcanaPrices', value: 'lorcana' },
 ];
 
 const CATEGORY_FILTERS: Array<{ label: string; value: '' | IntelligenceCategory }> = [
@@ -60,43 +63,67 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
     siteParam === 'network' ? null :
     (siteParam as SiteSlug);
 
-  const { rows, summary, error: queryError } = await listIntelligenceInbox(sb, {
-    site_slug,
-    category: categoryParam || null,
-    statuses: statusesByView[statusParam] ?? statusesByView['active']!,
-    limit: 200,
-  });
+  const [{ rows, summary, error: queryError }, latestRunRow] = await Promise.all([
+    listIntelligenceInbox(sb, {
+      site_slug,
+      category: categoryParam || null,
+      statuses: statusesByView[statusParam] ?? statusesByView['active']!,
+      limit: 200,
+    }),
+    sb.from('network_job_runs')
+      .select('finished_at')
+      .eq('job_name', 'intelligence.refresh')
+      .order('started_at', { ascending: false })
+      .limit(1).maybeSingle(),
+  ]);
+
+  const lastRefreshIso = (latestRunRow.data as { finished_at: string | null } | null)?.finished_at ?? null;
+  const refreshState = freshnessState(lastRefreshIso, { freshHours: 26, agingHours: 36 });
+
+  // Three deterministic sections.
+  const needsAction = rows.filter((r) => r.priority_score >= 70);
+  const opportunities = rows.filter((r) => r.priority_score >= 45 && r.priority_score < 70);
+  const backlog = rows.filter((r) => r.priority_score < 45);
 
   const headline = summary.total === 0
     ? statusParam === 'active' ? 'Nothing worth your attention right now.' : `No ${statusParam} items.`
-    : `${summary.total} thing${summary.total === 1 ? '' : 's'} worth your attention.`;
+    : `${summary.total} item${summary.total === 1 ? '' : 's'} in view.`;
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/intelligence">
       <SectionHeader
         eyebrow="Collector Network OS · Intelligence"
-        title="Intelligence inbox"
+        title="Intelligence Inbox"
         description={<>Deterministic ranked view of the highest-value signals across all five sites. Scores come from the engine, not an LLM. {headline}</>}
         actions={
-          <form action={refreshIntelligenceAction}>
-            <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">Refresh now</button>
-          </form>
+          <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+            <FreshnessBadge state={refreshState} label={relativeLabel(lastRefreshIso)} />
+            <form action={refreshIntelligenceAction}>
+              <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">Refresh now</button>
+            </form>
+          </div>
         }
       />
 
-      <Panel title="Overview" eyebrow={`Formula · ${PRIORITY_FORMULA_LABEL}`}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+      {/* ─── Overview ─── */}
+      <Panel title="Overview">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
           <SummaryKV label="Critical" value={summary.critical.toString()} tone={summary.critical > 0 ? 'warning' : 'muted'} />
           <SummaryKV label="High" value={summary.high.toString()} tone={summary.high > 0 ? 'warning' : 'muted'} />
           <SummaryKV label="Opportunities" value={summary.opportunities.toString()} tone="success" />
           <SummaryKV label="Risks + warnings" value={summary.risks.toString()} tone={summary.risks > 0 ? 'warning' : 'muted'} />
           <SummaryKV label="Tasks created" value={summary.tasks_created.toString()} tone="muted" />
-          <SummaryKV label="Total shown" value={summary.total.toString()} tone="muted" />
         </div>
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 11.5, color: 'var(--admin-text-muted)' }}>How priority is calculated</summary>
+          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+            Formula: <code>{PRIORITY_FORMULA_LABEL}</code>. Each rule produces 0-100 impact/confidence/urgency/effort; priority is their weighted mean. Ease = 100 − effort.
+          </div>
+        </details>
       </Panel>
 
       {/* ─── Filters ─── */}
-      <Panel title="Filters" eyebrow="GET params; shareable">
+      <Panel title="Filters" eyebrow="Shareable via URL">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
           <FilterGroup label="Site">
             {SITE_FILTERS.map((f) => (
@@ -131,123 +158,177 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
       )}
 
       {!queryError && rows.length === 0 && (
-        <Notice tone="info">
+        <EmptyPanelNotice>
           {statusParam === 'active'
             ? <>No intelligence items yet. Click <strong>Refresh now</strong> at the top to generate the first batch, or wait for the scheduled run.</>
             : <>No items for the current filters. Try widening the site/category filters.</>}
-        </Notice>
+        </EmptyPanelNotice>
       )}
 
-      {rows.map((row, i) => (
-        <IntelligenceCard key={row.id} rank={i + 1} row={row} />
-      ))}
+      {/* ─── Sections ─── */}
+      {needsAction.length > 0 && (
+        <IntelSection title="Needs action now" eyebrow={`${needsAction.length} · priority ≥ 70`} rows={needsAction} />
+      )}
+      {opportunities.length > 0 && (
+        <IntelSection title="Opportunities" eyebrow={`${opportunities.length} · priority 45-69`} rows={opportunities} />
+      )}
+      {backlog.length > 0 && (
+        <IntelSection title="Backlog" eyebrow={`${backlog.length} · priority < 45`} rows={backlog} collapsibleAfter={10} />
+      )}
     </AdminShell>
   );
 }
 
-function IntelligenceCard({ rank, row }: { rank: number; row: IntelligenceRowRead }) {
+function IntelSection({ title, eyebrow, rows, collapsibleAfter }: { title: string; eyebrow: string; rows: IntelligenceRowRead[]; collapsibleAfter?: number }) {
+  const visible = collapsibleAfter ? rows.slice(0, collapsibleAfter) : rows;
+  const hidden = collapsibleAfter ? rows.slice(collapsibleAfter) : [];
+  return (
+    <Panel title={title} eyebrow={eyebrow}>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {visible.map((row) => <IntelCard key={row.id} row={row} />)}
+      </ul>
+      {hidden.length > 0 && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Show {hidden.length} more</summary>
+          <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
+            {hidden.map((row) => <IntelCard key={row.id} row={row} />)}
+          </ul>
+        </details>
+      )}
+    </Panel>
+  );
+}
+
+function IntelCard({ row }: { row: IntelligenceRowRead }) {
   const band = priorityBand(row.priority_score ?? 0);
   const signalBadge = row.signal_kind === 'opportunity' ? 'info'
                    : row.signal_kind === 'positive'    ? 'success'
                    : row.signal_kind === 'risk'        ? 'failed'
                    : row.signal_kind === 'warning'     ? 'warning'
                    :                                      'disabled';
-  const siteLabel = row.network_sites?.slug ?? 'network';
-  // expected_upside is jsonb — defend against unexpected shapes
-  // (e.g. a string or array sneaking in from a legacy row).
+  const slug = row.network_sites?.slug ?? 'network';
+  const siteDisplay = siteDisplayName(slug, 'Network');
   const upside: { label?: string; rationale?: string } | null =
     row.expected_upside && typeof row.expected_upside === 'object' && !Array.isArray(row.expected_upside)
       ? (row.expected_upside as { label?: string; rationale?: string })
       : null;
-  const upsideLabel     = typeof upside?.label === 'string' ? upside.label : null;
-  const upsideRationale = typeof upside?.rationale === 'string' ? upside.rationale : null;
+  const upsideLabel = typeof upside?.label === 'string' ? upside.label : null;
+
+  // Contextual action target.
+  const actionLink =
+    row.category === 'indexing' ? { href: '/admin/seo/sitemaps', label: 'Open sitemaps' }
+    : (row.type === 'failed_job' || row.type === 'stale_job' || row.type === 'stale_job_network') ? { href: '/admin/jobs', label: 'Open jobs' }
+    : (row.category === 'seo' || row.category === 'content') ? { href: '/admin/seo/opportunities', label: 'Inspect opportunity' }
+    : null;
+
   return (
-    <Panel
-      title={`#${rank} · ${siteLabel} · ${row.title}`}
-      eyebrow={`${row.category.toUpperCase()} · ${row.type}`}
-      actions={<PriorityPill band={band} value={row.priority_score} />}
-    >
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-        <StatusBadge state={signalBadge} label={row.signal_kind ?? 'unknown'} />
-        {row.status === 'task_created' && <StatusBadge state="success" label={`task · ${row.task_id?.slice(0, 8) ?? ''}`} />}
-        {row.status === 'snoozed' && row.snoozed_until && (
-          <StatusBadge state="warning" label={`snoozed until ${safeDate(row.snoozed_until)}`} />
-        )}
-      </div>
-
-      <p style={{ fontSize: 13.5, lineHeight: 1.55, margin: '0 0 8px' }}>{row.summary || '(no summary)'}</p>
-      <p style={{ fontSize: 13, lineHeight: 1.55, margin: '0 0 10px', color: 'var(--admin-text-muted)' }}>
-        <strong>Recommendation:</strong> {row.recommended_action || '(no recommendation)'}
-      </p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 10 }}>
-        <ScoreKV label="Impact" value={row.impact_score ?? 0} />
-        <ScoreKV label="Confidence" value={row.confidence_score ?? 0} />
-        <ScoreKV label="Urgency" value={row.urgency_score ?? 0} />
-        <ScoreKV label="Effort" value={row.effort_score ?? 0} />
-      </div>
-
-      {upsideLabel && (
-        <p style={{ fontSize: 12.5, margin: '0 0 10px', color: 'var(--admin-text-muted)' }}>
-          <strong>Potential:</strong> {upsideLabel}
-          {upsideRationale && <> <span className="col-dim">({upsideRationale})</span></>}
+    <li style={{
+      padding: '12px 0',
+      borderBottom: '1px solid var(--admin-border)',
+      display: 'grid',
+      gridTemplateColumns: 'auto 1fr auto',
+      gap: 10,
+      alignItems: 'start',
+    }}>
+      <PriorityPill band={band} value={row.priority_score} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <StatusBadge state={signalBadge} label={siteDisplay} />
+          <StatusBadge state="info" label={intelTypeLabel(row.type)} />
+          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{row.title}</span>
+          {row.status === 'task_created' && <StatusBadge state="success" label="task created" />}
+          {row.status === 'snoozed' && row.snoozed_until && (
+            <StatusBadge state="warning" label={`snoozed to ${safeDate(row.snoozed_until)}`} />
+          )}
+        </div>
+        <p style={{ fontSize: 12.5, margin: '4px 0 4px', color: 'var(--admin-text-muted)', lineHeight: 1.45 }}>
+          {row.summary || '(no summary)'}
         </p>
-      )}
+        {row.recommended_action && (
+          <p style={{ fontSize: 12, margin: '0 0 4px' }}>
+            <strong>Action:</strong> {row.recommended_action}
+          </p>
+        )}
+        {upsideLabel && (
+          <p style={{ fontSize: 12, margin: 0, color: 'var(--admin-text-muted)' }}>
+            <strong>Potential:</strong> {upsideLabel}
+          </p>
+        )}
 
-      {row.status === 'open' && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-          <form action={createTaskFromItemAction}><input type="hidden" name="item_id" value={row.id} /><button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">Create task</button></form>
-          <SnoozeMenu id={row.id} />
-          <form action={dismissItemAction}><input type="hidden" name="item_id" value={row.id} /><button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm">Dismiss</button></form>
-          <form action={resolveItemAction}><input type="hidden" name="item_id" value={row.id} /><button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm">Resolve</button></form>
-        </div>
-      )}
-      {row.status === 'task_created' && row.task_id && (
-        <div style={{ fontSize: 12.5, marginTop: 8 }}>
-          Task created · <Link href={`/admin/tasks?open=${row.task_id}`}><code>{row.task_id.slice(0, 12)}…</code></Link>
-          <> · </>
-          <form action={resolveItemAction} style={{ display: 'inline' }}>
-            <input type="hidden" name="item_id" value={row.id} />
-            <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm">Mark resolved</button>
-          </form>
-        </div>
-      )}
-
-      <details style={{ marginTop: 10 }}>
-        <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Evidence + score breakdown + source</summary>
-        <div style={{ marginTop: 8 }}>
-          <h4 className="admin-eyebrow" style={{ marginBottom: 4 }}>Evidence</h4>
-          <pre style={{ background: 'var(--admin-surface-strong)', padding: 10, borderRadius: 6, fontSize: 11, maxHeight: 260, overflow: 'auto' }}>
-            {safeStringify(row.evidence)}
-          </pre>
-          <h4 className="admin-eyebrow" style={{ marginTop: 10, marginBottom: 4 }}>Source</h4>
-          <div style={{ fontSize: 12 }}>
-            <div><strong>source_type:</strong> <code>{row.source_type}</code></div>
-            <div><strong>source_id:</strong> <code>{row.source_id ?? '—'}</code></div>
-            <div><strong>source_key:</strong> <code>{row.source_key}</code></div>
-            <div><strong>first_detected_at:</strong> <code>{row.first_detected_at}</code></div>
-            <div><strong>last_detected_at:</strong> <code>{row.last_detected_at}</code></div>
+        {row.status === 'open' && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
+            <form action={createTaskFromItemAction}>
+              <input type="hidden" name="item_id" value={row.id} />
+              <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">Create task</button>
+            </form>
+            <details style={{ display: 'inline-block' }}>
+              <summary className="ui-btn ui-btn--secondary ui-btn--sm" style={{ cursor: 'pointer', fontSize: 11 }}>More…</summary>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <SnoozeMenuInline id={row.id} />
+                <form action={dismissItemAction}>
+                  <input type="hidden" name="item_id" value={row.id} />
+                  <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Dismiss</button>
+                </form>
+                <form action={resolveItemAction}>
+                  <input type="hidden" name="item_id" value={row.id} />
+                  <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Mark resolved</button>
+                </form>
+              </div>
+            </details>
           </div>
-        </div>
-      </details>
-    </Panel>
+        )}
+        {row.status === 'task_created' && row.task_id && (
+          <div style={{ fontSize: 12, marginTop: 8 }}>
+            Task created · <Link href={`/admin/tasks?open=${row.task_id}`}>view task</Link>
+            {' · '}
+            <form action={resolveItemAction} style={{ display: 'inline' }}>
+              <input type="hidden" name="item_id" value={row.id} />
+              <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Mark resolved</button>
+            </form>
+          </div>
+        )}
+
+        <details style={{ marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 11.5, color: 'var(--admin-text-muted)' }}>Score details, evidence &amp; source</summary>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 6, marginBottom: 10 }}>
+              <ScoreKV label="Impact"     value={row.impact_score ?? 0} />
+              <ScoreKV label="Confidence" value={row.confidence_score ?? 0} />
+              <ScoreKV label="Urgency"    value={row.urgency_score ?? 0} />
+              <ScoreKV label="Effort"     value={row.effort_score ?? 0} />
+            </div>
+            <h4 className="admin-eyebrow" style={{ marginBottom: 4 }}>Evidence</h4>
+            <pre style={{ background: 'var(--admin-surface-strong)', padding: 10, borderRadius: 6, fontSize: 11, maxHeight: 260, overflow: 'auto' }}>
+              {safeStringify(row.evidence)}
+            </pre>
+            <h4 className="admin-eyebrow" style={{ marginTop: 10, marginBottom: 4 }}>Source</h4>
+            <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+              <div><code>{row.source_type}</code> · <code>{row.source_key}</code></div>
+              <div>first detected <code>{row.first_detected_at}</code> · last detected <code>{row.last_detected_at}</code></div>
+            </div>
+          </div>
+        </details>
+      </div>
+      {actionLink && (
+        <Link href={actionLink.href} className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+          {actionLink.label}
+        </Link>
+      )}
+    </li>
   );
 }
 
-function SnoozeMenu({ id }: { id: string }) {
+function SnoozeMenuInline({ id }: { id: string }) {
   return (
-    <details style={{ display: 'inline-block' }}>
-      <summary className="ui-btn ui-btn--secondary ui-btn--sm" style={{ cursor: 'pointer' }}>Snooze…</summary>
-      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        {[1, 7, 30].map((days) => (
-          <form key={days} action={snoozeItemAction}>
-            <input type="hidden" name="item_id" value={id} />
-            <input type="hidden" name="days" value={days} />
-            <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm">{days}d</button>
-          </form>
-        ))}
-      </div>
-    </details>
+    <>
+      {[1, 7, 30].map((days) => (
+        <form key={days} action={snoozeItemAction} style={{ display: 'inline' }}>
+          <input type="hidden" name="item_id" value={id} />
+          <input type="hidden" name="days" value={days} />
+          <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Snooze {days}d</button>
+        </form>
+      ))}
+    </>
   );
 }
 
@@ -259,27 +340,23 @@ function PriorityPill({ band, value }: { band: 'critical' | 'high' | 'normal' | 
                           'var(--admin-text-muted, #6b7280)';
   return (
     <div style={{
-      display: 'inline-flex', alignItems: 'baseline', gap: 6,
-      padding: '4px 10px', borderRadius: 999,
+      display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+      padding: '4px 8px', borderRadius: 8,
       border: `1px solid ${color}`, color,
-      fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
+      fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+      minWidth: 46,
     }}>
-      <span style={{ textTransform: 'uppercase' }}>{band}</span>
-      <span style={{ fontSize: 14 }}>{value}</span>
+      <span style={{ fontSize: 15, lineHeight: 1 }}>{value}</span>
+      <span style={{ textTransform: 'uppercase', fontSize: 9, marginTop: 1 }}>{band}</span>
     </div>
   );
 }
 
 function ScoreKV({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{
-      border: '1px solid var(--admin-border)',
-      borderRadius: 'var(--radius-md)',
-      padding: '6px 10px',
-      background: 'var(--admin-surface)',
-    }}>
-      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--admin-text-subtle)', fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 700 }}>{value}</div>
+    <div style={{ border: '1px solid var(--admin-border)', borderRadius: 6, padding: '4px 8px', background: 'var(--admin-surface)' }}>
+      <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--admin-text-subtle)', fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{value}</div>
     </div>
   );
 }
@@ -308,6 +385,7 @@ function FilterGroup({ label, children }: { label: string; children: React.React
     </div>
   );
 }
+
 function FilterLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
     <Link

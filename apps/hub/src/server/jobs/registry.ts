@@ -241,6 +241,17 @@ export interface JobRunResult {
   metadata: Record<string, unknown>;
 }
 
+// How the operator should think about this job. Drives sorting +
+// visual quietness on /admin/jobs. 'deprecated' entries will not
+// render on the main panel.
+export type JobClassification =
+  | 'scheduled'      // runs daily via Vercel cron
+  | 'manual'         // operator-triggered when needed
+  | 'one_off'        // single-shot setup / migration
+  | 'backfill'       // historical catch-up (90-day etc)
+  | 'diagnostic'     // read-only probe for debugging
+  | 'deprecated';    // kept for historical audit only
+
 export interface JobDefinition {
   slug: string;
   jobName: string;
@@ -248,6 +259,13 @@ export interface JobDefinition {
   label: string;
   description: string;
   requiresConfirmation?: boolean;
+  // Operator classification. Omit → defaults to 'scheduled' for
+  // ingest + analysis entries, 'manual' for ops entries. Set
+  // explicitly for one-offs, backfills, diagnostics, deprecated.
+  classification?: JobClassification;
+  // Human-readable schedule hint, e.g. 'Daily 02:30 UTC'. Deterministic;
+  // the actual cron lives in vercel.json.
+  scheduleLabel?: string;
   // Null = don't wrap in an outer job_run (inner functions manage
   // their own entries, so wrapping would double-count).
   wrapsOuter: boolean;
@@ -344,6 +362,8 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'ingest',
     label: 'GSC sync (incremental)',
     description: 'Sliding-window re-fetch of GSC metrics across all five sites. Creates one job_run per property. ~30s typical.',
+    classification: 'scheduled',
+    scheduleLabel: 'Daily 02:15 UTC',
     wrapsOuter: false,
     run: async (sb) => {
       const r = await syncAllGsc(sb, new Date());
@@ -358,7 +378,9 @@ export const JOBS: Record<string, JobDefinition> = {
     jobName: 'ga4.incremental',
     group: 'ingest',
     label: 'GA4 sync (incremental)',
-    description: 'Sliding-window re-fetch of GA4 daily metrics across all five sites.',
+    description: 'Sliding-window re-fetch of GA4 daily metrics across all five sites. Also triggers the GA4 country-dimension sync in the same cron run.',
+    classification: 'scheduled',
+    scheduleLabel: 'Daily 02:30 UTC',
     wrapsOuter: false,
     run: async (sb) => {
       const r = await syncAllGa4(sb, new Date());
@@ -373,7 +395,9 @@ export const JOBS: Record<string, JobDefinition> = {
     jobName: 'ga4.country.incremental',
     group: 'ingest',
     label: 'GA4 country-dimension sync',
-    description: 'Pulls GA4 traffic broken down by country into network_ga4_country_daily. Powers the Singapore-exclusion reporting layer. 3-day sliding window.',
+    description: 'Pulls GA4 traffic broken down by country into network_ga4_country_daily. Powers the Singapore-exclusion reporting layer. 3-day sliding window. Chained into the ga4.sync cron since Phase 2.',
+    classification: 'scheduled',
+    scheduleLabel: 'Daily 02:30 UTC (chained to GA4)',
     wrapsOuter: false,
     run: async (sb) => {
       const r = await syncAllGa4Country(sb, new Date(), 3);
@@ -386,6 +410,7 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'ingest',
     label: 'GA4 country-dimension 90-day backfill',
     description: 'One-shot: fetches 90 days of per-country GA4 breakdown for all five sites. 15-day chunks. Idempotent on (site, date, country).',
+    classification: 'backfill',
     requiresConfirmation: true,
     wrapsOuter: false,
     run: async (sb) => {
@@ -399,6 +424,8 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'analysis',
     label: 'SEO opportunities',
     description: 'Deterministic SEO opportunity rules over 28d GSC data. Should run after a GSC sync.',
+    classification: 'scheduled',
+    scheduleLabel: 'Daily 03:00 UTC',
     wrapsOuter: true,
     run: async (sb) => {
       const r = await generateOpportunities(sb, new Date());
@@ -521,6 +548,7 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'ops',
     label: 'BigQuery diagnostic probe',
     description: 'Low-cost probe: confirms the WIF chain to BigQuery works and pokeprices-seo datasets are visible. Scans <100MB.',
+    classification: 'diagnostic',
     wrapsOuter: true,
     run: async (sb) => {
       const r = await bigqueryDiagnostic();
@@ -568,6 +596,8 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'ingest',
     label: 'Impact EPN daily sync (7-day overlap)',
     description: '/Actions + /ActionUpdates for the last 7 days. SharedId → source routing. Upserts via impact:epn:<Id>. Scheduled 06:00 UTC daily.',
+    classification: 'scheduled',
+    scheduleLabel: 'Daily 06:00 UTC',
     wrapsOuter: true,
     run: async (sb) => summariseImpactIngest(await ingestImpactEpn(sb, { totalDays: 7, windowDays: 7 })),
   },
@@ -577,6 +607,7 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'ingest',
     label: 'Impact EPN full backfill (365 days)',
     description: 'Re-fetches the entire available Impact Action history. Idempotent. Should rarely be needed after the initial cutover.',
+    classification: 'backfill',
     requiresConfirmation: true,
     wrapsOuter: true,
     run: async (sb) => summariseImpactIngest(await ingestImpactEpn(sb, { totalDays: 365, windowDays: 45 })),
@@ -592,6 +623,7 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'analysis',
     label: 'Content opportunity refresh (placeholder)',
     description: 'Rescores known content ideas against freshly-synced GSC + market data. Real executor lands in Checkpoint B.',
+    classification: 'deprecated',
     wrapsOuter: true,
     run: async () => ({
       rowsExamined: 0,
@@ -605,6 +637,7 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'ingest',
     label: 'Content autopilot run (placeholder)',
     description: 'Top-of-funnel orchestrator: pick next opportunity, build evidence pack, reserve budget, generate, QA, publish. Real executor lands in Checkpoint B.',
+    classification: 'deprecated',
     requiresConfirmation: true,
     wrapsOuter: true,
     run: async () => ({
@@ -638,6 +671,8 @@ export const JOBS: Record<string, JobDefinition> = {
     group: 'analysis',
     label: 'Intelligence inbox refresh',
     description: 'Re-runs the deterministic intelligence engine. Upserts network_intelligence_items from upstream signals; auto-resolves items whose condition no longer applies. No AI, no external action.',
+    classification: 'scheduled',
+    scheduleLabel: 'Daily 06:30 UTC (after revenue)',
     wrapsOuter: true,
     run: async (sb) => {
       const r = await runIntelligenceEngine(sb);
@@ -670,8 +705,9 @@ export const JOBS: Record<string, JobDefinition> = {
     slug: 'brief.build',
     jobName: 'brief.build',
     group: 'analysis',
-    label: 'Daily operating brief',
-    description: 'Composes today\'s brief: network yesterday, notable changes, top 5 actions. Persists to network_daily_briefs so /admin reads instantly.',
+    label: 'Daily operating brief (legacy)',
+    description: 'Legacy pre-Morning-Brief composer that persisted into network_daily_briefs. The dashboard panel that read this cache was removed in the Phase 1 polish pass; nothing now consumes the output. Kept callable for audit; cron scheduling removed in Phase 2.',
+    classification: 'deprecated',
     wrapsOuter: true,
     run: async (sb) => {
       const b = await buildBrief(sb, new Date());

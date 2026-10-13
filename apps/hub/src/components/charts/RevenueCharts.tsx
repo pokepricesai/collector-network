@@ -123,27 +123,61 @@ export function RpkuChart({
   data,
   currency,
 }: {
-  data: Array<{ bucket: string; users: number; rpku_minor: number }>;
+  data: Array<{ bucket: string; users: number; rpku_minor: number; rpku_attributed_minor?: number; is_immature?: boolean }>;
   currency: string;
 }) {
+  // Two series:
+  //   confirmed      — realised RPKU; solid line.
+  //   attributed     — confirmed + pending; dashed line labelled
+  //                    'provisional' on immature months.
+  // Operators see realised efficiency without the pending-approval
+  // lag collapsing the recent months to zero.
   const rows = data.map((d) => ({
     month: d.bucket,
-    rpku: d.rpku_minor / 100,
+    confirmed:   d.rpku_minor / 100,
+    attributed:  (d.rpku_attributed_minor ?? d.rpku_minor) / 100,
     users: d.users,
+    is_immature: d.is_immature ?? false,
   }));
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={240}>
       <LineChart data={rows} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={COLOURS.grid} />
         <XAxis dataKey="month" tick={{ fill: COLOURS.axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: COLOURS.grid }} />
         <YAxis tick={{ fill: COLOURS.axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: COLOURS.grid }} tickFormatter={(v) => fmtMoney(v * 100, currency)} />
         <Tooltip
-          formatter={(v, name) => (name === 'rpku' ? fmtMoney(Number(v) * 100, currency) : Number(v).toLocaleString())}
+          formatter={(v, name) => {
+            const label =
+              name === 'confirmed'  ? `Realised (confirmed) · ${currency}`
+              : name === 'attributed' ? `Provisional (attributed) · ${currency}`
+              : 'User-days';
+            if (name === 'confirmed' || name === 'attributed') return [fmtMoney(Number(v) * 100, currency), label];
+            return [Number(v).toLocaleString(), label];
+          }}
           contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #E6E6E2' }}
-          labelFormatter={(l) => `${l}`}
+          labelFormatter={(l, payload) => {
+            const point = payload?.[0]?.payload as { is_immature?: boolean } | undefined;
+            return point?.is_immature ? `${l} · provisional` : `${l}`;
+          }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Line type="monotone" dataKey="rpku" stroke={COLOURS.accent} name={`Revenue per 1k users (${currency})`} strokeWidth={2} dot={{ r: 3 }} />
+        <Line
+          type="monotone"
+          dataKey="attributed"
+          stroke={COLOURS.pending}
+          strokeWidth={2}
+          strokeDasharray="4 3"
+          name={`Attributed per 1k user-days (${currency})`}
+          dot={{ r: 3 }}
+        />
+        <Line
+          type="monotone"
+          dataKey="confirmed"
+          stroke={COLOURS.accent}
+          strokeWidth={2}
+          name={`Confirmed per 1k user-days (${currency})`}
+          dot={{ r: 3 }}
+        />
       </LineChart>
     </ResponsiveContainer>
   );

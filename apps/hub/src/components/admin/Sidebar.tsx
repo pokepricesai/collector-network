@@ -5,23 +5,28 @@ import Link from 'next/link';
 // inside that module's own page nav (/admin/seo lists Pages,
 // Queries, Opportunities etc. with its own tabs).
 
+// Sidebar reflects the real operator system post-consolidation:
+//   • Alerts is now part of Intelligence (same engine) — removed.
+//   • Automation duplicated Jobs — removed from primary nav.
+//     Both tables / backends remain; use /admin/automation directly
+//     if you need the audit view.
 const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string }> }> = [
   {
     label: 'Overview',
     items: [
       { href: '/admin/brief',        label: 'Morning Brief' },
-      { href: '/admin',              label: 'Dashboard' },
-      { href: '/admin/intelligence', label: 'Intelligence' },
+      { href: '/admin',              label: 'Network Overview' },
       { href: '/admin/sites',        label: 'Sites' },
     ],
   },
   {
     label: 'Growth',
     items: [
-      { href: '/admin/seo',     label: 'SEO' },
-      { href: '/admin/content', label: 'Content' },
-      { href: '/admin/social',  label: 'Social' },
-      { href: '/admin/newsletter', label: 'Newsletter' },
+      { href: '/admin/intelligence', label: 'Intelligence' },
+      { href: '/admin/seo',          label: 'SEO' },
+      { href: '/admin/content',      label: 'Content' },
+      { href: '/admin/social',       label: 'Social' },
+      { href: '/admin/newsletter',   label: 'Newsletter' },
     ],
   },
   {
@@ -35,9 +40,7 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
     label: 'Operations',
     items: [
       { href: '/admin/tasks',      label: 'Tasks' },
-      { href: '/admin/alerts',     label: 'Alerts' },
       { href: '/admin/approvals',  label: 'Approvals' },
-      { href: '/admin/automation', label: 'Automation' },
       { href: '/admin/jobs',       label: 'Jobs' },
       { href: '/admin/health',     label: 'Health' },
     ],

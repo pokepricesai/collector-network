@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { EmptyState, Notice, Panel, SectionHeader, StatusBadge } from '@/components/admin/admin-ui';
+import { Panel, SectionHeader, StatusBadge } from '@/components/admin/admin-ui';
+import { EmptyPanelNotice } from '@/components/admin/EmptyPanelNotice';
 import { listTasks, OPERATOR_INBOX_SOURCES, type TaskKind, type TaskSourceCategory } from '@/server/tasks/queries';
 import { completeTaskAction, reopenTaskAction } from './actions';
 import type { SiteSlug } from '@/server/intelligence/types';
@@ -133,13 +134,11 @@ export default async function TasksPage({ searchParams }: PageProps) {
       </Panel>
 
       {rows.length === 0 ? (
-        <EmptyState
-          title={view === 'completed' ? 'No completed tasks in range' : 'No open tasks for the current filters'}
-          description={view === 'completed'
-            ? 'Only the most recent 100 completed tasks are shown.'
-            : 'Click + Task in the top bar to log something you notice, or run Intelligence refresh to pull in current signals.'}
-          tone="muted"
-        />
+        <EmptyPanelNotice>
+          {view === 'completed'
+            ? 'No completed tasks in range. Only the most recent 100 completed tasks are shown.'
+            : <>No open tasks for the current filters. Click <strong>+ Task</strong> at the top-right to jot something down, or widen the Source filter to see system-generated items.</>}
+        </EmptyPanelNotice>
       ) : (
         <Panel>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
@@ -221,11 +220,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
         </Panel>
       )}
 
-      {view === 'open' && (
-        <Notice tone="info">
-          Press <strong>+ Task</strong> in the top bar to log something you noticed. Fix / improvement + site + optional notes is all it takes.
-        </Notice>
-      )}
+      {/* Removed the standalone bottom Notice in the polish pass —
+          the EmptyPanelNotice above already covers the empty-state
+          case and otherwise the row list itself is self-explanatory. */}
     </AdminShell>
   );
 }
