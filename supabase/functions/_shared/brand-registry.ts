@@ -106,10 +106,18 @@ export const BRANDS: readonly Brand[] = [
     confirmBaseUrl: 'https://onepieceprices.io',
     productBlurb: 'your OnePiecePrices account and collection',
   },
-  // lorcana intentionally omitted from the registry until its
-  // production hostname is final. Auth actions from any pre-launch
-  // preview domain will fall back to NEUTRAL_BRAND (spec: never guess
-  // a brand from an arbitrary redirect URL).
+  {
+    siteCode: 'lorcana',
+    brandName: 'LorcanaPrices',
+    senderName: 'LorcanaPrices',
+    hostnames: ['lorcanaprices.io', 'www.lorcanaprices.io'],
+    logoUrl: null,
+    primaryColor: '#0b0d13',
+    accentColor: '#c9a24a',
+    supportUrl: 'https://lorcanaprices.io',
+    confirmBaseUrl: 'https://lorcanaprices.io',
+    productBlurb: 'your LorcanaPrices account and collection',
+  },
 ] as const;
 
 // Return the brand whose hostname allowlist matches the given

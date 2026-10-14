@@ -1,0 +1,26 @@
+{
+  "name": "@collector-network/email",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./brand-registry": "./src/brand-registry.ts",
+    "./templates": "./src/templates/index.ts",
+    "./send": "./src/send.ts",
+    "./queue": "./src/queue.ts"
+  },
+  "scripts": {
+    "lint": "echo \"(email) lint placeholder\" && exit 0",
+    "typecheck": "tsc --noEmit",
+    "build": "echo \"(email) build placeholder\" && exit 0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  }
+}

@@ -27,6 +27,7 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
       { href: '/admin/content',      label: 'Content' },
       { href: '/admin/social',       label: 'Social' },
       { href: '/admin/newsletter',   label: 'Newsletter' },
+      { href: '/admin/emails',       label: 'Network email' },
     ],
   },
   {

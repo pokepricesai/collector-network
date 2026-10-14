@@ -1,13 +1,16 @@
 {
   "crons": [
-    { "path": "/api/sync/gsc",            "schedule": "15 2 * * *" },
-    { "path": "/api/sync/ga4",            "schedule": "30 2 * * *" },
-    { "path": "/api/sync/opportunities",  "schedule": "0 3 * * *" },
-    { "path": "/api/sync/sitemaps",       "schedule": "15 3 * * *" },
-    { "path": "/api/sync/inspection",     "schedule": "30 3 * * *" },
-    { "path": "/api/sync/internal-links", "schedule": "45 3 * * *" },
-    { "path": "/api/sync/bigquery",       "schedule": "0 4 * * *" },
-    { "path": "/api/sync/impact-epn",     "schedule": "0 6 * * *" },
-    { "path": "/api/sync/intelligence",   "schedule": "30 6 * * *" }
+    { "path": "/api/sync/gsc",                     "schedule": "15 2 * * *" },
+    { "path": "/api/sync/ga4",                     "schedule": "30 2 * * *" },
+    { "path": "/api/sync/opportunities",           "schedule": "0 3 * * *" },
+    { "path": "/api/sync/sitemaps",                "schedule": "15 3 * * *" },
+    { "path": "/api/sync/inspection",              "schedule": "30 3 * * *" },
+    { "path": "/api/sync/internal-links",          "schedule": "45 3 * * *" },
+    { "path": "/api/sync/bigquery",                "schedule": "0 4 * * *" },
+    { "path": "/api/sync/impact-epn",              "schedule": "0 6 * * *" },
+    { "path": "/api/sync/intelligence",            "schedule": "30 6 * * *" },
+    { "path": "/api/cron/schedule-onboarding",     "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/send-pending-emails",     "schedule": "*/10 * * * *" },
+    { "path": "/api/cron/weekly-digests",          "schedule": "0 9 * * 1" }
   ]
 }
