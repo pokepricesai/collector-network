@@ -58,6 +58,26 @@ export interface QueueRow {
   attempts: number;
 }
 
+// Reset rows stuck in 'sending' back to 'pending' so the next tick
+// retries. Safety: our Resend send always carries the queue row's
+// idempotency_key as the HTTP Idempotency-Key header, so a retry
+// after a Vercel-timeout-mid-send does NOT duplicate at Resend —
+// Resend returns the same email id without re-dispatching.
+export async function reclaimStaleSending(
+  admin: SupabaseClient,
+  olderThanSeconds: number,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanSeconds * 1000).toISOString();
+  const { data, error } = await admin
+    .from('collector_email_queue')
+    .update({ status: 'pending' })
+    .eq('status', 'sending')
+    .lt('updated_at', cutoff)
+    .select('id');
+  if (error || !data) return 0;
+  return (data as { id: string }[]).length;
+}
+
 export async function claimPendingBatch(
   admin: SupabaseClient,
   limit: number,
@@ -69,21 +89,26 @@ export async function claimPendingBatch(
   const nowIso = new Date().toISOString();
   const { data: candidates, error: selErr } = await admin
     .from('collector_email_queue')
-    .select('id')
+    .select('id, attempts')
     .eq('status', 'pending')
     .lte('send_after', nowIso)
     .order('send_after', { ascending: true })
     .limit(limit);
   if (selErr || !candidates || candidates.length === 0) return [];
-  const ids = (candidates as { id: string }[]).map((r) => r.id);
-  const { data: claimed, error: updErr } = await admin
-    .from('collector_email_queue')
-    .update({ status: 'sending', attempts: 1 })
-    .in('id', ids)
-    .eq('status', 'pending')
-    .select('id,user_id,recipient_email,site_code,template_key,category,variables,idempotency_key,attempts');
-  if (updErr || !claimed) return [];
-  return claimed as QueueRow[];
+  const rows = candidates as { id: string; attempts: number }[];
+  const claimed: QueueRow[] = [];
+  for (const row of rows) {
+    const next = (row.attempts ?? 0) + 1;
+    const { data: upd, error: updErr } = await admin
+      .from('collector_email_queue')
+      .update({ status: 'sending', attempts: next })
+      .eq('id', row.id)
+      .eq('status', 'pending')
+      .select('id,user_id,recipient_email,site_code,template_key,category,variables,idempotency_key,attempts')
+      .maybeSingle();
+    if (!updErr && upd) claimed.push(upd as QueueRow);
+  }
+  return claimed;
 }
 
 export async function markSent(

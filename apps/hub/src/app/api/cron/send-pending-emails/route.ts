@@ -10,7 +10,7 @@ import {
   type BrandSiteCode,
   type TemplateKey,
 } from '@collector-network/email';
-import { claimPendingBatch, markSent, markFailed, markSkipped, markSuppressed } from '@/server/emails/queue';
+import { claimPendingBatch, markSent, markFailed, markSkipped, markSuppressed, reclaimStaleSending } from '@/server/emails/queue';
 import { checkConsent } from '@/server/emails/consent';
 import {
   getResendApiKey,
@@ -41,8 +41,12 @@ export async function GET(req: Request) {
   }
 
   const admin = createServiceRoleSupabase();
+  // Self-heal: rows stuck in 'sending' > 5 min were orphaned by a
+  // function timeout. Return them to 'pending' so this tick retries.
+  // Safe because Resend sees the same Idempotency-Key and dedups.
+  const reclaimed = await reclaimStaleSending(admin, 300);
   const batch = await claimPendingBatch(admin, SEND_BATCH_LIMIT);
-  if (batch.length === 0) return NextResponse.json({ ok: true, drained: 0 });
+  if (batch.length === 0) return NextResponse.json({ ok: true, drained: 0, reclaimed });
 
   if (!isSendPendingEnabled()) {
     for (const row of batch) {
