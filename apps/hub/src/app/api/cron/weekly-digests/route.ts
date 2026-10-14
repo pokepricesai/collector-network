@@ -54,25 +54,26 @@ export async function GET(req: Request) {
   const stats: Record<string, number> = { enqueued: 0, skipped_empty: 0, skipped_dedup: 0 };
 
   for (const site of HUB_MANAGED_SITES) {
-    // Memberships eligible on this site.
-    const { data: members } = await admin
-      .from('collector_user_sites')
-      .select('user_id')
+    // Weekly-digest eligibility: ONLY users who already completed the
+    // CN-03 welcome funnel. collector_site_onboarding.welcome_sent_at
+    // is set only by the hub sender, which only ever sends to users
+    // whose membership was enqueued by the scheduler — which requires
+    // first_authenticated_at >= CN03_ONBOARDING_ELIGIBLE_AFTER. This
+    // chain is the sole guarantee that no historical user ever
+    // receives a weekly digest.
+    const { data: onboarded } = await admin
+      .from('collector_site_onboarding')
+      .select('user_id, weekly_last_sent_at')
       .eq('site_code', site)
-      .not('first_authenticated_at', 'is', null)
+      .not('welcome_sent_at', 'is', null)
       .limit(CRON_BATCH_LIMIT);
 
-    const memberList = (members ?? []) as { user_id: string }[];
+    const memberList = (onboarded ?? []) as { user_id: string; weekly_last_sent_at: string | null }[];
     if (memberList.length === 0) continue;
 
     const userIds = memberList.map((m) => m.user_id);
-    const { data: lastSent } = await admin
-      .from('collector_site_onboarding')
-      .select('user_id,weekly_last_sent_at')
-      .in('user_id', userIds)
-      .eq('site_code', site);
     const lastByUser = new Map<string, string | null>();
-    for (const row of (lastSent ?? []) as { user_id: string; weekly_last_sent_at: string | null }[]) {
+    for (const row of memberList) {
       lastByUser.set(row.user_id, row.weekly_last_sent_at);
     }
 
