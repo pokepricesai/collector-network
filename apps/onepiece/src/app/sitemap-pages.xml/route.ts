@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { SITE_ORIGIN, isSitemapEligible } from '@/lib/seo';
 import { OP_COLOURS } from '@/lib/onepiece/colour';
 import { OP_ARTICLES } from '@/lib/articles';
+import { listNetworkArticles } from '@/server/network-articles';
 
 // Hub / static pages sitemap. Colour landing pages and the top-level
 // hubs live here; card and set URLs are in their own shards.
@@ -52,6 +53,24 @@ export async function GET() {
     items.push({
       url: `${SITE_ORIGIN}${path}`,
       lastmod: article.updatedIso,
+      changefreq: 'monthly',
+      priority: '0.65',
+    });
+  }
+
+  // Collector Network OS published articles (CN-04A). The hardcoded
+  // OP_ARTICLES registry carries launch pieces; the Content Engine's
+  // network_articles rows (publication_target='onepiece_db',
+  // status='published') must also be discoverable.
+  const hardcodedSlugs = new Set(OP_ARTICLES.map((a) => a.slug));
+  const netArticles = await listNetworkArticles();
+  for (const article of netArticles) {
+    if (hardcodedSlugs.has(article.slug)) continue;
+    const path = `/insights/${article.slug}`;
+    if (!isSitemapEligible(path)) continue;
+    items.push({
+      url: `${SITE_ORIGIN}${path}`,
+      lastmod: article.updatedAt,
       changefreq: 'monthly',
       priority: '0.65',
     });

@@ -9,6 +9,7 @@ import {
   listYugiohSetsForDirectory,
 } from '../../../server/browse';
 import { listPublicDecksForSitemap } from '../../../server/deck-publishing';
+import { listNetworkArticles } from '../../../server/network-articles';
 import { CACHE_TTL } from '../../../server/cache';
 import {
   RARITY_FAMILY_LABELS,
@@ -74,7 +75,7 @@ async function buildShard(shard: SitemapShard): Promise<Entry[]> {
   const url = siteUrl();
   if (shard === 'base') {
     const now = new Date().toISOString();
-    return [
+    const base: Entry[] = [
       { loc: `${url}/`, lastmod: now, changefreq: 'daily', priority: 1.0 },
       { loc: `${url}/market`, lastmod: now, changefreq: 'daily', priority: 0.9 },
       { loc: `${url}/market/most-valuable`, lastmod: now, changefreq: 'daily', priority: 0.8 },
@@ -89,6 +90,27 @@ async function buildShard(shard: SitemapShard): Promise<Entry[]> {
       { loc: `${url}/insights/yugioh-rarities-explained`, lastmod: '2026-09-28', changefreq: 'weekly', priority: 0.7 },
       { loc: `${url}/insights/yugioh-collecting-guide-sets-editions-rarities-prices`, lastmod: '2026-09-28', changefreq: 'weekly', priority: 0.7 },
     ];
+    // CN-04A: include Collector Network OS published articles so
+    // Content-Engine-authored pieces (publication_target='ygo_db',
+    // status='published') are indexable alongside the hardcoded
+    // launch registry above.
+    const hardcoded = new Set([
+      '/insights/most-valuable-yugioh-cards',
+      '/insights/yugioh-rarities-explained',
+      '/insights/yugioh-collecting-guide-sets-editions-rarities-prices',
+    ]);
+    const netArticles = await listNetworkArticles();
+    for (const article of netArticles) {
+      const path = `/insights/${article.slug}`;
+      if (hardcoded.has(path)) continue;
+      base.push({
+        loc: `${url}${path}`,
+        lastmod: article.updatedAt ?? null,
+        changefreq: 'weekly',
+        priority: 0.7,
+      });
+    }
+    return base;
   }
   if (shard === 'cards') return buildCards(url);
   if (shard === 'sets') return buildSets(url);

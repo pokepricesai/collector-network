@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { SITE_ORIGIN, isSitemapEligible } from '@/lib/seo';
 import { LC_INKS } from '@/lib/lorcana/ink';
 import { LORCANA_ARTICLES } from '@/lib/insights';
+import { listNetworkArticles } from '@/server/network-articles';
 
 // Hub / static pages sitemap. Colour landing pages and the top-level
 // hubs live here; card and set URLs are in their own shards.
@@ -54,6 +55,22 @@ export async function GET() {
     items.push({
       url: `${SITE_ORIGIN}/insights/${article.slug}`,
       lastmod: `${article.updatedAt}T00:00:00.000Z`,
+      changefreq: 'monthly',
+      priority: '0.65',
+    });
+  }
+
+  // Collector Network OS published articles (CN-04A). The hardcoded
+  // LORCANA_ARTICLES registry carries launch pieces; the Content
+  // Engine's network_articles rows (publication_target='lorcana_db',
+  // status='published') must also be discoverable.
+  const hardcodedSlugs = new Set(LORCANA_ARTICLES.map((a) => a.slug));
+  const netArticles = await listNetworkArticles();
+  for (const article of netArticles) {
+    if (hardcodedSlugs.has(article.slug)) continue;
+    items.push({
+      url: `${SITE_ORIGIN}/insights/${article.slug}`,
+      lastmod: article.updatedAt,
       changefreq: 'monthly',
       priority: '0.65',
     });
