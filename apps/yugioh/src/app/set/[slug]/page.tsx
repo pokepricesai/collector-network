@@ -12,6 +12,7 @@ import { siteUrl } from '../../../lib/site-url';
 import { toCardSlug } from '../../../lib/slug';
 import {
   getYugiohSetBySlug,
+  listYugiohSetsForDirectory,
   type SetPageData,
 } from '../../../server/browse';
 import { buildYugiohEbayLink } from '../../../lib/ebay';
@@ -70,6 +71,15 @@ export default async function SetPage({ params }: Props) {
   // read here is what unlocks ISR / Full Route Cache on this page.
   const data = await getYugiohSetBySlug(slug);
   if (!data) notFound();
+
+  // CN-05A growth sprint: surface the surrounding sibling sets +
+  // the full-directory link so Googlebot and users can discover
+  // more than the ~8 sets the homepage currently exposes. The
+  // directory listing is cached (6h TTL via unstable_cache in
+  // server/browse.ts), so this adds no DB round-trip in the hot
+  // path.
+  const directory = await listYugiohSetsForDirectory();
+  const siblingSets = buildSiblingSetGrid(directory, data.set.id);
 
   const jsonLd = buildSetJsonLd(data, siteUrl());
   const sortedCards = [...data.cards].sort((a, b) => {
@@ -266,6 +276,45 @@ export default async function SetPage({ params }: Props) {
           </div>
         </section>
 
+        <section aria-labelledby="related-sets-heading" style={{
+          marginTop: 32, paddingTop: 24,
+          borderTop: '1px solid var(--ygo-border, #E5E7EB)',
+        }}>
+          <h2 id="related-sets-heading" style={{
+            margin: '0 0 12px', fontSize: 18, letterSpacing: '-0.01em',
+          }}>Other Yu-Gi-Oh! sets</h2>
+          <div style={{
+            display: 'grid', gap: 8,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          }}>
+            {siblingSets.map((entry) => (
+              <Link
+                key={entry.set.id}
+                href={`/set/${entry.set.code.toLowerCase()}`}
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 2,
+                  padding: '8px 12px', borderRadius: 8,
+                  border: '1px solid var(--ygo-border, #E5E7EB)',
+                  background: 'var(--ygo-bg-light, #F9FAFB)',
+                  color: 'inherit', textDecoration: 'none',
+                  fontSize: 13, lineHeight: 1.35,
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>{entry.set.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--ygo-text-muted, #6B7280)' }}>
+                  {entry.set.code.toUpperCase()}
+                  {entry.uniqueCardCount > 0 ? ` · ${entry.uniqueCardCount.toLocaleString('en-US')} cards` : ''}
+                </span>
+              </Link>
+            ))}
+          </div>
+          <p style={{ marginTop: 12, fontSize: 13 }}>
+            <Link href="/sets" style={{ color: 'var(--ygo-accent-gold-strong, #B78A0F)' }}>
+              Browse all Yu-Gi-Oh! sets →
+            </Link>
+          </p>
+        </section>
+
         <Faq
           title={`About the ${data.set.name} set`}
           entries={setFaq(data.set.name, data.set.code, {
@@ -303,4 +352,49 @@ function buildSetJsonLd(data: SetPageData, siteOrigin: string) {
     '@context': 'https://schema.org',
     '@graph': [breadcrumb, collection],
   };
+}
+
+// Pick ~24 sibling sets to surface at the bottom of the set page.
+// Preference: the 12 most-recently-released sets other than the
+// current one, plus the 12 nearest in release-date order so the
+// user has both "what's new" and "what's adjacent to this release"
+// surfaced. The full directory lives at /sets.
+function buildSiblingSetGrid(
+  directory: Awaited<ReturnType<typeof listYugiohSetsForDirectory>>,
+  currentSetId: string,
+): typeof directory {
+  const pool = directory.filter((entry) => entry.set.id !== currentSetId);
+  if (pool.length === 0) return [];
+  const withDates = pool
+    .map((entry) => ({ entry, t: entry.set.released_at ? Date.parse(entry.set.released_at) : NaN }))
+    .filter((x) => Number.isFinite(x.t))
+    .sort((a, b) => (b.t as number) - (a.t as number));
+
+  const recent = withDates.slice(0, 12).map((x) => x.entry);
+  const currentIdx = withDates.findIndex((x) => x.entry.set.id === currentSetId); // -1 since filtered
+  // Find adjacent sets to the current set by release date among the
+  // full directory (which still contains the current set).
+  const fullSorted = directory
+    .map((entry) => ({ entry, t: entry.set.released_at ? Date.parse(entry.set.released_at) : NaN }))
+    .filter((x) => Number.isFinite(x.t))
+    .sort((a, b) => (b.t as number) - (a.t as number));
+  const idx = fullSorted.findIndex((x) => x.entry.set.id === currentSetId);
+  const adjacent: typeof directory = [];
+  if (idx >= 0) {
+    for (let step = 1; adjacent.length < 12 && (idx - step >= 0 || idx + step < fullSorted.length); step++) {
+      if (idx - step >= 0) adjacent.push(fullSorted[idx - step]!.entry);
+      if (idx + step < fullSorted.length) adjacent.push(fullSorted[idx + step]!.entry);
+    }
+  }
+  // Merge, dedupe by set.id, cap at 24.
+  const seen = new Set<string>([currentSetId]);
+  const out: typeof directory = [];
+  for (const entry of [...adjacent, ...recent]) {
+    if (seen.has(entry.set.id)) continue;
+    seen.add(entry.set.id);
+    out.push(entry);
+    if (out.length >= 24) break;
+  }
+  void currentIdx; // kept for readability — adjacent uses idx against full
+  return out;
 }

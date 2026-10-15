@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { Header } from '../../../components/Header';
 import { Footer } from '../../../components/Footer';
 import { siteUrl } from '../../../lib/site-url';
-import { findYgoArticle, YGO_ARTICLES } from '../../../lib/articles';
+import { findYgoArticle, YGO_ARTICLES, type YgoArticleMeta } from '../../../lib/articles';
 import { safe } from '../../../server/safe';
 import { getYugiohHomepageData } from '../../../server/homepage';
 import { findNetworkArticle, renderMarkdownToHtml } from '../../../server/network-articles';
@@ -90,6 +90,7 @@ export default async function ArticlePage({
             </header>
             <div className="article-body" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
           </article>
+          <ExploreMore currentSlug={slug} />
           <nav style={{ marginTop: 32 }}>
             <Link href="/insights" style={{ fontSize: 13 }}>← All insights</Link>
           </nav>
@@ -176,6 +177,8 @@ export default async function ArticlePage({
         <article style={{ marginTop: 24, fontSize: 15, lineHeight: 1.7, color: 'var(--ygo-text, #111827)' }}>
           {body}
         </article>
+
+        <ExploreMore currentSlug={slug} />
 
         <hr style={{ marginTop: 40, border: 'none', borderTop: '1px solid var(--ygo-border, #E5E7EB)' }} />
         <p style={{ marginTop: 16, color: 'var(--ygo-text-muted, #6B7280)', fontSize: 12, lineHeight: 1.6 }}>
@@ -521,5 +524,67 @@ function CollectingBody() {
         account. Nobody else can see your holdings.
       </p>
     </>
+  );
+}
+
+// CN-05A: pass link equity from editorial back into the catalogue
+// and surface the other Yu-Gi-Oh! insights. The previous version
+// of this page had zero outbound links to /set/, /card/ or
+// sibling /insights/ URLs — Google therefore treated each article
+// as a dead end. This block adds up to three sibling articles
+// plus three evergreen catalogue entry points.
+function ExploreMore({ currentSlug }: { currentSlug: string }) {
+  const siblings: YgoArticleMeta[] = YGO_ARTICLES.filter((a) => a.slug !== currentSlug).slice(0, 3);
+  const links: Array<{ href: string; label: string; sub: string }> = [
+    { href: '/sets', label: 'All Yu-Gi-Oh! sets', sub: '661 sets, newest first' },
+    { href: '/archetypes', label: 'Archetypes', sub: 'Browse by deck archetype' },
+    { href: '/forbidden-limited', label: 'Forbidden & Limited list', sub: 'Current TCG + OCG restrictions' },
+  ];
+  return (
+    <section aria-labelledby="explore-more-heading" style={{
+      marginTop: 32, paddingTop: 24,
+      borderTop: '1px solid var(--ygo-border, #E5E7EB)',
+    }}>
+      <h2 id="explore-more-heading" style={{
+        margin: '0 0 12px', fontSize: 16, letterSpacing: '-0.01em',
+      }}>Explore more on YGOPrices</h2>
+
+      {siblings.length > 0 && (
+        <div style={{
+          display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+          marginBottom: 14,
+        }}>
+          {siblings.map((a) => (
+            <Link key={a.slug} href={`/insights/${a.slug}`} style={{
+              display: 'flex', flexDirection: 'column', gap: 4,
+              padding: '10px 12px', borderRadius: 10,
+              background: 'var(--ygo-bg-light, #F9FAFB)',
+              border: '1px solid var(--ygo-border, #E5E7EB)',
+              textDecoration: 'none', color: 'inherit',
+            }}>
+              <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ygo-text-muted, #6B7280)' }}>{a.category}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>{a.title}</span>
+              <span style={{ fontSize: 12, color: 'var(--ygo-text-muted, #6B7280)', lineHeight: 1.4 }}>{a.excerpt}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div style={{
+        display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+      }}>
+        {links.map((l) => (
+          <Link key={l.href} href={l.href} style={{
+            display: 'flex', flexDirection: 'column', gap: 2,
+            padding: '8px 12px', borderRadius: 8,
+            border: '1px solid var(--ygo-border, #E5E7EB)',
+            textDecoration: 'none', color: 'inherit',
+          }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{l.label} →</span>
+            <span style={{ fontSize: 11, color: 'var(--ygo-text-muted, #6B7280)' }}>{l.sub}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }

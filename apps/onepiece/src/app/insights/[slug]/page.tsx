@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { canonicalFor } from '@/lib/seo';
-import { findArticle, OP_ARTICLES } from '@/lib/articles';
+import { findArticle, OP_ARTICLES, type OpArticleMeta } from '@/lib/articles';
 import { findNetworkArticle, renderMarkdownToHtml } from '@/server/network-articles';
 import { queryFinder } from '@/server/finder';
 import { listSetsWithCounts } from '@/server/browse';
@@ -103,6 +103,7 @@ export default async function ArticlePage({
               {network.publishedAt && network.updatedAt && network.updatedAt !== network.publishedAt ? ` · Updated ${fmt(network.updatedAt)}` : null}
             </p>
             <article className="article-body" style={{ marginTop: 24, fontSize: 15, lineHeight: 1.7, color: 'var(--text)' }} dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            <ExploreMore currentSlug={slug} />
             <nav style={{ marginTop: 32 }}>
               <Link href="/insights" style={{ fontSize: 13 }}>← All insights</Link>
             </nav>
@@ -193,6 +194,8 @@ export default async function ArticlePage({
         }}>
           {body}
         </article>
+
+        <ExploreMore currentSlug={slug} />
 
         <hr style={{ marginTop: 40, border: 'none', borderTop: '1px solid var(--border)' }} />
         <p style={{ marginTop: 16, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.6 }}>
@@ -544,5 +547,66 @@ function ArticleList({ tiles }: {
         </li>
       ))}
     </ol>
+  );
+}
+
+// CN-05A: sibling articles + evergreen catalogue entry points at
+// the bottom of every OnePiecePrices insight. Pre-sprint the only
+// outbound link from an article body was "← All insights"; this
+// adds three sibling tiles plus three browse entry points so
+// Googlebot can follow the editorial graph into the catalogue.
+function ExploreMore({ currentSlug }: { currentSlug: string }) {
+  const siblings: OpArticleMeta[] = OP_ARTICLES.filter((a) => a.slug !== currentSlug).slice(0, 3);
+  const browse: Array<{ href: string; label: string; sub: string }> = [
+    { href: '/browse', label: 'All sets', sub: 'Every indexed One Piece set' },
+    { href: '/leaders', label: 'Leaders', sub: 'Browse by Leader card' },
+    { href: '/colours', label: 'Colours', sub: 'By colour identity' },
+  ];
+  return (
+    <section aria-labelledby="explore-more-heading" style={{
+      marginTop: 32, paddingTop: 24,
+      borderTop: '1px solid var(--border)',
+    }}>
+      <h2 id="explore-more-heading" style={{
+        margin: '0 0 12px', fontSize: 16, letterSpacing: '-0.01em',
+      }}>Explore more on OnePiecePrices</h2>
+
+      {siblings.length > 0 && (
+        <div style={{
+          display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+          marginBottom: 14,
+        }}>
+          {siblings.map((a) => (
+            <Link key={a.slug} href={`/insights/${a.slug}`} style={{
+              display: 'flex', flexDirection: 'column', gap: 4,
+              padding: '10px 12px', borderRadius: 10,
+              background: 'var(--bg-light, #F9FAFB)',
+              border: '1px solid var(--border)',
+              textDecoration: 'none', color: 'inherit',
+            }}>
+              <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>{a.category}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>{a.title}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>{a.excerpt}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div style={{
+        display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+      }}>
+        {browse.map((l) => (
+          <Link key={l.href} href={l.href} style={{
+            display: 'flex', flexDirection: 'column', gap: 2,
+            padding: '8px 12px', borderRadius: 8,
+            border: '1px solid var(--border)',
+            textDecoration: 'none', color: 'inherit',
+          }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{l.label} →</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.sub}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
