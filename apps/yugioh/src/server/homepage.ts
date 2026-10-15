@@ -217,7 +217,10 @@ async function loadIconicCards(supabase: SupabaseClient): Promise<IconicCardFami
 }
 
 async function loadLatestSets(supabase: SupabaseClient): Promise<LatestSet[]> {
-  const sets = await getRecentSets(supabase, YGO_GAME_ID, 8);
+  // CN-05B task 1: homepage grid 8 → 24. GSC showed only 8 of 661
+  // /set/* URLs got any impressions in a 12-day window; the homepage
+  // was the discovery bottleneck. 24 recent sets at 4-wide × 6-row.
+  const sets = await getRecentSets(supabase, YGO_GAME_ID, 24);
   const counts = await Promise.all(
     sets.map((s) =>
       countCardsInSet(supabase, s.id).catch(() => null),

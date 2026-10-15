@@ -3,7 +3,7 @@ import type React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { canonicalFor, SITE_ORIGIN } from '@/lib/seo';
-import { findArticle, LORCANA_ARTICLES } from '@/lib/insights';
+import { findArticle, LORCANA_ARTICLES, type ArticleMeta } from '@/lib/insights';
 import { findNetworkArticle, renderMarkdownToHtml } from '@/server/network-articles';
 import { getPricedTiles } from '@/server/discovery';
 import { buildPrintingSlug, slugifyCardName } from '@/lib/lorcana/slug';
@@ -101,6 +101,7 @@ export default async function ArticlePage({
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.55 }}>{network.summary}</p>
             )}
             <article className="article-body" style={{ marginTop: 24, fontSize: 15, lineHeight: 1.7, color: 'var(--text)' }} dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+            <ExploreMore currentSlug={slug} />
             <nav style={{ marginTop: 32 }}>
               <Link href="/insights" style={{ fontSize: 13 }}>← All insights</Link>
             </nav>
@@ -170,6 +171,7 @@ export default async function ArticlePage({
         </p>
       </header>
       {body}
+      <ExploreMore currentSlug={slug} />
       <hr style={{ margin: '32px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
       <p style={{ fontSize: 12, color: 'var(--text-subtle)', lineHeight: 1.6 }}>
         <em>Disclaimer:</em> Live prices move continuously. Figures cited
@@ -447,5 +449,63 @@ function CollectingGuideBody() {
         <Link href="/insights/most-valuable-disney-lorcana-cards">The Most Valuable Disney Lorcana Cards</Link>.
       </p>
     </div>
+  );
+}
+
+// CN-05B task 5: sibling articles + evergreen catalogue entry points
+// at the bottom of every /insights/[slug]. Mirrors the YGO/OnePiece
+// pattern shipped in CN-05A 98cb30f. Code lands in main; takes
+// effect on next lorcana-web manual deploy.
+function ExploreMore({ currentSlug }: { currentSlug: string }) {
+  const siblings: ArticleMeta[] = LORCANA_ARTICLES.filter((a) => a.slug !== currentSlug).slice(0, 3);
+  const browse: Array<{ href: string; label: string; sub: string }> = [
+    { href: '/browse', label: 'All sets', sub: 'Every indexed Lorcana set' },
+    { href: '/characters', label: 'Characters', sub: 'Browse by character family' },
+    { href: '/inks', label: 'Inks', sub: 'Browse by ink colour' },
+  ];
+  return (
+    <section aria-labelledby="explore-more-heading" style={{
+      marginTop: 32, paddingTop: 24,
+      borderTop: '1px solid var(--border)',
+    }}>
+      <h2 id="explore-more-heading" style={{
+        margin: '0 0 12px', fontSize: 16, letterSpacing: '-0.01em',
+      }}>Explore more on LorcanaPrices</h2>
+      {siblings.length > 0 && (
+        <div style={{
+          display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+          marginBottom: 14,
+        }}>
+          {siblings.map((a) => (
+            <Link key={a.slug} href={`/insights/${a.slug}`} style={{
+              display: 'flex', flexDirection: 'column', gap: 4,
+              padding: '10px 12px', borderRadius: 10,
+              background: 'var(--bg-light, #F9FAFB)',
+              border: '1px solid var(--border)',
+              textDecoration: 'none', color: 'inherit',
+            }}>
+              <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Guide</span>
+              <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>{a.title}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>{a.description.slice(0, 140)}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+      <div style={{
+        display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+      }}>
+        {browse.map((l) => (
+          <Link key={l.href} href={l.href} style={{
+            display: 'flex', flexDirection: 'column', gap: 2,
+            padding: '8px 12px', borderRadius: 8,
+            border: '1px solid var(--border)',
+            textDecoration: 'none', color: 'inherit',
+          }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{l.label} →</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.sub}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }

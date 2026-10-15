@@ -33,7 +33,12 @@ export async function getHomepageData(): Promise<HomepagePayload> {
 
   const [statsResult, latestResult, moversResult, leadersResult] = await Promise.allSettled([
     getHomepageStats(),
-    listRecentSetsWithCounts(8),
+    // CN-05B task 3: homepage set grid 8 → 24. GSC showed only 9
+    // impressions on homepage vs 1,967 across /set/* in 12 days.
+    // The homepage is the strongest internal entry point and had
+    // only 8 outbound set links; 24 recent sets widens the crawl
+    // graph without visual bloat (4-wide × 6-row).
+    listRecentSetsWithCounts(24),
     getMovers(30, 6, currency),
     topLeadersForHome(),
   ]);
