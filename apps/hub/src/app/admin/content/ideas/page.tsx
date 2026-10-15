@@ -22,6 +22,7 @@ interface IdeaRow {
   priority: 'critical' | 'high' | 'normal' | 'low';
   status: 'new' | 'approved' | 'in_brief' | 'drafting' | 'published' | 'dismissed' | 'rejected' | 'stale';
   origin_type: string; evidence: Record<string, unknown>;
+  hold_reasons: string[] | null;
   created_at: string; last_seen_at: string;
 }
 
@@ -34,7 +35,7 @@ export default async function IdeasPage({ searchParams }: Params) {
   const siteId = siteSlug ? sites.find((s) => s.slug === siteSlug)?.id ?? null : null;
 
   let q = sb.from('network_content_ideas')
-    .select('id, site_id, content_type, working_title, primary_query, secondary_queries, summary, priority, status, origin_type, evidence, created_at, last_seen_at')
+    .select('id, site_id, content_type, working_title, primary_query, secondary_queries, summary, priority, status, origin_type, evidence, hold_reasons, created_at, last_seen_at')
     .order('priority', { ascending: true })
     .order('last_seen_at', { ascending: false })
     .limit(300);
@@ -99,7 +100,7 @@ export default async function IdeasPage({ searchParams }: Params) {
                 return <span className="col-dim" style={{ fontSize: 11 }}>{parts.join(' · ') || '—'}</span>;
               } },
               { key: 'seen', header: 'Last seen', render: (r) => formatRelative(r.last_seen_at) },
-              { key: 'actions', header: '', render: (r) => <IdeaRowActions ideaId={r.id} status={r.status} /> },
+              { key: 'actions', header: '', render: (r) => <IdeaRowActions ideaId={r.id} status={r.status} holdReasons={r.hold_reasons ?? []} /> },
             ]}
             rows={rows}
           />

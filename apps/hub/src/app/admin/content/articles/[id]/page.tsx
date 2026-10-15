@@ -93,6 +93,7 @@ export default async function ArticleDetail({ params }: Params) {
           body_format: a.body_format,
           body_rich_html: richHtml,
           status: a.status,
+          publication_target: a.publication_target,
           qc_report: a.qc_report,
         }}
         links={((links ?? []) as Array<{ id: string; target_url: string; anchor_text: string | null; reason: string | null; state: string }>)}

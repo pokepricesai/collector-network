@@ -59,7 +59,7 @@ export async function generateIdeasForSite(
   sb: SupabaseClient,
   siteId: string,
   siteSlug: string,
-): Promise<{ generated: number; refreshed: number; dismissed_stale: number }> {
+): Promise<{ generated: number; refreshed: number; dismissed_stale: number; shortfall: number; candidates_considered: number }> {
   const ideas: IdeaInput[] = [];
 
   // Run routing FIRST. It writes the non-editorial Phase 2 signals
@@ -223,5 +223,11 @@ export async function generateIdeasForSite(
     if (existingKeys.has(i.dedupe_key)) refreshed++;
     else generated++;
   }
-  return { generated, refreshed, dismissed_stale: dismissed };
+  const candidatesConsidered = brandNewSorted.length;
+  const shortfall = Math.max(0, PER_SITE_WEEKLY_CAP - generated);
+  return {
+    generated, refreshed, dismissed_stale: dismissed,
+    shortfall,
+    candidates_considered: candidatesConsidered,
+  };
 }

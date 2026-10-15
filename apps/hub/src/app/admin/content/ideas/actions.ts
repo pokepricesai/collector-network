@@ -6,25 +6,31 @@ import { requireAdmin } from '@/server/admin/require-admin';
 import { createServiceRoleSupabase } from '@/server/admin/service-role';
 import { generateIdeasForSite } from '@/server/content/ideas';
 import { generateBriefForIdea } from '@/server/content/briefs';
+import { driveDraftingFromIdea } from '@/server/content/pipeline';
 
 // Generate ideas for all 5 active sites. Deterministic, no AI.
-export async function regenerateAllIdeasAction(): Promise<{ ok: boolean; perSite: Array<{ site: string; generated: number; refreshed: number; dismissed_stale: number }> }> {
+export async function regenerateAllIdeasAction(): Promise<{
+  ok: boolean;
+  perSite: Array<{ site: string; generated: number; refreshed: number; dismissed_stale: number; shortfall?: number }>;
+  totalShortfall: number;
+}> {
   await requireAdmin('/admin/content/ideas');
   const sb = createServiceRoleSupabase();
   const { data: sites } = await sb.from('network_sites').select('id, slug').eq('status', 'active');
-  const perSite: Array<{ site: string; generated: number; refreshed: number; dismissed_stale: number }> = [];
+  const perSite: Array<{ site: string; generated: number; refreshed: number; dismissed_stale: number; shortfall?: number }> = [];
   for (const s of ((sites ?? []) as Array<{ id: string; slug: string }>)) {
     try {
       const r = await generateIdeasForSite(sb, s.id, s.slug);
-      perSite.push({ site: s.slug, ...r });
+      perSite.push({ site: s.slug, generated: r.generated, refreshed: r.refreshed, dismissed_stale: r.dismissed_stale, shortfall: r.shortfall });
     } catch (err) {
       perSite.push({ site: s.slug, generated: 0, refreshed: 0, dismissed_stale: 0 });
       console.error(`[ideas] regen for ${s.slug}: ${(err as Error).message}`);
     }
   }
+  const totalShortfall = perSite.reduce((a, r) => a + (r.shortfall ?? 0), 0);
   revalidatePath('/admin/content/ideas');
   revalidatePath('/admin/content');
-  return { ok: true, perSite };
+  return { ok: true, perSite, totalShortfall };
 }
 
 export async function createManualIdeaAction(fd: FormData): Promise<void> {
@@ -54,7 +60,15 @@ export async function dismissIdeaAction(id: string, reason: string): Promise<voi
   revalidatePath('/admin/content/ideas');
 }
 
-export async function approveIdeaAction(id: string): Promise<{ ok: boolean; error?: string }> {
+export interface ApproveIdeaResult {
+  ok: boolean;
+  error?: string;
+  pipeline?: 'drafted' | 'budget_waiting' | 'failed' | 'skipped';
+  articleId?: string;
+  message?: string;
+}
+
+export async function approveIdeaAction(id: string): Promise<ApproveIdeaResult> {
   const { admin, sb } = await requireAdmin('/admin/content/ideas');
   const { data: idea, error: loadErr } = await sb.from('network_content_ideas')
     .select('id, status, site_id').eq('id', id).maybeSingle();
@@ -81,9 +95,31 @@ export async function approveIdeaAction(id: string): Promise<{ ok: boolean; erro
     p_source: 'manual',
     p_metadata: {} as unknown as Record<string, unknown>,
   });
+
+  // Immediate single-click drafting: brief → article → draft → QC
+  // in one server-action call. The idea page sets maxDuration=300
+  // so Haiku 4.5 generation (~20-40 s) stays well within budget.
+  // On budget denial, the idea is tagged 'budget_waiting' and the
+  // weekly process-approved cron will pick it up when the rolling
+  // window makes room.
+  const outcome = await driveDraftingFromIdea(sb, id, admin.adminRowId);
+
   revalidatePath('/admin/content/ideas');
   revalidatePath('/admin/content');
-  return { ok: true };
+  if (outcome.status === 'drafted' || outcome.status === 'skipped') {
+    revalidatePath(`/admin/content/articles/${outcome.articleId}`);
+  }
+
+  switch (outcome.status) {
+    case 'drafted':
+      return { ok: true, pipeline: 'drafted', articleId: outcome.articleId, message: 'approved · drafted · ready to edit' };
+    case 'skipped':
+      return { ok: true, pipeline: 'skipped', articleId: outcome.articleId, message: `approved · existing article kept (${outcome.reason.replace(/_/g, ' ')})` };
+    case 'budget_waiting':
+      return { ok: true, pipeline: 'budget_waiting', articleId: outcome.articleId, message: `approved · Budget Waiting — needs $${outcome.neededUsd.toFixed(2)}, $${outcome.availableUsd.toFixed(4)} available` };
+    case 'failed':
+      return { ok: true, pipeline: 'failed', articleId: outcome.articleId, error: outcome.error, message: `approved · drafting failed: ${outcome.error}` };
+  }
 }
 
 export async function updateIdeaAction(fd: FormData): Promise<void> {

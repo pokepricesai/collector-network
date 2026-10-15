@@ -12,7 +12,6 @@ import { generateDraft, logAiCost, type VoiceProfile, type GeneratedBrief } from
 import {
   reserveArticleAiBudget,
   consumeArticleAiBudget,
-  failArticleAiBudget,
   ESTIMATED_COST_USD,
 } from './budget';
 
@@ -224,7 +223,19 @@ export async function generateArticleDraft(
     });
     draft = result.draft; usage = result.usage; rawText = result.rawText;
   } catch (err) {
-    await failArticleAiBudget(sb, { reservationId, reason: (err as Error).message.slice(0, 200) });
+    // Billable failures still count toward the rolling budget. Mark
+    // the reservation consumed at the estimate (worst case) and
+    // write a cost-log row the budget reader will see.
+    await consumeArticleAiBudget(sb, { reservationId, actualUsd: ESTIMATED_COST_USD.draft, articleId: a.id });
+    await logAiCost(sb, {
+      operation: 'draft',
+      usage: {
+        input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0,
+        est_cost_usd: ESTIMATED_COST_USD.draft,
+        model: 'failed:draft',
+      },
+      article_id: a.id, brief_id: a.brief_id, actor_user_id: adminId ?? undefined,
+    });
     throw err;
   }
   await consumeArticleAiBudget(sb, { reservationId, actualUsd: usage.est_cost_usd, articleId: a.id });
@@ -375,10 +386,10 @@ export async function runArticleQc(
 ): Promise<QcIssue[]> {
   const { data: art } = await sb
     .from('network_articles')
-    .select('id, site_id, title, slug, body, body_format, meta_title, meta_description, publication_target')
+    .select('id, site_id, title, slug, body, body_format, body_rich, meta_title, meta_description, publication_target, primary_query')
     .eq('id', articleId).maybeSingle();
   if (!art) return [{ code: 'not_found', severity: 'error', message: 'article not found' }];
-  const a = art as { id: string; site_id: string; title: string; slug: string; body: string; body_format: string; meta_title: string | null; meta_description: string | null; publication_target: string };
+  const a = art as { id: string; site_id: string; title: string; slug: string; body: string; body_format: string; body_rich: unknown; meta_title: string | null; meta_description: string | null; publication_target: string; primary_query: string | null };
   const issues: QcIssue[] = [];
 
   if (!a.title) issues.push({ code: 'title_missing', severity: 'error', message: 'Title is required.' });
@@ -394,17 +405,24 @@ export async function runArticleQc(
     .select('id').eq('site_id', a.site_id).eq('slug', a.slug).neq('id', a.id).limit(1);
   if ((dup ?? []).length > 0) issues.push({ code: 'slug_duplicate', severity: 'error', message: 'Another article on this site shares this slug.' });
 
-  // Body checks
-  const body = a.body ?? '';
+  // Resolve the "live" body: body_rich (operator-visible, sanitised
+  // HTML) wins when present; otherwise fall back to the markdown
+  // source. Strip HTML tags so pattern checks work on prose.
+  const liveBody = resolveLiveBody(a.body_rich, a.body);
+  const body = liveBody.plain;
   if (body.trim().length === 0) {
     issues.push({ code: 'body_empty', severity: 'error', message: 'Article body is empty.' });
   } else {
     const words = body.split(/\s+/).filter(Boolean).length;
     if (words < 300) issues.push({ code: 'body_short', severity: 'warning', message: `Article is ${words} words — thin content risk.` });
-    const h1Count = (body.match(/^#\s+/gm) ?? []).length;
-    if (h1Count === 0) issues.push({ code: 'h1_missing', severity: 'warning', message: 'No H1 (#) found in body.' });
+
+    // Heading structure — operate on markdown source so we read
+    // explicit heading levels. If source is HTML-only, pull h1/h2
+    // tag counts instead.
+    const h1Count = liveBody.isMarkdown ? (a.body.match(/^#\s+/gm) ?? []).length : (liveBody.html.match(/<h1\b/gi) ?? []).length;
+    const h2Count = liveBody.isMarkdown ? (a.body.match(/^##\s+/gm) ?? []).length : (liveBody.html.match(/<h2\b/gi) ?? []).length;
+    if (h1Count === 0 && !a.title) issues.push({ code: 'h1_missing', severity: 'warning', message: 'No H1 found in body.' });
     if (h1Count > 1) issues.push({ code: 'h1_multiple', severity: 'warning', message: `Multiple H1 headers (${h1Count}) — only one is recommended.` });
-    const h2Count = (body.match(/^##\s+/gm) ?? []).length;
     if (h2Count === 0) issues.push({ code: 'h2_missing', severity: 'warning', message: 'No H2 sections — flat articles risk weak information scent.' });
 
     if (/\bRESEARCH REQUIRED\b/i.test(body)) {
@@ -412,6 +430,102 @@ export async function runArticleQc(
     }
     if (/\bTODO\b|\bTBD\b|\{\{.*?\}\}/i.test(body)) {
       issues.push({ code: 'placeholder_todo', severity: 'error', message: 'Body contains TODO / TBD / {{placeholder}} markers.' });
+    }
+
+    // --- CN-04 Slice B editorial checks ---------------------------
+
+    // Em dashes: ban both the proper em dash (U+2014) and the
+    // operator-flagged en dash (U+2013) when used as a separator
+    // (surrounded by spaces, i.e. "foo – bar"). Hyphenated compounds
+    // like "year-round" use U+002D which is ignored.
+    const emCount = (body.match(/—/g) ?? []).length;
+    const enCount = (body.match(/\s–\s/g) ?? []).length;
+    if (emCount + enCount > 0) {
+      issues.push({ code: 'em_dash', severity: 'error', message: `${emCount + enCount} em/en dash${emCount + enCount === 1 ? '' : 's'} found — replace with commas, parentheses, or two sentences.` });
+    }
+
+    // Formulaic AI openers / closers.
+    const openerPatterns = [
+      /^in the world of\b/i,
+      /^in today'?s\b/i,
+      /^in the ever-evolving\b/i,
+      /^welcome to\b/i,
+      /^have you ever\b/i,
+      /^picture this\b/i,
+      /^let'?s dive into\b/i,
+      /^when it comes to\b/i,
+    ];
+    const firstSentence = body.split(/[.!?]/)[0]?.trim() ?? '';
+    if (openerPatterns.some((rx) => rx.test(firstSentence))) {
+      issues.push({ code: 'formulaic_opener', severity: 'warning', message: `Opening sentence matches a formulaic AI pattern: "${firstSentence.slice(0, 80)}…"` });
+    }
+    const closerPatterns = [
+      /\bin conclusion\b/i,
+      /\bat the end of the day\b/i,
+      /\bonly time will tell\b/i,
+      /\bthe bottom line is\b/i,
+    ];
+    const lastChunk = body.slice(-400);
+    const closer = closerPatterns.find((rx) => rx.test(lastChunk));
+    if (closer) {
+      issues.push({ code: 'formulaic_closer', severity: 'warning', message: `Closing paragraph uses a formulaic phrase (${closer.source.replace(/\\b|\\|/g, '')}).` });
+    }
+
+    // Repetitive sentence starts: two consecutive sentences
+    // beginning with the same lowercased first word.
+    const sentences = body.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+    for (let i = 1; i < sentences.length; i++) {
+      const prev = sentences[i - 1]!.split(/\s+/)[0]?.toLowerCase();
+      const curr = sentences[i]!.split(/\s+/)[0]?.toLowerCase();
+      if (prev && curr && prev === curr && prev.length > 2 && !/^(the|a|an|and|but|if|so)$/.test(prev)) {
+        issues.push({ code: 'repetitive_openings', severity: 'warning', message: `Two consecutive sentences start with "${prev}" (sentence ${i}).` });
+        break;
+      }
+    }
+
+    // Keyword stuffing on primary_query.
+    if (a.primary_query && words > 0) {
+      const pq = a.primary_query.toLowerCase();
+      const bodyLower = body.toLowerCase();
+      let count = 0; let idx = 0;
+      while ((idx = bodyLower.indexOf(pq, idx)) !== -1) { count++; idx += pq.length; }
+      const density = count / Math.max(1, words);
+      if (density > 0.03) {
+        issues.push({ code: 'keyword_stuffing', severity: 'warning', message: `Primary query "${a.primary_query}" appears ${count} times (${(density * 100).toFixed(1)}% density). Keep under 3%.` });
+      }
+    }
+
+    // Unsupported market-trend claims.
+    const trendPatterns = [
+      /\b(prices? (?:are|is) (?:rising|surging|soaring|skyrocketing|climbing))\b/i,
+      /\b(demand (?:is )?(?:surging|exploding|skyrocketing))\b/i,
+      /\b(the market is (?:heating up|exploding|on fire|rallying))\b/i,
+      /\b(set to (?:explode|skyrocket|double|triple))\b/i,
+      /\b(hot right now)\b/i,
+    ];
+    const trendHit = trendPatterns.find((rx) => rx.test(body));
+    if (trendHit) {
+      issues.push({ code: 'unsupported_trend_claim', severity: 'warning', message: 'Trend language detected ("rising", "surging", "hot") — ensure a specific price-data fact backs it.' });
+    }
+
+    // Hyperbolic marketing adjectives.
+    const hyperbolePatterns = [
+      /\b(revolutionary|ultimate|world-class|game-changer|must-have|unprecedented)\b/i,
+    ];
+    const hyperHit = hyperbolePatterns.find((rx) => rx.test(body));
+    if (hyperHit) {
+      issues.push({ code: 'hyperbole', severity: 'warning', message: 'Hyperbolic adjective detected ("revolutionary", "ultimate", etc.) — tighten.' });
+    }
+
+    // Firsthand fabrication: AI shouldn't claim to have personally
+    // handled cards, tested products, or witnessed events.
+    const firstHandPatterns = [
+      /\b(I (?:remember|witnessed|personally saw|tested|opened|pulled))\b/i,
+      /\b(we (?:tested|opened|pulled|personally))\b/i,
+    ];
+    const firstHit = firstHandPatterns.find((rx) => rx.test(body));
+    if (firstHit) {
+      issues.push({ code: 'first_person_fabrication', severity: 'error', message: 'Firsthand experience claim detected — these are never valid (the generator has no body).' });
     }
   }
 
@@ -431,4 +545,24 @@ export async function runArticleQc(
   }).eq('id', a.id);
 
   return issues;
+}
+
+// Resolve the body actually shown to readers. body_rich (TipTap
+// output, stored as { html, text, json }) wins when non-empty;
+// otherwise fall back to the AI-generated markdown source. Returns
+// both the plain-text (for pattern checks) and the raw HTML/md.
+function resolveLiveBody(
+  bodyRich: unknown,
+  bodyMd: string | null,
+): { plain: string; html: string; isMarkdown: boolean } {
+  if (bodyRich && typeof bodyRich === 'object') {
+    const r = bodyRich as { html?: string; text?: string };
+    if (typeof r.html === 'string' && r.html.replace(/<[^>]+>/g, '').trim().length > 0) {
+      const plain = typeof r.text === 'string' && r.text.trim().length > 0
+        ? r.text
+        : r.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      return { plain, html: r.html, isMarkdown: false };
+    }
+  }
+  return { plain: bodyMd ?? '', html: '', isMarkdown: true };
 }

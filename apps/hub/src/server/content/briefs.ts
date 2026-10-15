@@ -11,7 +11,6 @@ import { generateBrief, logAiCost, type VoiceProfile, type BriefEvidence } from 
 import {
   reserveArticleAiBudget,
   consumeArticleAiBudget,
-  failArticleAiBudget,
   ESTIMATED_COST_USD,
 } from './budget';
 
@@ -169,7 +168,22 @@ export async function generateBriefForIdea(
     });
     brief = result.brief; usage = result.usage; rawText = result.rawText;
   } catch (err) {
-    await failArticleAiBudget(sb, { reservationId, reason: (err as Error).message.slice(0, 200) });
+    // CN-04 Slice B: billable failures still count against the
+    // $1/7d ceiling. We mark the reservation 'consumed' at the
+    // estimated cost (worst case Anthropic charged for the API hit
+    // even if we never saw the response) AND write a cost-log row
+    // so getRollingAiBudget — which sums est_cost_usd from the log
+    // — picks it up on the next read.
+    await consumeArticleAiBudget(sb, { reservationId, actualUsd: ESTIMATED_COST_USD.brief });
+    await logAiCost(sb, {
+      operation: 'brief',
+      usage: {
+        input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0,
+        est_cost_usd: ESTIMATED_COST_USD.brief,
+        model: 'failed:brief',
+      },
+      idea_id: idea.id, actor_user_id: adminId ?? undefined,
+    });
     throw err;
   }
   // Reconcile the reservation with the real cost before logging —
@@ -247,7 +261,7 @@ export async function generateBriefForIdea(
 export async function approveBrief(
   sb: SupabaseClient,
   briefId: string,
-  adminId: string,
+  adminId: string | null,
 ): Promise<void> {
   const { data: brief, error } = await sb
     .from('network_content_briefs')

@@ -26,6 +26,7 @@ interface Article {
   body_format: string;
   body_rich_html: string | null;
   status: string;
+  publication_target: string;
   qc_report: {
     issues?: Array<{ code: string; severity: string; message: string }>;
     ran_at?: string;
@@ -302,35 +303,58 @@ export function ArticleEditor(props: {
           </div>
         </Panel>
 
-        <Panel title="Publish">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <Button size="sm" variant="secondary" onClick={() => start(async () => wrapMsg(async () => {
-              const r = await publishArticleAction(props.article.id, 'preview');
-              if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Preview OK'; }
-              return `Error: ${r.error}`;
-            }))}>Preview publish</Button>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={props.article.status !== 'approved'}
-              onClick={() => {
-                if (!window.confirm('Publish this article? For DB-driven sites it goes live immediately on /insights/[slug]. For MTG/PokePrices you will receive a payload for manual delivery.')) return;
-                start(async () => wrapMsg(async () => {
-                  const r = await publishArticleAction(props.article.id, 'publish');
-                  if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return r.requiresManual ? 'Published (manual delivery required)' : 'Published'; }
-                  return `Error: ${r.error}`;
-                }));
-              }}
-            >Publish</Button>
-          </div>
-          {preview && <div className="col-dim" style={{ fontSize: 12, marginTop: 6 }}>URL: <a href={preview} target="_blank" rel="noopener noreferrer">{preview}</a></div>}
-          {manualPayload != null && (
-            <div style={{ marginTop: 8 }}>
-              <div className="col-dim" style={{ fontSize: 11 }}>Manual delivery payload:</div>
-              <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, maxHeight: 220, overflow: 'auto', fontSize: 11, fontFamily: 'var(--admin-font-mono)' }}>{JSON.stringify(manualPayload, null, 2)}</pre>
-            </div>
-          )}
-        </Panel>
+        {(() => {
+          const target = props.article.publication_target;
+          const isDbTarget = target === 'ygo_db' || target === 'onepiece_db' || target === 'lorcana_db';
+          const notApproved = props.article.status !== 'approved';
+          return (
+            <Panel title="Publish">
+              {!isDbTarget ? (
+                <>
+                  <div style={{ fontSize: 12, color: 'var(--admin-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+                    <strong>{target === 'pokeprices_external' ? 'PokePrices' : 'MTGPrices'} auto-publish lands in Slice C.</strong> For now, use <em>Export manual payload</em> to copy the exact content into the site&apos;s own admin / Git repo. The Publish button only commits inside Collector Network — never claims delivery that didn&apos;t happen.
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <Button size="sm" variant="primary" onClick={() => start(async () => wrapMsg(async () => {
+                      const r = await publishArticleAction(props.article.id, 'preview');
+                      if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Manual payload ready — see below'; }
+                      return `Error: ${r.error}`;
+                    }))}>Export manual payload</Button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <Button size="sm" variant="secondary" onClick={() => start(async () => wrapMsg(async () => {
+                    const r = await publishArticleAction(props.article.id, 'preview');
+                    if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Preview OK'; }
+                    return `Error: ${r.error}`;
+                  }))}>Preview publish</Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={notApproved}
+                    title={notApproved ? "Set article status to 'approved' first" : 'Publishes immediately to the site via the database adapter'}
+                    onClick={() => {
+                      if (!window.confirm('Publish this article? The DB adapter sets it live on /insights/[slug] immediately and revalidates the public path.')) return;
+                      start(async () => wrapMsg(async () => {
+                        const r = await publishArticleAction(props.article.id, 'publish');
+                        if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Published'; }
+                        return `Error: ${r.error}`;
+                      }));
+                    }}
+                  >Publish</Button>
+                </div>
+              )}
+              {preview && <div className="col-dim" style={{ fontSize: 12, marginTop: 6 }}>URL: <a href={preview} target="_blank" rel="noopener noreferrer">{preview}</a></div>}
+              {manualPayload != null && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="col-dim" style={{ fontSize: 11 }}>Manual delivery payload:</div>
+                  <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, maxHeight: 220, overflow: 'auto', fontSize: 11, fontFamily: 'var(--admin-font-mono)' }}>{JSON.stringify(manualPayload, null, 2)}</pre>
+                </div>
+              )}
+            </Panel>
+          );
+        })()}
 
         <div id="article-media-picker">
           <MediaPicker
