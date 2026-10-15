@@ -8,6 +8,10 @@ import {
   setArticleStatusAction,
   toggleArticleLinkAction,
   updateArticleAction,
+  scheduleArticleAction,
+  cancelScheduleAction,
+  markGoogleIndexRequestedAction,
+  submitBingIndexNowAction,
 } from '../actions';
 import { runEditorialQcAction } from '@/app/admin/social/actions';
 import { Button, Field, Input, Panel, Textarea } from '@/components/admin/admin-ui';
@@ -27,6 +31,12 @@ interface Article {
   body_rich_html: string | null;
   status: string;
   publication_target: string;
+  publication_url: string | null;
+  published_at: string | null;
+  scheduled_for: string | null;
+  google_index_requested_at: string | null;
+  bing_index_submitted_at: string | null;
+  bing_index_submission_response: { ok?: boolean; status?: number; error?: string | null } | null;
   qc_report: {
     issues?: Array<{ code: string; severity: string; message: string }>;
     ran_at?: string;
@@ -303,58 +313,35 @@ export function ArticleEditor(props: {
           </div>
         </Panel>
 
-        {(() => {
-          const target = props.article.publication_target;
-          const isDbTarget = target === 'ygo_db' || target === 'onepiece_db' || target === 'lorcana_db';
-          const notApproved = props.article.status !== 'approved';
-          return (
-            <Panel title="Publish">
-              {!isDbTarget ? (
-                <>
-                  <div style={{ fontSize: 12, color: 'var(--admin-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
-                    <strong>{target === 'pokeprices_external' ? 'PokePrices' : 'MTGPrices'} auto-publish lands in Slice C.</strong> For now, use <em>Export manual payload</em> to copy the exact content into the site&apos;s own admin / Git repo. The Publish button only commits inside Collector Network — never claims delivery that didn&apos;t happen.
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <Button size="sm" variant="primary" onClick={() => start(async () => wrapMsg(async () => {
-                      const r = await publishArticleAction(props.article.id, 'preview');
-                      if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Manual payload ready — see below'; }
-                      return `Error: ${r.error}`;
-                    }))}>Export manual payload</Button>
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <Button size="sm" variant="secondary" onClick={() => start(async () => wrapMsg(async () => {
-                    const r = await publishArticleAction(props.article.id, 'preview');
-                    if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Preview OK'; }
-                    return `Error: ${r.error}`;
-                  }))}>Preview publish</Button>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={notApproved}
-                    title={notApproved ? "Set article status to 'approved' first" : 'Publishes immediately to the site via the database adapter'}
-                    onClick={() => {
-                      if (!window.confirm('Publish this article? The DB adapter sets it live on /insights/[slug] immediately and revalidates the public path.')) return;
-                      start(async () => wrapMsg(async () => {
-                        const r = await publishArticleAction(props.article.id, 'publish');
-                        if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Published'; }
-                        return `Error: ${r.error}`;
-                      }));
-                    }}
-                  >Publish</Button>
-                </div>
-              )}
-              {preview && <div className="col-dim" style={{ fontSize: 12, marginTop: 6 }}>URL: <a href={preview} target="_blank" rel="noopener noreferrer">{preview}</a></div>}
-              {manualPayload != null && (
-                <div style={{ marginTop: 8 }}>
-                  <div className="col-dim" style={{ fontSize: 11 }}>Manual delivery payload:</div>
-                  <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, maxHeight: 220, overflow: 'auto', fontSize: 11, fontFamily: 'var(--admin-font-mono)' }}>{JSON.stringify(manualPayload, null, 2)}</pre>
-                </div>
-              )}
-            </Panel>
-          );
-        })()}
+        <PublishPanel
+          article={props.article}
+          onPreview={async () => wrapMsg(async () => {
+            const r = await publishArticleAction(props.article.id, 'preview');
+            if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return 'Preview OK — payload below'; }
+            return `Error: ${r.error}`;
+          })}
+          onPublish={async () => wrapMsg(async () => {
+            const r = await publishArticleAction(props.article.id, 'publish');
+            if (r.ok) { setPreview(r.url ?? null); if (r.manualPayload) setManualPayload(r.manualPayload); return r.verified === false ? `Published but live URL verification failed: ${r.verificationError}` : 'Published'; }
+            return `Error: ${r.error}`;
+          })}
+          onSchedule={async (iso) => wrapMsg(async () => {
+            const r = await scheduleArticleAction(props.article.id, iso);
+            return r.ok ? 'Scheduled' : `Error: ${r.error}`;
+          })}
+          onCancelSchedule={async () => wrapMsg(async () => {
+            const r = await cancelScheduleAction(props.article.id);
+            return r.ok ? 'Schedule cancelled' : `Error: ${r.error}`;
+          })}
+          start={start}
+          preview={preview}
+          manualPayload={manualPayload}
+        />
+        <IndexingPanel
+          article={props.article}
+          start={start}
+          wrap={wrapMsg}
+        />
 
         <div id="article-media-picker">
           <MediaPicker
@@ -437,4 +424,255 @@ export function ArticleEditor(props: {
       </aside>
     </div>
   );
+}
+
+// ── Publish panel ────────────────────────────────────────────
+//
+// Save Draft | Publish Now | Schedule Publication. All three sit
+// in the editor sidebar. The Save Draft primary is up top in the
+// save-bar; this panel owns Publish Now + Schedule.
+
+function PublishPanel(props: {
+  article: Article;
+  onPreview: () => Promise<void>;
+  onPublish: () => Promise<void>;
+  onSchedule: (iso: string) => Promise<void>;
+  onCancelSchedule: () => Promise<void>;
+  start: (cb: () => void | Promise<void>) => void;
+  preview: string | null;
+  manualPayload: unknown;
+}) {
+  const notApproved = props.article.status !== 'approved' && props.article.status !== 'scheduled';
+  const alreadyPublished = props.article.status === 'published';
+  const scheduled = props.article.status === 'scheduled' && props.article.scheduled_for;
+  const [showPicker, setShowPicker] = useState(false);
+  const [when, setWhen] = useState<string>(defaultScheduleLocal());
+
+  return (
+    <Panel title="Publish">
+      {alreadyPublished && (
+        <div style={{ fontSize: 12, color: 'var(--admin-text-muted)', marginBottom: 8 }}>
+          Published {props.article.published_at ? new Date(props.article.published_at).toISOString().slice(0, 16).replace('T', ' ') : ''}.
+          {props.article.publication_url && <> <a href={props.article.publication_url} target="_blank" rel="noopener noreferrer">Live article ↗</a></>}
+          <div style={{ fontSize: 11, color: 'var(--admin-text-muted)', marginTop: 4 }}>
+            Reset status to republish — publishes are single-use per article.
+          </div>
+        </div>
+      )}
+
+      {scheduled && (
+        <div style={{ fontSize: 12, color: 'var(--admin-text-muted)', marginBottom: 8 }}>
+          <strong>Scheduled</strong>: {formatLocalLabel(props.article.scheduled_for)} (UK local).
+          Cron publishes within 5 min of this time.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => props.start(async () => props.onPreview())}
+        >Preview</Button>
+
+        {!alreadyPublished && (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={notApproved}
+            title={notApproved ? "Set status 'approved' first" : 'Publish now via the site adapter — verifies live URL before marking success'}
+            onClick={() => {
+              const target = props.article.publication_target;
+              const confirmMsg = target === 'pokeprices_external'
+                ? 'Publish NOW to PokePrices via its Supabase project? The hub writes a published row and verifies the public URL serves it.'
+                : target === 'mtgprices_markdown'
+                  ? 'Publish NOW to MTGPrices by committing the markdown file to GitHub? Vercel git auto-deploy publishes within ~1-2 minutes; the hub verifies the live URL before marking success.'
+                  : 'Publish NOW to the site via the database adapter? The public /insights/[slug] page serves this article immediately.';
+              if (!window.confirm(confirmMsg)) return;
+              props.start(async () => props.onPublish());
+            }}
+          >Publish Now</Button>
+        )}
+
+        {!alreadyPublished && !scheduled && (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={notApproved}
+            onClick={() => setShowPicker((v) => !v)}
+          >Schedule…</Button>
+        )}
+
+        {scheduled && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              if (!window.confirm('Cancel this scheduled publication? Status returns to approved.')) return;
+              props.start(async () => props.onCancelSchedule());
+            }}
+          >Cancel schedule</Button>
+        )}
+      </div>
+
+      {showPicker && !alreadyPublished && !scheduled && (
+        <div style={{ marginTop: 10, padding: 10, background: 'var(--admin-surface-strong)', borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
+            Publish on (UK local time — BST/GMT handled; stored as UTC)
+          </label>
+          <input
+            type="datetime-local"
+            value={when}
+            min={defaultScheduleLocal()}
+            onChange={(e) => setWhen(e.currentTarget.value)}
+            style={{ padding: '6px 8px', border: '1px solid var(--admin-border)', borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: 'var(--admin-surface-raised)', color: 'var(--admin-text)' }}
+          />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                const iso = ukLocalToUtcIso(when);
+                if (!iso) { alert('Invalid date/time'); return; }
+                if (!window.confirm(`Schedule publish for ${when.replace('T', ' ')} UK time?`)) return;
+                props.start(async () => { await props.onSchedule(iso); setShowPicker(false); });
+              }}
+            >Confirm schedule</Button>
+            <Button size="sm" variant="secondary" onClick={() => setShowPicker(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {props.preview && <div className="col-dim" style={{ fontSize: 12, marginTop: 6 }}>URL: <a href={props.preview} target="_blank" rel="noopener noreferrer">{props.preview}</a></div>}
+      {props.manualPayload != null && (
+        <details style={{ marginTop: 8, fontSize: 11 }}>
+          <summary className="col-dim" style={{ cursor: 'pointer' }}>Preview payload (what the adapter would send)</summary>
+          <pre style={{ background: 'var(--admin-surface-strong)', padding: 8, borderRadius: 6, maxHeight: 220, overflow: 'auto', fontSize: 11, fontFamily: 'var(--admin-font-mono)' }}>{JSON.stringify(props.manualPayload, null, 2)}</pre>
+        </details>
+      )}
+    </Panel>
+  );
+}
+
+// ── Indexing panel ───────────────────────────────────────────
+
+function IndexingPanel(props: {
+  article: Article;
+  start: (cb: () => void | Promise<void>) => void;
+  wrap: (fn: () => Promise<string>) => Promise<void>;
+}) {
+  if (props.article.status !== 'published' || !props.article.publication_url) return null;
+  const googleDone = Boolean(props.article.google_index_requested_at);
+  const bingDone = Boolean(props.article.bing_index_submitted_at) && props.article.bing_index_submission_response?.ok !== false;
+  const bingAccepted = props.article.bing_index_submission_response?.ok === true;
+  const bingStatus = props.article.bing_index_submission_response?.status ?? null;
+  const bingError = props.article.bing_index_submission_response?.error ?? null;
+  return (
+    <Panel title="Indexing">
+      <div style={{ fontSize: 12, color: 'var(--admin-text-muted)', marginBottom: 8 }}>
+        Submission ≠ confirmed indexing. The checkboxes record that the submission step happened.
+      </div>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <li style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={googleDone}
+            onChange={(e) => props.start(async () => props.wrap(async () => {
+              const r = await markGoogleIndexRequestedAction(props.article.id, e.currentTarget.checked);
+              return r.ok ? 'Google indexing checkbox updated' : `Error: ${r.error}`;
+            }))}
+          />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13 }}>Google indexing requested (manual)</div>
+            <div className="col-dim" style={{ fontSize: 11 }}>
+              Open <a href="https://search.google.com/search-console" target="_blank" rel="noopener noreferrer">Search Console</a> → URL inspection → <code>{props.article.publication_url}</code> → <em>Request indexing</em>. Then tick here.
+              {googleDone && props.article.google_index_requested_at && (
+                <> · Requested {new Date(props.article.google_index_requested_at).toISOString().slice(0, 16).replace('T', ' ')}</>
+              )}
+            </div>
+          </div>
+        </li>
+        <li style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={bingDone}
+            readOnly
+            title="Auto-managed via IndexNow"
+          />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13 }}>Bing IndexNow submission</div>
+            <div className="col-dim" style={{ fontSize: 11 }}>
+              Auto-submitted on publish. <a href="https://www.bing.com/webmasters" target="_blank" rel="noopener noreferrer">Webmaster Tools</a>.
+              {props.article.bing_index_submitted_at && (
+                <> · Submitted {new Date(props.article.bing_index_submitted_at).toISOString().slice(0, 16).replace('T', ' ')} · status {bingStatus ?? '—'} {bingAccepted ? '(accepted)' : bingError ? `· ${bingError}` : ''}</>
+              )}
+            </div>
+            {!bingDone && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => props.start(async () => props.wrap(async () => {
+                  const r = await submitBingIndexNowAction(props.article.id);
+                  return r.ok ? `Submitted · HTTP ${r.status}` : (r.skipped ? `Skipped: ${r.skipped}` : `Error: ${r.error}`);
+                }))}
+              >Submit now</Button>
+            )}
+          </div>
+        </li>
+      </ul>
+    </Panel>
+  );
+}
+
+// ── Scheduling helpers ───────────────────────────────────────
+//
+// The <input type="datetime-local"> value is a naive wall-clock
+// string ("YYYY-MM-DDTHH:MM"). We display it as UK local time
+// (BST/GMT handled by Intl.DateTimeFormat below) and convert to
+// UTC via the Intl offset at that specific wall-clock moment —
+// so a date in BST and a date in GMT both land on the right
+// absolute instant.
+
+function defaultScheduleLocal(): string {
+  // Default: +1 hour from now, rounded to the nearest 5 minutes.
+  const t = new Date(Date.now() + 60 * 60_000);
+  t.setMinutes(Math.round(t.getMinutes() / 5) * 5, 0, 0);
+  return toUkWallClock(t);
+}
+
+function toUkWallClock(d: Date): string {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(d).map((p) => [p.type, p.value]));
+  return `${parts['year']}-${parts['month']}-${parts['day']}T${parts['hour']}:${parts['minute']}`;
+}
+
+function ukLocalToUtcIso(wall: string): string | null {
+  // wall = "YYYY-MM-DDTHH:MM" interpreted in Europe/London.
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(wall);
+  if (!m) return null;
+  const [, Y, M, D, h, min] = m;
+  const utcAssumed = new Date(Date.UTC(+Y!, +M! - 1, +D!, +h!, +min!));
+  const label = toUkWallClock(utcAssumed);
+  if (label === wall) return utcAssumed.toISOString();
+  // Difference between our target wall-clock and what UTC-assumed renders
+  // tells us the offset. Add it in minutes.
+  const target = new Date(Date.UTC(+Y!, +M! - 1, +D!, +h!, +min!));
+  // Compute offset at the TARGET instant (not the assumed one) so DST
+  // transitions resolve to the right side.
+  const probe = new Date(target);
+  const labelProbe = toUkWallClock(probe);
+  const [, pY, pM, pD, pH, pMin] = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(labelProbe) ?? [];
+  if (!pH) return null;
+  const probeAsUtc = Date.UTC(+pY!, +pM! - 1, +pD!, +pH!, +pMin!);
+  const offsetMinutes = (probeAsUtc - target.getTime()) / 60_000;
+  const corrected = new Date(target.getTime() - offsetMinutes * 60_000);
+  return corrected.toISOString();
+}
+
+function formatLocalLabel(iso: string | null): string {
+  if (!iso) return '';
+  return toUkWallClock(new Date(iso)).replace('T', ' ');
 }

@@ -343,9 +343,10 @@ export async function generateDraft(args: DraftInput & { sb: SupabaseClient }): 
 
   const res = await client.messages.create({
     model: draftModel,
-    // Haiku-4.5 caps at 8192 output tokens; use the configured max
-    // so an operator can upgrade to Sonnet (16k) without a deploy.
-    max_tokens: Math.max(modelCfg.max_output_tokens, 4000),
+    // Haiku-4.5 caps at 8192 output tokens. Respect the configured
+    // max (operator can lower it to save budget) but hard-cap at
+    // 8000 — the ESTIMATED_COST_USD.draft ceiling is sized for that.
+    max_tokens: Math.min(modelCfg.max_output_tokens, 8000),
     system: systemBlocks,
     messages: [{
       role: 'user',

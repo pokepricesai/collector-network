@@ -23,7 +23,7 @@ export default async function ArticleDetail({ params }: Params) {
   const { id } = await params;
   const [{ data: art }, { data: links }, { data: versions }] = await Promise.all([
     sb.from('network_articles')
-      .select('id, site_id, title, slug, status, body, body_format, body_rich, standfirst, meta_title, meta_description, summary, featured_image_id, publication_target, publication_url, published_at, qc_report, network_sites(slug, name, canonical_url)')
+      .select('id, site_id, title, slug, status, body, body_format, body_rich, standfirst, meta_title, meta_description, summary, featured_image_id, publication_target, publication_url, published_at, qc_report, scheduled_for, scheduled_by, google_index_requested_at, google_index_requested_by, bing_index_submitted_at, bing_index_submission_response, network_sites(slug, name, canonical_url)')
       .eq('id', id).maybeSingle(),
     sb.from('network_article_links').select('id, target_url, anchor_text, reason, state').eq('article_id', id).order('state', { ascending: true }).limit(50),
     sb.from('network_article_versions').select('version, actor_type, change_note, created_at').eq('article_id', id).order('version', { ascending: false }).limit(20),
@@ -36,6 +36,9 @@ export default async function ArticleDetail({ params }: Params) {
     summary: string | null; featured_image_id: string | null;
     publication_target: string; publication_url: string | null;
     published_at: string | null;
+    scheduled_for: string | null; scheduled_by: string | null;
+    google_index_requested_at: string | null; google_index_requested_by: string | null;
+    bing_index_submitted_at: string | null; bing_index_submission_response: { ok?: boolean; status?: number; error?: string | null } | null;
     qc_report: {
       issues?: Array<{ code: string; severity: string; message: string }>; ran_at?: string;
       deterministic?: { issues: Array<{ code: string; severity: string; message: string }>; ran_at: string | null };
@@ -94,6 +97,12 @@ export default async function ArticleDetail({ params }: Params) {
           body_rich_html: richHtml,
           status: a.status,
           publication_target: a.publication_target,
+          publication_url: a.publication_url,
+          published_at: a.published_at,
+          scheduled_for: a.scheduled_for,
+          google_index_requested_at: a.google_index_requested_at,
+          bing_index_submitted_at: a.bing_index_submitted_at,
+          bing_index_submission_response: a.bing_index_submission_response,
           qc_report: a.qc_report,
         }}
         links={((links ?? []) as Array<{ id: string; target_url: string; anchor_text: string | null; reason: string | null; state: string }>)}

@@ -170,16 +170,35 @@ export async function loadDraftModel(sb: SupabaseClient): Promise<ModelConfig> {
 
 // --- Spend estimates --------------------------------------------
 //
-// Conservative pre-flight estimates used when reserving budget BEFORE
-// the AI call. The actual cost is reconciled on consume. These are
-// generous ceilings — a brief typically costs ~$0.012 at Haiku-4.5
-// pricing, but we reserve $0.03 so we never underestimate.
+// GENUINE UPPER BOUNDS. CN-04 Slice C spec: "AI reservations use
+// genuine upper bounds enforced by maximum token limits and current
+// model pricing, not just optimistic typical-cost estimates."
+//
+// Haiku 4.5 pricing: $0.80/MTok input, $4/MTok output, $1/MTok
+// cache write, $0.08/MTok cache read.
+//
+// Worst-case input context for a brief: ~30k input tokens (voice
+// profile cached + evidence pack + GSC context). The system block
+// is cache-controlled, so a cold run writes it:
+//    30k × $1/MTok cache_write    = $0.030
+//    30k × $0.80/MTok input       = $0.024   (billed on first call)
+//     4k × $4/MTok output         = $0.016
+//    --------------------------------------
+//    worst-case brief cost        = $0.070
+//
+// Draft worst case: wider output cap. Input ≤ 30k, output ≤ 8k:
+//    30k × $1 cache_write + 30k × $0.80 input + 8k × $4 output
+//    = $0.030 + $0.024 + $0.032   = $0.086 ≈ $0.09
+//
+// Pushing to $0.10 for the draft and $0.07 for the brief gives a
+// small guard-rail against pricing nudges without starving the
+// weekly budget: $1/7d ÷ $0.17 pair ≈ 5-6 full articles/week.
 
 export const ESTIMATED_COST_USD = {
-  brief: 0.03,     // ~5k in + 3k out at Haiku-4.5 ($0.80/$4 per MTok) = ~$0.016; keep 2x headroom
-  draft: 0.05,     // ~5k in + 5k out at Haiku-4.5 = ~$0.024; keep 2x headroom
-  revision: 0.02,
-  summary: 0.01,
+  brief: 0.07,
+  draft: 0.10,
+  revision: 0.04,
+  summary: 0.02,
 } as const;
 
 export type ArticleOperation = keyof typeof ESTIMATED_COST_USD;

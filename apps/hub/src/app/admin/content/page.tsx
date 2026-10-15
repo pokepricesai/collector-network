@@ -82,6 +82,7 @@ export default async function ContentDashboard() {
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/content/briefs">Briefs</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/content/articles">Articles</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/content/calendar">Calendar</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/content/indexing">Indexing</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/content/autopilot">Autopilot</Link>
           </div>
         }

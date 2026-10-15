@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { generateArticleDraft, runArticleQc } from '@/server/content/drafts';
-import { publishArticle } from '@/server/content/publish';
+import { publishArticle, scheduleArticle, cancelSchedule } from '@/server/content/publish';
 import { sanitiseEditorHtml } from '@/server/content/sanitise';
+import { submitArticleToIndexNow, loadSiteIndexNow } from '@/server/content/indexing';
 
 export async function updateArticleAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
   const { admin, sb } = await requireAdmin('/admin/content/articles');
@@ -83,15 +84,15 @@ export async function runQcAction(articleId: string): Promise<{ ok: boolean; iss
   return { ok: true, issues };
 }
 
-export async function publishArticleAction(articleId: string, mode: 'preview' | 'publish'): Promise<{ ok: boolean; url?: string | null; requiresManual?: boolean; manualPayload?: unknown; error?: string }> {
+export async function publishArticleAction(articleId: string, mode: 'preview' | 'publish'): Promise<{ ok: boolean; url?: string | null; requiresManual?: boolean; manualPayload?: unknown; error?: string; verified?: boolean; verificationError?: string }> {
   const { admin, sb } = await requireAdmin('/admin/content/articles');
   try {
     const r = await publishArticle(sb, articleId, admin.adminRowId, mode);
     revalidatePath(`/admin/content/articles/${articleId}`);
     revalidatePath('/admin/content/articles');
     revalidatePath('/admin/content');
-    if (!r.ok) return { ok: false, error: r.error };
-    return { ok: true, url: r.publicationUrl, requiresManual: r.requiresManualAction, manualPayload: r.manualPayload };
+    if (!r.ok) return { ok: false, error: r.error, verified: r.verified, verificationError: r.verificationError };
+    return { ok: true, url: r.publicationUrl, requiresManual: r.requiresManualAction, manualPayload: r.manualPayload, verified: r.verified, verificationError: r.verificationError };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -101,4 +102,53 @@ export async function toggleArticleLinkAction(linkId: string, state: 'suggested'
   const { sb } = await requireAdmin('/admin/content/articles');
   await sb.from('network_article_links').update({ state }).eq('id', linkId);
   return { ok: true };
+}
+
+export async function scheduleArticleAction(articleId: string, scheduledForIso: string): Promise<{ ok: boolean; error?: string }> {
+  const { admin, sb } = await requireAdmin('/admin/content/articles');
+  const r = await scheduleArticle(sb, { articleId, scheduledForIso, adminId: admin.adminRowId });
+  revalidatePath(`/admin/content/articles/${articleId}`);
+  revalidatePath('/admin/content/articles');
+  return r;
+}
+
+export async function cancelScheduleAction(articleId: string): Promise<{ ok: boolean; error?: string }> {
+  const { admin, sb } = await requireAdmin('/admin/content/articles');
+  const r = await cancelSchedule(sb, articleId, admin.adminRowId);
+  revalidatePath(`/admin/content/articles/${articleId}`);
+  revalidatePath('/admin/content/articles');
+  return r;
+}
+
+export async function markGoogleIndexRequestedAction(articleId: string, requested: boolean): Promise<{ ok: boolean; error?: string }> {
+  const { admin, sb } = await requireAdmin('/admin/content/articles');
+  const update: Record<string, unknown> = requested
+    ? { google_index_requested_at: new Date().toISOString(), google_index_requested_by: admin.adminRowId }
+    : { google_index_requested_at: null, google_index_requested_by: null };
+  const { error } = await sb.from('network_articles').update(update).eq('id', articleId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/admin/content/articles/${articleId}`);
+  revalidatePath('/admin/content/indexing');
+  return { ok: true };
+}
+
+export async function submitBingIndexNowAction(articleId: string): Promise<{ ok: boolean; status?: number; error?: string; skipped?: string }> {
+  const { admin, sb } = await requireAdmin('/admin/content/articles');
+  const { data: artRow } = await sb.from('network_articles')
+    .select('site_id, publication_url').eq('id', articleId).maybeSingle();
+  if (!artRow) return { ok: false, error: 'article not found' };
+  const a = artRow as { site_id: string; publication_url: string | null };
+  const site = await loadSiteIndexNow(sb, a.site_id);
+  if (!site) return { ok: false, error: 'site config not found' };
+  const r = await submitArticleToIndexNow({ url: a.publication_url, site });
+  if (!r.skipped) {
+    await sb.from('network_articles').update({
+      bing_index_submitted_at: r.submittedAtIso,
+      bing_index_submitted_by: admin.adminRowId,
+      bing_index_submission_response: { ok: r.ok, status: r.status, error: r.error ?? null } as unknown as Record<string, unknown>,
+    }).eq('id', articleId);
+  }
+  revalidatePath(`/admin/content/articles/${articleId}`);
+  revalidatePath('/admin/content/indexing');
+  return { ok: r.ok, status: r.status, skipped: r.skipped, error: r.error };
 }
