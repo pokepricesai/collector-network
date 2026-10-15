@@ -1,17 +1,20 @@
 import 'server-only';
 
-// PokePrices publishing adapter. Direct server-to-server write
-// against the PokePrices Supabase project using its service-role
-// key. The key never leaves the hub's server runtime (plain env
-// var, no NEXT_PUBLIC_ prefix). See:
+// PokePrices publishing adapter. Writes directly to the shared
+// Supabase project that already backs both the CN hub and
+// pokeprices-web (ref: egidpsrkqvymvioidatc — one project, two
+// apps). The adapter reuses the hub's own service-role client:
+// no additional POKEPRICES_* env vars are required because the
+// insights table lives in the SAME database. See:
 //   pokeprices-web/src/lib/insights/adminApi.ts   (column allowlist)
 //   pokeprices-web/src/lib/insights/richText.ts   (block JSON shape)
 //
 // Writes the row with status='published' + published_at=now() so
 // the public /insights/[slug] route (ISR revalidate=3600) picks it
-// up on next request. We rely on the public URL check in
-// server/content/publish.ts to confirm the row actually went live.
+// up on next request. The URL check in server/content/publish.ts
+// confirms the row actually went live.
 
+import { createServiceRoleSupabase } from '@/server/admin/service-role';
 import { htmlToPokeBlocks, type PokeBlock } from './html-convert';
 
 export interface PokepricesPublishInput {
@@ -39,12 +42,6 @@ export interface PokepricesPublishResult {
 const PUBLIC_INSIGHTS_BASE = 'https://www.pokeprices.io/insights';
 
 export async function publishToPokePrices(input: PokepricesPublishInput): Promise<PokepricesPublishResult> {
-  const url = process.env['POKEPRICES_SUPABASE_URL'];
-  const serviceKey = process.env['POKEPRICES_SUPABASE_SERVICE_ROLE_KEY'];
-  if (!url || !serviceKey) {
-    return { ok: false, error: 'POKEPRICES_SUPABASE_URL + POKEPRICES_SUPABASE_SERVICE_ROLE_KEY must be set on the hub (server-only)', blocks: 0 };
-  }
-
   // Convert operator-visible rich HTML to the exact block JSON the
   // PokePrices renderer walks. If the article still only has the AI
   // markdown source (operator didn't open the rich editor), we need
@@ -80,32 +77,24 @@ export async function publishToPokePrices(input: PokepricesPublishInput): Promis
   };
   if (input.heroImageUrl) row['image_url'] = input.heroImageUrl;
 
-  // PostgREST upsert against (slug) so a republish for the same slug
-  // updates in place rather than conflicting on the unique index.
-  const endpoint = `${url.replace(/\/$/, '')}/rest/v1/insights?on_conflict=slug`;
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      'Content-Type': 'application/json',
-      'Content-Profile': 'public',
-      Prefer: 'resolution=merge-duplicates,return=representation',
-    },
-    body: JSON.stringify(row),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    return { ok: false, error: `PokePrices Supabase ${res.status}: ${body.slice(0, 300)}`, blocks: blocks.length };
+  // Upsert via supabase-js. onConflict=slug means a republish for
+  // the same slug updates in place rather than failing the unique
+  // index. The service role bypasses the admin RLS policy that
+  // normally restricts writes to pokeprices-web's own /admin.
+  const sb = createServiceRoleSupabase();
+  const { data, error } = await sb
+    .from('insights')
+    .upsert(row, { onConflict: 'slug' })
+    .select('id')
+    .single();
+  if (error) {
+    return { ok: false, error: `PokePrices insights upsert: ${error.message}`, blocks: blocks.length };
   }
-  const data = await res.json().catch(() => null);
-  const inserted = Array.isArray(data) ? data[0] : data;
-  const id = inserted && typeof inserted === 'object' ? String((inserted as Record<string, unknown>)['id'] ?? '') : '';
+  const id = (data as { id?: string | number } | null)?.id;
 
   return {
     ok: true,
-    targetRecordId: id || undefined,
+    targetRecordId: id != null ? String(id) : undefined,
     publicUrl: `${PUBLIC_INSIGHTS_BASE}/${input.slug}`,
     blocks: blocks.length,
   };
