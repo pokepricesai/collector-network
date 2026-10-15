@@ -6,24 +6,30 @@ import 'server-only';
 // the per-site voice profile (reused across many briefs) so cost
 // stays low. Server-only — the API key never ships to the browser.
 //
-// Model: claude-opus-4-6 for both operations. Opus is required for
-// the structured-brief outputs (nested JSON matching our brief
-// schema) and the site-voice fidelity.
+// Model: Haiku 4.5 (claude-haiku-4-5-20251001) is the Slice A
+// default. The actual model identifier comes from
+// network_autopilot_config.default_draft_model so an operator can
+// swap it without a deploy. Haiku-4.5 keeps a brief + draft pair
+// well under $0.05 — critical for the $1 / 7-day rolling budget.
 
 import Anthropic from '@anthropic-ai/sdk';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadDraftModel } from './budget';
 
-const BRIEF_MODEL = 'claude-opus-4-7';
-const DRAFT_MODEL = 'claude-opus-4-7';
-
-// Opus pricing (as of 2026-02): $15/MTok input, $75/MTok output,
-// cache read $1.50/MTok, cache write $18.75/MTok. We track this on
-// network_ai_cost_log alongside token counts.
-const PRICE_PER_MTOK = {
-  input: 15,
-  output: 75,
-  cache_read: 1.5,
-  cache_write: 18.75,
+// Per-model USD/MTok rates. Keep every model we might configure so
+// cost accounting stays accurate if an operator flips the config.
+// Prices as of 2026-10 (Anthropic pricing page).
+const MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number; cache_write: number }> = {
+  // Haiku 4.5
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4,    cache_read: 0.08, cache_write: 1 },
+  'claude-haiku-4-5':          { input: 0.80, output: 4,    cache_read: 0.08, cache_write: 1 },
+  // Sonnet 4.6 (fallback)
+  'claude-sonnet-4-6':          { input: 3,    output: 15,   cache_read: 0.30, cache_write: 3.75 },
+  // Opus 4.7 (not used by Slice A; kept so prior cost-log rows reconcile)
+  'claude-opus-4-7':            { input: 15,   output: 75,   cache_read: 1.5,  cache_write: 18.75 },
 };
+
+const DEFAULT_HAIKU = 'claude-haiku-4-5-20251001';
 
 export interface AiUsage {
   input_tokens: number;
@@ -34,23 +40,24 @@ export interface AiUsage {
   model: string;
 }
 
-function estimateCost(usage: Anthropic.Usage): AiUsage {
+function estimateCost(usage: Anthropic.Usage, model: string): AiUsage {
   const input         = usage.input_tokens         ?? 0;
   const output        = usage.output_tokens        ?? 0;
   const cacheRead     = usage.cache_read_input_tokens ?? 0;
   const cacheWrite    = usage.cache_creation_input_tokens ?? 0;
+  const price = MODEL_PRICING[model] ?? MODEL_PRICING[DEFAULT_HAIKU]!;
   const cost =
-    (input * PRICE_PER_MTOK.input +
-     output * PRICE_PER_MTOK.output +
-     cacheRead * PRICE_PER_MTOK.cache_read +
-     cacheWrite * PRICE_PER_MTOK.cache_write) / 1_000_000;
+    (input * price.input +
+     output * price.output +
+     cacheRead * price.cache_read +
+     cacheWrite * price.cache_write) / 1_000_000;
   return {
     input_tokens: input,
     output_tokens: output,
     cache_read_tokens: cacheRead,
     cache_write_tokens: cacheWrite,
     est_cost_usd: Number(cost.toFixed(6)),
-    model: 'claude-opus-4-7',
+    model,
   };
 }
 
@@ -180,8 +187,11 @@ export async function generateBrief(args: {
   siteSlug: string;
   voice: VoiceProfile;
   evidence: BriefEvidence;
+  sb: SupabaseClient;
 }): Promise<{ brief: GeneratedBrief; usage: AiUsage; rawText: string }> {
   const client = getAnthropic();
+  const modelCfg = await loadDraftModel(args.sb);
+  const briefModel = modelCfg.model;
 
   const system = voiceSystemBlock(args.siteSlug, args.voice);
   // Cache the system block (voice profile + rules) — it's reused
@@ -202,11 +212,10 @@ export async function generateBrief(args: {
   };
 
   const res = await client.messages.create({
-    model: BRIEF_MODEL,
-    // 8000 output tokens accommodates briefs with large evidence
-    // (e.g. 40 mover candidates). Prior 4000 cap caused truncation
-    // mid-array for data-driven briefs.
-    max_tokens: 8000,
+    model: briefModel,
+    // Haiku-4.5 caps at 8192 output tokens; keep brief budget wide
+    // enough for data-heavy evidence packs.
+    max_tokens: Math.min(modelCfg.max_output_tokens, 4000),
     system: systemBlocks,
     messages: [{
       role: 'user',
@@ -230,7 +239,7 @@ export async function generateBrief(args: {
     console.error(`[brief] parse failure: ${msg}. Raw output length=${rawText.length}. First 400 chars: ${rawText.slice(0, 400)}... Last 400: ${rawText.slice(-400)}`);
     throw new Error(`AI returned non-JSON: ${msg}. Output length ${rawText.length} chars. stop_reason=${res.stop_reason}. First 200 chars: ${rawText.slice(0, 200)}`);
   }
-  return { brief, usage: estimateCost(res.usage), rawText };
+  return { brief, usage: estimateCost(res.usage, briefModel), rawText };
 }
 
 function parseBriefJson(raw: string): GeneratedBrief {
@@ -273,8 +282,10 @@ export interface GeneratedDraft {
   research_gaps: string[];
 }
 
-export async function generateDraft(args: DraftInput): Promise<{ draft: GeneratedDraft; usage: AiUsage; rawText: string }> {
+export async function generateDraft(args: DraftInput & { sb: SupabaseClient }): Promise<{ draft: GeneratedDraft; usage: AiUsage; rawText: string }> {
   const client = getAnthropic();
+  const modelCfg = await loadDraftModel(args.sb);
+  const draftModel = modelCfg.model;
 
   const system = [
     voiceSystemBlock(args.siteSlug, args.voice),
@@ -312,11 +323,10 @@ export async function generateDraft(args: DraftInput): Promise<{ draft: Generate
   };
 
   const res = await client.messages.create({
-    model: DRAFT_MODEL,
-    // 16000 output tokens accommodates full articles plus the
-    // sources + used_internal_links arrays and the research_gaps
-    // list. The brief hit truncation at 4000; we go wider here.
-    max_tokens: 16000,
+    model: draftModel,
+    // Haiku-4.5 caps at 8192 output tokens; use the configured max
+    // so an operator can upgrade to Sonnet (16k) without a deploy.
+    max_tokens: Math.max(modelCfg.max_output_tokens, 4000),
     system: systemBlocks,
     messages: [{
       role: 'user',
@@ -340,7 +350,7 @@ export async function generateDraft(args: DraftInput): Promise<{ draft: Generate
     console.error(`[draft] parse failure: ${msg}. Raw output length=${rawText.length}. First 400 chars: ${rawText.slice(0, 400)}... Last 400: ${rawText.slice(-400)}`);
     throw new Error(`AI returned non-JSON: ${msg}. Output length ${rawText.length} chars. stop_reason=${res.stop_reason}. First 200 chars: ${rawText.slice(0, 200)}`);
   }
-  return { draft, usage: estimateCost(res.usage), rawText };
+  return { draft, usage: estimateCost(res.usage, draftModel), rawText };
 }
 
 function parseDraftJson(raw: string): GeneratedDraft {

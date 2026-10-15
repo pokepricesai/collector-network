@@ -9,6 +9,12 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateDraft, logAiCost, type VoiceProfile, type GeneratedBrief } from './ai';
+import {
+  reserveArticleAiBudget,
+  consumeArticleAiBudget,
+  failArticleAiBudget,
+  ESTIMATED_COST_USD,
+} from './budget';
 
 async function loadVoice(sb: SupabaseClient, siteId: string): Promise<VoiceProfile> {
   const { data, error } = await sb
@@ -141,11 +147,11 @@ export async function generateArticleDraft(
 ): Promise<{ draft: Record<string, unknown>; usage: { input_tokens: number; output_tokens: number; est_cost_usd: number; model: string } }> {
   const { data: art, error } = await sb
     .from('network_articles')
-    .select('id, site_id, brief_id, title, slug, body, publication_target, network_sites(slug)')
+    .select('id, site_id, idea_id, brief_id, title, slug, body, publication_target, network_sites(slug)')
     .eq('id', articleId).maybeSingle();
   if (error) throw new Error(`[drafts] load article: ${error.message}`);
   if (!art) throw new Error('article not found');
-  const a = art as unknown as { id: string; site_id: string; brief_id: string; title: string; slug: string; body: string; publication_target: string; network_sites: { slug: string } };
+  const a = art as unknown as { id: string; site_id: string; idea_id: string | null; brief_id: string; title: string; slug: string; body: string; publication_target: string; network_sites: { slug: string } };
   if (!a.brief_id) throw new Error('article has no attached brief');
 
   // Snapshot current state before overwrite
@@ -193,13 +199,35 @@ export async function generateArticleDraft(
       accepted: l.state === 'accepted',
     }));
 
-  const { draft, usage, rawText } = await generateDraft({
-    siteSlug: a.network_sites.slug,
-    voice,
-    brief: briefPayload,
-    internal_link_slate: linkSlate.map((l) => ({ ...l })),
-    additional_facts: additionalFacts,
+  // Reserve rolling-7d budget before any AI call.
+  const reservation = await reserveArticleAiBudget(sb, {
+    estimatedUsd: ESTIMATED_COST_USD.draft,
+    ideaId: a.idea_id ?? null,
+    siteId: a.site_id,
   });
+  if (!reservation.reserved || !reservation.reservationId) {
+    throw new Error(`[drafts] AI budget denied: ${reservation.reason ?? 'unknown'}. The $1 / 7-day ceiling is full.`);
+  }
+  const reservationId = reservation.reservationId;
+
+  let draft: Awaited<ReturnType<typeof generateDraft>>['draft'];
+  let usage: Awaited<ReturnType<typeof generateDraft>>['usage'];
+  let rawText: string;
+  try {
+    const result = await generateDraft({
+      siteSlug: a.network_sites.slug,
+      voice,
+      brief: briefPayload,
+      internal_link_slate: linkSlate.map((l) => ({ ...l })),
+      additional_facts: additionalFacts,
+      sb,
+    });
+    draft = result.draft; usage = result.usage; rawText = result.rawText;
+  } catch (err) {
+    await failArticleAiBudget(sb, { reservationId, reason: (err as Error).message.slice(0, 200) });
+    throw err;
+  }
+  await consumeArticleAiBudget(sb, { reservationId, actualUsd: usage.est_cost_usd, articleId: a.id });
 
   await sb.from('network_articles').update({
     title: draft.title,

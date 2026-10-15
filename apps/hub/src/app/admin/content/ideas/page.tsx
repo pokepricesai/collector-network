@@ -20,7 +20,7 @@ interface IdeaRow {
   working_title: string; primary_query: string | null;
   secondary_queries: string[]; summary: string | null;
   priority: 'critical' | 'high' | 'normal' | 'low';
-  status: 'new' | 'in_brief' | 'drafting' | 'published' | 'dismissed' | 'stale';
+  status: 'new' | 'approved' | 'in_brief' | 'drafting' | 'published' | 'dismissed' | 'rejected' | 'stale';
   origin_type: string; evidence: Record<string, unknown>;
   created_at: string; last_seen_at: string;
 }
@@ -66,7 +66,7 @@ export default async function IdeasPage({ searchParams }: Params) {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-          {(['new', 'in_brief', 'drafting', 'published', 'dismissed', 'stale'] as const).map((s) => (
+          {(['new', 'approved', 'in_brief', 'drafting', 'published', 'dismissed', 'stale'] as const).map((s) => (
             <Link key={s} className={`status-badge ${status === s ? 'status-active' : 'status-not_connected'}`} href={`/admin/content/ideas?${siteSlug ? `site=${siteSlug}&` : ''}status=${s}`}>{s.replace(/_/g, ' ')}</Link>
           ))}
         </div>

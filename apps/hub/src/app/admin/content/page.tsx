@@ -7,6 +7,7 @@ import { listNetworkSites } from '@/server/admin/sites';
 import { formatInt, formatPct, formatRelative } from '@/lib/format';
 import { siteDisplayName } from '@/lib/display-names';
 import { computeArticlePerformance } from '@/server/content/performance';
+import { getRollingAiBudget } from '@/server/content/budget';
 import { RefreshIdeasButton } from './RefreshIdeasButton';
 
 export const dynamic = 'force-dynamic';
@@ -45,6 +46,7 @@ export default async function ContentDashboard() {
     sb.from('network_approvals').select('id, title, action_type, created_at, site_id').eq('status', 'pending').in('action_type', ['content_brief', 'content_publish']).order('created_at', { ascending: false }).limit(10),
     sb.from('network_ai_cost_log').select('operation, est_cost_usd, input_tokens, output_tokens').gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
   ]);
+  const budget = await getRollingAiBudget(sb);
 
   const costSum = ((aiCostTotals ?? []) as Array<{ operation: string; est_cost_usd: number; input_tokens: number; output_tokens: number }>);
   const costTotal = costSum.reduce((a, r) => a + Number(r.est_cost_usd ?? 0), 0);
@@ -152,17 +154,24 @@ export default async function ContentDashboard() {
         <ArticlePerformanceGrid />
       </Panel>
 
-      <Panel title="AI cost (last 7d)" eyebrow="Generation spend">
+      <Panel title="AI budget · rolling 7 days" eyebrow={`Hard cap $${budget.limit_usd.toFixed(2)}`}>
         <div className="metric-grid metric-grid--compact">
-          <MetricCard label="Est cost (USD)" value={`$${costTotal.toFixed(4)}`} state={costTotal > 0 ? 'ok' : 'muted'} helper="all operations" />
-          <MetricCard label="Operations" value={formatInt(costSum.length)} />
-          <MetricCard label="Avg cost / op" value={costSum.length > 0 ? `$${(costTotal / costSum.length).toFixed(5)}` : '—'} />
+          <MetricCard
+            label="Remaining"
+            value={`$${budget.remaining_usd.toFixed(4)}`}
+            state={budget.remaining_usd > 0 ? 'ok' : 'muted'}
+            helper={`of $${budget.limit_usd.toFixed(2)} · ${((budget.spent_usd / budget.limit_usd) * 100).toFixed(1)}% used`}
+          />
+          <MetricCard label="Spent (7d)" value={`$${budget.spent_usd.toFixed(4)}`} helper={`${formatInt(budget.ops_in_window)} ops`} />
+          <MetricCard label="Reserved" value={`$${budget.reserved_usd.toFixed(4)}`} state="muted" helper="in-flight calls" />
+          <MetricCard label="Avg cost / op" value={budget.ops_in_window > 0 ? `$${(budget.spent_usd / budget.ops_in_window).toFixed(5)}` : '—'} state="muted" />
         </div>
         <details style={{ marginTop: 10, fontSize: 11, color: 'var(--admin-text-muted)' }}>
-          <summary style={{ cursor: 'pointer' }}>Token detail</summary>
+          <summary style={{ cursor: 'pointer' }}>Token detail (last 7d)</summary>
           <div style={{ marginTop: 6, display: 'flex', gap: 14 }}>
             <div><strong>Input tokens:</strong> {formatInt(inTokens)}</div>
             <div><strong>Output tokens:</strong> {formatInt(outTokens)}</div>
+            <div><strong>Total ops:</strong> {formatInt(costSum.length)} · <strong>Spent:</strong> ${costTotal.toFixed(5)}</div>
           </div>
         </details>
       </Panel>

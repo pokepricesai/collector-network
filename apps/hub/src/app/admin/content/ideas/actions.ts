@@ -54,6 +54,62 @@ export async function dismissIdeaAction(id: string, reason: string): Promise<voi
   revalidatePath('/admin/content/ideas');
 }
 
+export async function approveIdeaAction(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { admin, sb } = await requireAdmin('/admin/content/ideas');
+  const { data: idea, error: loadErr } = await sb.from('network_content_ideas')
+    .select('id, status, site_id').eq('id', id).maybeSingle();
+  if (loadErr) return { ok: false, error: loadErr.message };
+  if (!idea) return { ok: false, error: 'not found' };
+  const row = idea as { id: string; status: string; site_id: string };
+  if (row.status !== 'new') {
+    return { ok: false, error: `cannot approve from status '${row.status}'` };
+  }
+  const { error } = await sb.from('network_content_ideas').update({
+    status: 'approved',
+    approved_at: new Date().toISOString(),
+    approved_by: admin.adminRowId,
+  }).eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  await sb.rpc('network_log_audit', {
+    p_action: 'idea.approved',
+    p_entity_type: 'network_content_idea',
+    p_entity_id: id,
+    p_site_id: row.site_id,
+    p_old_value: { status: row.status } as unknown as Record<string, unknown>,
+    p_new_value: { status: 'approved' } as unknown as Record<string, unknown>,
+    p_actor_type: 'human',
+    p_source: 'manual',
+    p_metadata: {} as unknown as Record<string, unknown>,
+  });
+  revalidatePath('/admin/content/ideas');
+  revalidatePath('/admin/content');
+  return { ok: true };
+}
+
+export async function updateIdeaAction(fd: FormData): Promise<void> {
+  const { sb } = await requireAdmin('/admin/content/ideas');
+  const id = fd.get('id') as string;
+  const title = ((fd.get('title') as string) ?? '').slice(0, 180);
+  const summary = ((fd.get('summary') as string) ?? '') || null;
+  const primaryQuery = ((fd.get('primaryQuery') as string) ?? '') || null;
+  const priority = (fd.get('priority') as string) || 'normal';
+  const contentType = (fd.get('contentType') as string) || 'seo_article';
+  const notes = ((fd.get('notes') as string) ?? '') || null;
+  if (!id || !title) throw new Error('id + title required');
+  const { error } = await sb.from('network_content_ideas').update({
+    working_title: title,
+    summary,
+    primary_query: primaryQuery,
+    priority,
+    content_type: contentType,
+    notes,
+  }).eq('id', id);
+  if (error) throw new Error(error.message);
+  revalidatePath('/admin/content/ideas');
+  revalidatePath(`/admin/content/ideas/${id}`);
+  redirect('/admin/content/ideas');
+}
+
 export async function generateBriefForIdeaAction(ideaId: string): Promise<{ ok: boolean; briefId?: string; error?: string }> {
   const { admin, sb } = await requireAdmin('/admin/content/ideas');
   try {

@@ -142,7 +142,7 @@ export async function generateIdeasForSite(
   // --- Dedup within this run --------------------------------------
   const batch = new Map<string, IdeaInput>();
   for (const i of ideas) batch.set(i.dedupe_key, i);
-  const final = [...batch.values()];
+  const dedupedAll = [...batch.values()];
 
   // Early-exit: if nothing to emit AND there are no 'new' ideas to
   // mark stale, we're done. But we DO still need to run the stale
@@ -153,6 +153,31 @@ export async function generateIdeasForSite(
     .from('network_content_ideas')
     .select('dedupe_key').eq('site_id', siteId);
   const existingKeys = new Set(((existing.data ?? []) as Array<{ dedupe_key: string }>).map((r) => r.dedupe_key));
+
+  // --- CN-04 Slice A cap: emit at most 4 NEW ideas per site per run.
+  // Existing ideas still refresh (last_seen_at bump) so they stay out
+  // of the stale sweep. Only brand-new (unseen) dedupe_keys are
+  // trimmed. Rank by priority then evidence impression volume so the
+  // strongest signals win when more than 4 candidates fire the same
+  // week.
+  const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+  const impressions = (ev: Record<string, unknown>): number => {
+    const m = (ev['metrics'] as Record<string, unknown> | undefined) ?? {};
+    const direct = Number(ev['impressions_28d'] ?? 0);
+    const via = Number((m['impressions_28d'] as number | undefined) ?? (m['impressions_7d'] as number | undefined) ?? 0);
+    return Math.max(direct, via);
+  };
+  const refreshing = dedupedAll.filter((i) => existingKeys.has(i.dedupe_key));
+  const brandNewSorted = dedupedAll
+    .filter((i) => !existingKeys.has(i.dedupe_key))
+    .sort((a, b) => {
+      const p = (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9);
+      if (p !== 0) return p;
+      return impressions(b.evidence) - impressions(a.evidence);
+    });
+  const PER_SITE_WEEKLY_CAP = 4;
+  const brandNewCapped = brandNewSorted.slice(0, PER_SITE_WEEKLY_CAP);
+  const final = [...refreshing, ...brandNewCapped];
 
   if (final.length > 0) {
     const rows = final.map((i) => ({

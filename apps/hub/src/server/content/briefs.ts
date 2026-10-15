@@ -8,6 +8,12 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateBrief, logAiCost, type VoiceProfile, type BriefEvidence } from './ai';
+import {
+  reserveArticleAiBudget,
+  consumeArticleAiBudget,
+  failArticleAiBudget,
+  ESTIMATED_COST_USD,
+} from './budget';
 
 export interface BriefResult {
   briefId: string;
@@ -122,22 +128,53 @@ export async function generateBriefForIdea(
   // Load idea
   const { data: ideaRow, error: ideaErr } = await sb
     .from('network_content_ideas')
-    .select('id, site_id, working_title, primary_query, secondary_queries, content_type, summary, origin_type, evidence, network_sites(slug)')
+    .select('id, site_id, status, working_title, primary_query, secondary_queries, content_type, summary, origin_type, evidence, network_sites(slug)')
     .eq('id', ideaId).maybeSingle();
   if (ideaErr) throw new Error(`[briefs] load idea: ${ideaErr.message}`);
   if (!ideaRow) throw new Error(`[briefs] idea ${ideaId} not found`);
   const idea = ideaRow as unknown as {
-    id: string; site_id: string; working_title: string; primary_query: string | null;
+    id: string; site_id: string; status: string; working_title: string; primary_query: string | null;
     secondary_queries: string[]; content_type: string; summary: string | null;
     origin_type: string; evidence: Record<string, unknown>;
     network_sites: { slug: string };
   };
 
+  // Approval gate: only approved ideas may consume AI budget.
+  // Human-authored manual ideas enter as 'new' and still require
+  // the operator to click Approve.
+  if (idea.status !== 'approved') {
+    throw new Error(`[briefs] idea ${ideaId} is not approved (status=${idea.status}); approve it first`);
+  }
+
+  // Reserve budget BEFORE any AI call. Rolling 7-day cap enforced
+  // atomically by the Postgres RPC with an advisory lock.
+  const reservation = await reserveArticleAiBudget(sb, {
+    estimatedUsd: ESTIMATED_COST_USD.brief,
+    ideaId: idea.id,
+    siteId: idea.site_id,
+  });
+  if (!reservation.reserved || !reservation.reservationId) {
+    throw new Error(`[briefs] AI budget denied: ${reservation.reason ?? 'unknown'}. The $1 / 7-day ceiling is full; dismiss some ideas or wait for the window to roll forward.`);
+  }
+  const reservationId = reservation.reservationId;
+
   const voice = await loadVoice(sb, idea.site_id);
   const evidence = await loadEvidence(sb, idea);
-  const { brief, usage, rawText } = await generateBrief({
-    siteSlug: idea.network_sites.slug, voice, evidence,
-  });
+  let brief: Awaited<ReturnType<typeof generateBrief>>['brief'];
+  let usage: Awaited<ReturnType<typeof generateBrief>>['usage'];
+  let rawText: string;
+  try {
+    const result = await generateBrief({
+      siteSlug: idea.network_sites.slug, voice, evidence, sb,
+    });
+    brief = result.brief; usage = result.usage; rawText = result.rawText;
+  } catch (err) {
+    await failArticleAiBudget(sb, { reservationId, reason: (err as Error).message.slice(0, 200) });
+    throw err;
+  }
+  // Reconcile the reservation with the real cost before logging —
+  // keeps rolling-budget reads consistent with ground truth.
+  await consumeArticleAiBudget(sb, { reservationId, actualUsd: usage.est_cost_usd });
 
   // Persist brief
   const { data: inserted, error: insErr } = await sb
@@ -274,6 +311,8 @@ export async function rejectBrief(
     }).eq('id', b.approval_id);
   }
 
-  // Return the idea to 'new' so operator can try again.
-  await sb.from('network_content_ideas').update({ status: 'new' }).eq('id', b.idea_id);
+  // Return the idea to 'approved' — it was already vetted; a
+  // rejected brief doesn't invalidate the idea itself. The operator
+  // can regenerate a new brief from the ideas page.
+  await sb.from('network_content_ideas').update({ status: 'approved' }).eq('id', b.idea_id);
 }
