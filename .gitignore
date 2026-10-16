@@ -46,3 +46,4 @@ coverage
 .vercel
 .env*
 /tmp
+scripts/_cn06b/

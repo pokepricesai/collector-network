@@ -396,14 +396,23 @@ export default async function PartnerDetailPage({ params }: Params) {
           </form>
         </details>
         <ul style={{ margin: '12px 0 0', paddingLeft: 20, fontSize: 13 }}>
-          {interactions.length === 0 ? <li className="col-dim">No interactions logged yet.</li> : interactions.map((it) => (
-            <li key={it.id} style={{ marginBottom: 10 }}>
-              <StatusBadge state="info" label={`${it.kind.replace(/_/g, ' ')} · ${it.direction}`} />{' '}
-              <strong>{it.summary}</strong>
-              {' '}<span className="col-dim" style={{ fontSize: 11 }}>· {formatRelative(it.occurred_at)}</span>
-              {it.detail && <div className="col-dim" style={{ fontSize: 12 }}>{it.detail}</div>}
-            </li>
-          ))}
+          {interactions.length === 0 ? <li className="col-dim">No interactions logged yet.</li> : interactions.map((it) => {
+            const isDraft = /^\[DRAFT/i.test(it.summary ?? '');
+            return (
+              <li key={it.id} style={{ marginBottom: 10 }}>
+                <StatusBadge state={isDraft ? 'warning' : 'info'} label={isDraft ? 'DRAFT (not sent)' : `${it.kind.replace(/_/g, ' ')} · ${it.direction}`} />{' '}
+                <strong>{it.summary}</strong>
+                {' '}<span className="col-dim" style={{ fontSize: 11 }}>· {formatRelative(it.occurred_at)}</span>
+                {it.detail && (
+                  isDraft ? (
+                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, background: 'var(--admin-bg-subtle, #f7f7f7)', border: '1px solid var(--admin-border, #e5e5e5)', padding: 10, borderRadius: 4, marginTop: 6, fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif' }}>{it.detail}</pre>
+                  ) : (
+                    <div className="col-dim" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{it.detail}</div>
+                  )
+                )}
+              </li>
+            );
+          })}
         </ul>
       </Panel>
     </AdminShell>

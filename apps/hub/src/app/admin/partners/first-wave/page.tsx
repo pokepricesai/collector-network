@@ -22,6 +22,33 @@ export default async function FirstWavePage() {
   const avgFit = partners.filter((p) => p.fit_score != null).reduce((a, b) => a + (b.fit_score ?? 0), 0)
     / Math.max(1, partners.filter((p) => p.fit_score != null).length);
 
+  // Contact signal for each wave partner — one query, enrich in-process.
+  const partnerIds = partners.map((p) => p.id);
+  type ContactSignal = { email: boolean; named: boolean; form: boolean };
+  const signals = new Map<string, ContactSignal>();
+  if (partnerIds.length > 0) {
+    const { data: contactRows } = await sb.from('network_partner_contacts')
+      .select('partner_id, email, email_verification, contact_url, full_name, suppressed')
+      .in('partner_id', partnerIds);
+    for (const c of contactRows ?? []) {
+      if (c.suppressed) continue;
+      const s = signals.get(c.partner_id) ?? { email: false, named: false, form: false };
+      if (c.email && c.email_verification) s.email = true;
+      if (c.full_name && !c.full_name.includes('—')) s.named = true;
+      if (c.contact_url) s.form = true;
+      signals.set(c.partner_id, s);
+    }
+  }
+  // Also pull draft markers.
+  const draftIds = new Set<string>();
+  if (partnerIds.length > 0) {
+    const { data: drafts } = await sb.from('network_partner_interactions')
+      .select('partner_id, summary')
+      .in('partner_id', partnerIds)
+      .ilike('summary', '[DRAFT CN-06B%');
+    for (const d of drafts ?? []) draftIds.add(d.partner_id);
+  }
+
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/partners/first-wave">
       <SectionHeader
@@ -39,7 +66,7 @@ export default async function FirstWavePage() {
           </span>
         }
       />
-      <Panel title={`First-wave list (${partners.length})`} eyebrow="Ranked by fit score">
+      <Panel title={`First-wave list (${partners.length})`} eyebrow="Ranked by fit score + contact readiness">
         <Table
           rows={partners}
           columns={[
@@ -51,9 +78,20 @@ export default async function FirstWavePage() {
               </span>
             ) },
             { key: 'category', header: 'Category', render: (r) => <span style={{ fontSize: 12 }}>{categoryLabel(r.vendor_category)}</span> },
-            { key: 'tcgs', header: 'TCGs', render: (r) => r.relevant_tcgs?.length ? r.relevant_tcgs.join('·') : <span className="col-dim">—</span> },
-            { key: 'size', header: 'Size', render: (r) => r.estimated_size ?? <span className="col-dim">—</span> },
-            { key: 'rec', header: 'Recommended', render: (r) => r.recommended_price_minor != null ? `£${(r.recommended_price_minor / 100).toLocaleString()}/mo` : <span className="col-dim">—</span> },
+            { key: 'signal', header: 'Contact route', render: (r) => {
+              const s = signals.get(r.id);
+              if (!s) return <span className="col-dim">none</span>;
+              return (
+                <span style={{ display: 'inline-flex', gap: 4 }}>
+                  {s.named && s.email && <StatusBadge state="success" label="named+email" />}
+                  {s.named && !s.email && <StatusBadge state="info" label="named" />}
+                  {!s.named && s.email && <StatusBadge state="info" label="email" />}
+                  {!s.named && !s.email && s.form && <StatusBadge state="warning" label="form only" />}
+                </span>
+              );
+            } },
+            { key: 'draft', header: 'Draft', render: (r) => draftIds.has(r.id) ? <StatusBadge state="warning" label="wave-1 draft" /> : <span className="col-dim">—</span> },
+            { key: 'rec', header: 'Price', className: 'num', render: (r) => r.recommended_price_minor != null ? `£${(r.recommended_price_minor / 100).toLocaleString()}/mo` : <span className="col-dim">—</span> },
             { key: 'status', header: 'Stage', render: (r) => <StatusBadge state={r.status === 'won' ? 'success' : r.status === 'lost' ? 'failed' : 'info'} label={r.status.replace(/_/g, ' ')} /> },
             { key: 'contact', header: 'Last contact', render: (r) => <span className="col-dim" style={{ fontSize: 11 }}>{r.last_contact_at ? formatRelative(r.last_contact_at) : 'Never'}</span> },
           ]}
