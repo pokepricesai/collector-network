@@ -113,6 +113,41 @@ export default async function InsightsIndex() {
             </Link>
           ))}
         </div>
+
+        <section aria-labelledby="browse-topics-heading" style={{
+          marginTop: 40, paddingTop: 24,
+          borderTop: '1px solid var(--border)',
+        }}>
+          <h2 id="browse-topics-heading" style={{
+            margin: '0 0 12px', fontSize: 18, letterSpacing: '-0.01em',
+          }}>Browse by topic</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, maxWidth: 640 }}>
+            The articles above cover the market; the pages below are where to look up specific printings and track them.
+          </p>
+          <div style={{
+            display: 'grid', gap: 10,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+          }}>
+            {[
+              { href: '/browse', label: 'All sets', sub: 'Every indexed One Piece set' },
+              { href: '/leaders', label: 'Leaders', sub: 'Browse by Leader card' },
+              { href: '/colours', label: 'Colours', sub: 'Browse by colour identity' },
+              { href: '/market', label: 'Market movers', sub: 'Daily risers and fallers' },
+              { href: '/card-finder', label: 'Card finder', sub: 'Narrow by rarity, parallel, set' },
+            ].map((l) => (
+              <Link key={l.href} href={l.href} style={{
+                display: 'flex', flexDirection: 'column', gap: 2,
+                padding: '10px 12px', borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-light, #F9FAFB)',
+                textDecoration: 'none', color: 'inherit',
+              }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{l.label} →</span>
+                <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{l.sub}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

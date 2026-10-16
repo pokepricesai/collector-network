@@ -65,6 +65,43 @@ export default async function ArchetypesDirectoryPage() {
           ))}
         </div>
 
+        <section aria-labelledby="related-browse-heading" style={{
+          marginTop: 24, paddingTop: 24,
+          borderTop: '1px solid var(--ygo-border, #E5E7EB)',
+        }}>
+          <h2 id="related-browse-heading" style={{
+            margin: '0 0 10px', fontSize: 18, letterSpacing: '-0.01em',
+          }}>Related to archetypes</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--ygo-text-muted, #6B7280)', lineHeight: 1.55, maxWidth: 640 }}>
+            Archetypes describe strategies. The pages below cover the
+            print structure around those strategies: which sets they
+            came from, what&apos;s legal to play right now, and the
+            rarity treatments members appear in.
+          </p>
+          <div style={{
+            display: 'grid', gap: 10,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+          }}>
+            {[
+              { href: '/sets', label: 'All Yu-Gi-Oh! sets', sub: 'Where each archetype member was printed' },
+              { href: '/forbidden-limited', label: 'Forbidden & Limited list', sub: 'Current competitive legality' },
+              { href: '/rarities', label: 'Rarities', sub: 'Secret, Ultimate, Ghost, Starlight and more' },
+              { href: '/market/most-valuable', label: 'Most valuable', sub: 'The top-priced archetype pulls today' },
+            ].map((l) => (
+              <Link key={l.href} href={l.href} style={{
+                display: 'flex', flexDirection: 'column', gap: 2,
+                padding: '10px 12px', borderRadius: 10,
+                border: '1px solid var(--ygo-border, #E5E7EB)',
+                background: 'var(--ygo-bg-light, #F9FAFB)',
+                textDecoration: 'none', color: 'inherit',
+              }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{l.label} →</span>
+                <span style={{ fontSize: 11.5, color: 'var(--ygo-text-muted, #6B7280)' }}>{l.sub}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         <Faq title="About Yu-Gi-Oh! archetypes" entries={ARCHETYPES_FAQ} />
       </main>
       <Footer />

@@ -151,6 +151,40 @@ export default async function LeadersPage({
           </section>
         )}
 
+        <section aria-labelledby="leader-topics-heading" style={{
+          marginTop: 32, paddingTop: 24,
+          borderTop: '1px solid var(--border)',
+        }}>
+          <h2 id="leader-topics-heading" style={{
+            margin: '0 0 10px', fontSize: 18, letterSpacing: '-0.01em',
+          }}>Related to Leaders</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, maxWidth: 640 }}>
+            Leaders define the deck colour identity. The pages below cover the printing + colour structure the catalogue is built on.
+          </p>
+          <div style={{
+            display: 'grid', gap: 10,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+          }}>
+            {[
+              { href: '/colours', label: 'Colours', sub: 'Browse by colour identity' },
+              { href: '/browse', label: 'All sets', sub: 'Where every Leader was printed' },
+              { href: '/market', label: 'Market movers', sub: 'Daily risers and fallers' },
+              { href: '/insights', label: 'Insights', sub: 'Collecting guides and analysis' },
+            ].map((l) => (
+              <Link key={l.href} href={l.href} style={{
+                display: 'flex', flexDirection: 'column', gap: 2,
+                padding: '10px 12px', borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-light, #F9FAFB)',
+                textDecoration: 'none', color: 'inherit',
+              }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{l.label} →</span>
+                <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{l.sub}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         <Faq title="About One Piece Leaders" entries={LEADERS_FAQ} />
       </div>
     </div>

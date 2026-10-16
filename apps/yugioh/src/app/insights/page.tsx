@@ -98,6 +98,41 @@ export default function InsightsIndex() {
             </Link>
           ))}
         </div>
+
+        <section aria-labelledby="browse-topics-heading" style={{
+          marginTop: 40, paddingTop: 24,
+          borderTop: '1px solid var(--ygo-border, #E5E7EB)',
+        }}>
+          <h2 id="browse-topics-heading" style={{
+            margin: '0 0 12px', fontSize: 18, letterSpacing: '-0.01em',
+          }}>Browse by topic</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--ygo-text-muted, #6B7280)', lineHeight: 1.55, maxWidth: 640 }}>
+            The articles above explain the market; the pages below are where you look up specific printings and track them.
+          </p>
+          <div style={{
+            display: 'grid', gap: 10,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+          }}>
+            {[
+              { href: '/sets', label: 'All Yu-Gi-Oh! sets', sub: '661 sets, newest first' },
+              { href: '/archetypes', label: 'Archetypes', sub: 'Browse by deck archetype' },
+              { href: '/forbidden-limited', label: 'Forbidden & Limited list', sub: 'Current TCG + OCG restrictions' },
+              { href: '/market/most-valuable', label: 'Most valuable', sub: 'Top live retail across every printing' },
+              { href: '/card-finder', label: 'Card finder', sub: 'Narrow by rarity, set, edition' },
+            ].map((l) => (
+              <Link key={l.href} href={l.href} style={{
+                display: 'flex', flexDirection: 'column', gap: 2,
+                padding: '10px 12px', borderRadius: 10,
+                border: '1px solid var(--ygo-border, #E5E7EB)',
+                background: 'var(--ygo-bg-light, #F9FAFB)',
+                textDecoration: 'none', color: 'inherit',
+              }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{l.label} →</span>
+                <span style={{ fontSize: 11.5, color: 'var(--ygo-text-muted, #6B7280)' }}>{l.sub}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       </main>
       <Footer />
     </>
