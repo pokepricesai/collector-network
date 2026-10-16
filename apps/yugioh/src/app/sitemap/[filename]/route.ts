@@ -11,6 +11,8 @@ import {
 import { listPublicDecksForSitemap } from '../../../server/deck-publishing';
 import { listNetworkArticles } from '../../../server/network-articles';
 import { CACHE_TTL } from '../../../server/cache';
+import { getYugiohClient } from '../../../server/read';
+import { normalisePrintingKey, toCardSlug } from '../../../lib/slug';
 import {
   RARITY_FAMILY_LABELS,
   type RarityFamily,
@@ -18,6 +20,7 @@ import {
 import {
   SITEMAP_BYTE_CAP,
   SITEMAP_CACHE_HEADERS,
+  SITEMAP_SHARDS,
   SITEMAP_URL_CAP,
   printingShardForSlug,
   siteUrl,
@@ -25,14 +28,29 @@ import {
   type SitemapShard,
 } from '../../../lib/sitemap-shared';
 
-// Per-shard sitemap. Dynamic (server-rendered on first request) then
-// cached for 24 hours at the route level. Slice 9 also caches the
-// deduped inventories in the Data Cache with a 24-hour TTL so a first-
-// hit-per-region drops from 30-40s to sub-second after any single
-// request warms the inventory.
-
-export const dynamic = 'force-dynamic';
+// Per-shard sitemap. CN-SEO-FINAL-01 (2026-10-17):
+//
+// The previous version carried `export const dynamic = 'force-dynamic'`
+// which disabled Next's Full Route Cache; combined with ~172 sequential
+// Supabase round-trips in the printings scan this gave 30-120s cold-
+// origin times. Replaced with the on-demand ISR pattern used by other
+// dynamic YGO routes (/set/[slug]), so first-hit-per-region per 24h
+// pays the scan cost once and every subsequent request serves the
+// pre-rendered XML from the edge.
+//
+// The in-process memoisation (memoiseInstance) also still applies
+// across shards within one warm Lambda, so the three printings shards
+// share the inventory build within a region.
 export const revalidate = 86_400;
+export const dynamicParams = true;
+export const maxDuration = 60;
+
+// Register the 9 shard filenames so Next's router caches each variant
+// after first render. Returning [] is also legal but surfacing the
+// known filenames gives the build-time analyser a crisp picture.
+export function generateStaticParams(): { filename: string }[] {
+  return SITEMAP_SHARDS.map((shard) => ({ filename: `${shard}.xml` }));
+}
 
 interface Entry {
   loc: string;
@@ -218,27 +236,88 @@ interface PrintingInventoryRow {
 }
 
 async function _printingInventoryRaw(): Promise<PrintingInventoryRow[]> {
-  const out: PrintingInventoryRow[] = [];
-  let cursor: string | null = null;
-  // No hard cap on the intermediate list — each shard applies
-  // SITEMAP_URL_CAP after filtering. In practice production has ~86k
-  // printings across three shards.
-  while (true) {
-    const { rows, nextCursor } = await listAllPrintingRoutes(undefined, cursor);
-    if (rows.length === 0) break;
-    for (const r of rows) {
-      out.push({
-        cardSlug: r.cardSlug,
-        collectorNumber: r.collectorNumber,
-        printingKey: r.printingKey,
-        updatedAt: r.updatedAt,
-      });
+  // CN-SEO-FINAL-01: the old implementation looped listAllPrintingRoutes
+  // serially (1000-row page) and did a second query per page to
+  // resolve card names, giving ~172 round-trips across the 86k
+  // printing catalogue. Rewritten in two passes with the card-name
+  // lookup done ONCE and the printings fetched in concurrent waves.
+  const sb = getYugiohClient();
+
+  // Pass 1 — load the full tcg_cards name map in one scan (~14k
+  // rows). Single pass, ~2 round-trips at 10k per page.
+  const nameByCardId = new Map<string, string>();
+  {
+    const CARD_PAGE = 10_000;
+    for (let from = 0; from < 100_000; from += CARD_PAGE) {
+      const { data, error } = await sb
+        .from('tcg_cards')
+        .select('id,name')
+        .eq('game_id', 'ygo')
+        .range(from, from + CARD_PAGE - 1);
+      if (error) throw new Error(`[sitemap/printings] cards scan: ${error.message}`);
+      const rows = (data as Array<{ id: string; name: string }> | null) ?? [];
+      for (const r of rows) nameByCardId.set(r.id, r.name);
+      if (rows.length < CARD_PAGE) break;
     }
-    if (!nextCursor) break;
-    cursor = nextCursor;
+  }
+
+  // Pass 2 — printings. Concurrent waves of range queries so the
+  // 86k scan runs in parallel-equivalent time rather than serially.
+  interface PRow {
+    tcg_card_id: string;
+    collector_number: string | null;
+    tcggraph_printing_key: string | null;
+    updated_at: string | null;
+  }
+  const PRINT_PAGE = 2000;
+  const CONCURRENCY = 10;
+  const SAFETY_CAP = 500_000;
+  const out: PrintingInventoryRow[] = [];
+  let waveStart = 0;
+  while (waveStart < SAFETY_CAP) {
+    const waves = await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, i) => {
+        const from = waveStart + i * PRINT_PAGE;
+        return sb
+          .from('tcg_printings')
+          .select('tcg_card_id,collector_number,tcggraph_printing_key,updated_at')
+          .eq('game_id', 'ygo')
+          .range(from, from + PRINT_PAGE - 1);
+      }),
+    );
+    let anyRows = false;
+    let shortRead = false;
+    for (const { data, error } of waves) {
+      if (error) throw new Error(`[sitemap/printings] printings scan: ${error.message}`);
+      const rows = (data as PRow[] | null) ?? [];
+      if (rows.length > 0) anyRows = true;
+      if (rows.length < PRINT_PAGE) shortRead = true;
+      for (const r of rows) {
+        const name = nameByCardId.get(r.tcg_card_id);
+        if (!name || !r.collector_number) continue;
+        const slug = toCardSlug(name);
+        if (!slug) continue;
+        out.push({
+          cardSlug: slug,
+          collectorNumber: r.collector_number,
+          printingKey: normalisePrintingKey(r.tcggraph_printing_key),
+          updatedAt: r.updated_at,
+        });
+      }
+    }
+    if (!anyRows) break;
+    waveStart += CONCURRENCY * PRINT_PAGE;
+    // If any wave was short, the next wave will contain nothing.
+    // Stop one iteration early to avoid a redundant round-trip.
+    if (shortRead && waves[waves.length - 1]!.data?.length === 0) break;
   }
   return out;
 }
+
+// listAllPrintingRoutes is kept exported from card.ts for API stability
+// but is no longer called by the sitemap. Reference it so lint stays
+// quiet and so a future caller can find it.
+void listAllPrintingRoutes;
 
 const cachedFullPrintingInventory = memoiseInstance(
   _printingInventoryRaw,
