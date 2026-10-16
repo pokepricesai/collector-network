@@ -147,15 +147,70 @@ async function run() {
       }
     }
   }
-  console.log(`\n\n═══ ISSUES SUMMARY (${issues.length}) ═══`);
-  if (issues.length === 0) {
+  // ── Sitemap performance checks (CN-SEO-FINAL-01) ──────────────
+  //
+  // Large sitemap shards are the most likely silent regression:
+  // the handler returns 200 (so the main audit above passes) but
+  // the shard takes 30-120s to build or truncates its URL set.
+  // Separate pass with a tighter contract:
+  //   - cold response <= COLD_BUDGET_MS at the origin.
+  //   - URL count stays within ±5% of the expected baseline.
+  //
+  // Covers the sites with the largest sitemaps today. PokePrices is
+  // excluded while its SEO observation window is open.
+  const SITEMAP_CHECKS = [
+    { site: 'ygo',      url: 'https://ygoprices.io/sitemap/printings-0.xml', minUrls: 10_000, maxUrls: 25_000, coldBudgetMs: 20_000 },
+    { site: 'ygo',      url: 'https://ygoprices.io/sitemap/printings-1.xml', minUrls: 30_000, maxUrls: 45_000, coldBudgetMs: 20_000 },
+    { site: 'ygo',      url: 'https://ygoprices.io/sitemap/printings-2.xml', minUrls: 25_000, maxUrls: 45_000, coldBudgetMs: 20_000 },
+    { site: 'ygo',      url: 'https://ygoprices.io/sitemap/cards.xml',       minUrls: 10_000, maxUrls: 20_000, coldBudgetMs: 15_000 },
+    { site: 'mtg',      url: 'https://mtgprices.io/sitemap-cards-5.xml',     minUrls: 15_000, maxUrls: 25_000, coldBudgetMs: 15_000 },
+    { site: 'onepiece', url: 'https://onepieceprices.io/sitemap-cards-1.xml', minUrls: 2_000,  maxUrls: 5_000,  coldBudgetMs: 10_000 },
+    { site: 'lorcana',  url: 'https://www.lorcanaprices.io/sitemap-cards-1.xml', minUrls: 1_000, maxUrls: 3_000, coldBudgetMs: 10_000 },
+  ];
+  console.log(`\n═══ SITEMAP PERFORMANCE (${SITEMAP_CHECKS.length} checks) ═══`);
+  const sitemapIssues = [];
+  for (const c of SITEMAP_CHECKS) {
+    const cold = c.url + (c.url.includes('?') ? '&' : '?') + '__smoke=' + Date.now();
+    const start = Date.now();
+    try {
+      const res = await fetch(cold, {
+        headers: { 'User-Agent': GOOGLEBOT, Accept: 'application/xml' },
+        signal: AbortSignal.timeout(Math.max(c.coldBudgetMs + 5_000, 30_000)),
+      });
+      const body = await res.text();
+      const elapsed = Date.now() - start;
+      const vercelCache = res.headers.get('x-vercel-cache') ?? '-';
+      const urlCount = (body.match(/<loc>/g) || []).length;
+      const flags = [];
+      if (res.status !== 200) flags.push(`http_${res.status}`);
+      if (elapsed > c.coldBudgetMs) flags.push(`slow:${(elapsed/1000).toFixed(1)}s`);
+      if (urlCount < c.minUrls) flags.push(`under:${urlCount}`);
+      if (urlCount > c.maxUrls) flags.push(`over:${urlCount}`);
+      const flagStr = flags.length ? ` ⚠ ${flags.join(',')}` : ' ✓';
+      console.log(
+        `  [${c.site.padEnd(8)}] ${c.url.replace(/^https?:\/\//, '').padEnd(55)} time:${(elapsed/1000).toFixed(2).padStart(6)}s  urls:${String(urlCount).padStart(6)}  cache:${vercelCache.padEnd(7)}${flagStr}`,
+      );
+      if (flags.length) sitemapIssues.push({ site: c.site, url: c.url, flags, elapsed, urlCount });
+    } catch (err) {
+      const elapsed = Date.now() - start;
+      console.log(`  [${c.site.padEnd(8)}] ${c.url.replace(/^https?:\/\//, '').padEnd(55)} FETCH-ERR after ${(elapsed/1000).toFixed(1)}s: ${err?.message ?? err}`);
+      sitemapIssues.push({ site: c.site, url: c.url, flags: ['fetch_err'], elapsed, error: String(err) });
+    }
+  }
+
+  const totalIssues = issues.length + sitemapIssues.length;
+  console.log(`\n\n═══ ISSUES SUMMARY (${totalIssues}) ═══`);
+  if (totalIssues === 0) {
     console.log('  (none)');
   } else {
     for (const i of issues) {
       console.log(`  ${i.site.padEnd(10)} ${i.path.padEnd(60)} ${(i.flags || []).join(',')}  status=${i.status ?? '-'}`);
     }
+    for (const i of sitemapIssues) {
+      console.log(`  ${i.site.padEnd(10)} ${i.url.replace(/^https?:\/\//, '').padEnd(60)} ${(i.flags || []).join(',')}  urls=${i.urlCount ?? '-'}`);
+    }
   }
-  process.exit(issues.length > 0 ? 1 : 0);
+  process.exit(totalIssues > 0 ? 1 : 0);
 }
 
 run().catch((err) => { console.error('AUDIT CRASHED:', err); process.exit(2); });
