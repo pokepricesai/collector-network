@@ -83,6 +83,10 @@ export async function createPartnerContactAction(formData: FormData): Promise<vo
   const partnerId = String(formData.get('partnerId') ?? '').trim();
   const fullName = String(formData.get('fullName') ?? '').trim();
   if (!partnerId || !fullName) throw new Error('partnerId + fullName required');
+  const emailVerification = String(formData.get('emailVerification') ?? '').trim() || null;
+  if (emailVerification && !['public_listed', 'validated', 'confirmed'].includes(emailVerification)) {
+    throw new Error('invalid emailVerification value');
+  }
   const row = {
     partner_id: partnerId,
     full_name: fullName,
@@ -93,6 +97,9 @@ export async function createPartnerContactAction(formData: FormData): Promise<vo
     twitter: String(formData.get('twitter') ?? '').trim() || null,
     is_primary: formData.get('isPrimary') === 'on',
     notes: String(formData.get('notes') ?? '').trim() || null,
+    email_verification: emailVerification,
+    source_url: String(formData.get('sourceUrl') ?? '').trim() || null,
+    contact_url: String(formData.get('contactUrl') ?? '').trim() || null,
   };
   // If marked primary, demote existing primary first (partial unique index would reject otherwise).
   if (row.is_primary) {
