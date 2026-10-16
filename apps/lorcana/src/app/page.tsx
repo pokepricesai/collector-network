@@ -5,6 +5,7 @@ import MostValuable from '@/components/home/MostValuable';
 import EnchantedSpotlight from '@/components/home/EnchantedSpotlight';
 import InksExplorer from '@/components/home/InksExplorer';
 import ExploreStrip from '@/components/home/ExploreStrip';
+import PopularCharacters from '@/components/home/PopularCharacters';
 import Faq from '@/components/Faq';
 import { HOMEPAGE_FAQ } from '@/lib/faq-content';
 import { getHomepageData } from '@/server/homepage';
@@ -43,6 +44,7 @@ export default async function HomePage() {
       />
       <MostValuable tiles={payload.mostValuable} currency={currency} />
       <LatestSets sets={payload.latestSets} />
+      <PopularCharacters characters={payload.popularCharacters} />
       <InksExplorer />
       <div className="lc-container" style={{ maxWidth: 900 }}>
         <Faq

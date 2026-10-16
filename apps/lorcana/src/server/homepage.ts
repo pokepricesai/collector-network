@@ -1,6 +1,7 @@
 import 'server-only';
 import { unstable_cache } from 'next/cache';
 import { listRecentSetsWithCounts, type LcSetSummary } from './browse';
+import { listCharacters, type CharacterListEntry } from './characters';
 import { getPricedTiles, type DiscoveryTile } from './discovery';
 import { getLorcanaClient, getLorcanaGameId } from './client';
 import { DEFAULT_CURRENCY, type LorcanaCurrency } from '../lib/currency';
@@ -30,6 +31,7 @@ export interface HomepagePayload {
   mostValuable: DiscoveryTile[];
   enchantedSpotlight: DiscoveryTile[];
   iconicSpotlight: DiscoveryTile[];
+  popularCharacters: CharacterListEntry[];
   errors: string[];
 }
 
@@ -38,12 +40,21 @@ export async function getHomepageData(
 ): Promise<HomepagePayload> {
   const errors: string[] = [];
 
-  const [statsR, setsR, valueR, enchR, iconR] = await Promise.allSettled([
+  const [statsR, setsR, valueR, enchR, iconR, charsR] = await Promise.allSettled([
     getHomepageStats(),
-    listRecentSetsWithCounts(6),
+    // CN-05C task 20: 6 → 12 recent sets. ~23 sets exist in total;
+    // 12 densifies homepage discovery without duplicating /browse.
+    listRecentSetsWithCounts(12),
     getPricedTiles({ limit: 12, cardCandidates: 500, currency }),
     getPricedTiles({ limit: 6, rarity: 'Enchanted', cardCandidates: 260, currency }),
     getPricedTiles({ limit: 4, rarity: 'Iconic', cardCandidates: 30, currency }),
+    // CN-05C task 20: top-12 most-represented characters. listCharacters
+    // is 6h-cached (sort by cardCount desc already applied), so this is
+    // free in the hot path. Characters are the collector-recognisable
+    // entry point into the catalogue (Elsa, Mickey, Stitch…) that the
+    // homepage currently has no path to beyond the generic /characters
+    // link.
+    listCharacters(),
   ]);
 
   const stats = statsR.status === 'fulfilled'
@@ -67,12 +78,17 @@ export async function getHomepageData(
     ? iconR.value
     : (errors.push('iconicSpotlight: ' + describe(iconR.reason)), []);
 
+  const popularCharacters = charsR.status === 'fulfilled'
+    ? charsR.value.slice(0, 12)
+    : (errors.push('popularCharacters: ' + describe(charsR.reason)), []);
+
   return {
     stats,
     latestSets,
     mostValuable,
     enchantedSpotlight,
     iconicSpotlight,
+    popularCharacters,
     errors,
   };
 }

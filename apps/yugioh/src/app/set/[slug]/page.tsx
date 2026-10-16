@@ -80,6 +80,7 @@ export default async function SetPage({ params }: Props) {
   // path.
   const directory = await listYugiohSetsForDirectory();
   const siblingSets = buildSiblingSetGrid(directory, data.set.id);
+  const prevNext = buildPrevNextSet(directory, data.set.id);
 
   const jsonLd = buildSetJsonLd(data, siteUrl());
   const sortedCards = [...data.cards].sort((a, b) => {
@@ -101,6 +102,53 @@ export default async function SetPage({ params }: Props) {
             <span className={styles.crumbSep}>·</span>
             <span>{data.set.code.toUpperCase()}</span>
           </p>
+          {(prevNext.prev || prevNext.next) && (
+            <nav aria-label="Set release sequence" style={{
+              display: 'flex', gap: 10, flexWrap: 'wrap',
+              fontSize: 12.5, marginBottom: 10,
+            }}>
+              {prevNext.prev ? (
+                <Link
+                  href={`/set/${prevNext.prev.set.code.toLowerCase()}`}
+                  rel="prev"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 10px', borderRadius: 8,
+                    border: '1px solid var(--ygo-border, #E5E7EB)',
+                    background: 'var(--ygo-bg-light, #F9FAFB)',
+                    color: 'var(--ygo-text, #111827)', textDecoration: 'none',
+                    maxWidth: 320,
+                  }}
+                >
+                  <span aria-hidden style={{ color: 'var(--ygo-text-muted, #6B7280)' }}>←</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--ygo-text-muted, #6B7280)' }}>Previous set: </span>
+                    <strong>{prevNext.prev.set.name}</strong>
+                  </span>
+                </Link>
+              ) : <span />}
+              {prevNext.next ? (
+                <Link
+                  href={`/set/${prevNext.next.set.code.toLowerCase()}`}
+                  rel="next"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 10px', borderRadius: 8,
+                    border: '1px solid var(--ygo-border, #E5E7EB)',
+                    background: 'var(--ygo-bg-light, #F9FAFB)',
+                    color: 'var(--ygo-text, #111827)', textDecoration: 'none',
+                    maxWidth: 320, marginLeft: 'auto',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--ygo-text-muted, #6B7280)' }}>Next set: </span>
+                    <strong>{prevNext.next.set.name}</strong>
+                  </span>
+                  <span aria-hidden style={{ color: 'var(--ygo-text-muted, #6B7280)' }}>→</span>
+                </Link>
+              ) : null}
+            </nav>
+          )}
           <h1 className={styles.title}>{data.set.name}</h1>
           <div className={styles.identityGrid}>
             <span className={styles.setCode}>{data.set.code.toUpperCase()}</span>
@@ -397,4 +445,29 @@ function buildSiblingSetGrid(
   }
   void currentIdx; // kept for readability — adjacent uses idx against full
   return out;
+}
+
+// CN-05C task 13: 1-hop prev/next in release-date order so Googlebot
+// (and users) see an explicit "release sequence" over the catalogue.
+// Different signal from the broader siblings grid at the bottom of
+// the page: that offers 24 adjacent sets as discovery; this offers
+// a crisp 2-link chain Google can walk predictably across the whole
+// catalogue.
+function buildPrevNextSet(
+  directory: Awaited<ReturnType<typeof listYugiohSetsForDirectory>>,
+  currentSetId: string,
+): { prev: typeof directory[number] | null; next: typeof directory[number] | null } {
+  // Sort chronologically ascending — "previous" is the set that was
+  // released BEFORE the current one; "next" is the one released
+  // after. Only entries with a release date participate.
+  const dated = directory
+    .map((entry) => ({ entry, t: entry.set.released_at ? Date.parse(entry.set.released_at) : NaN }))
+    .filter((x) => Number.isFinite(x.t))
+    .sort((a, b) => (a.t as number) - (b.t as number));
+  const idx = dated.findIndex((x) => x.entry.set.id === currentSetId);
+  if (idx < 0) return { prev: null, next: null };
+  return {
+    prev: idx > 0 ? dated[idx - 1]!.entry : null,
+    next: idx < dated.length - 1 ? dated[idx + 1]!.entry : null,
+  };
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getSetBundle } from '@/server/browse';
+import { getSetBundle, listSetsWithCounts } from '@/server/browse';
 import { getSetMarketForOp } from '@/server/set-market';
 import { canonicalFor } from '@/lib/seo';
 import { buildPrintingSlug } from '@/lib/onepiece/slug';
@@ -92,6 +92,14 @@ export default async function SetPage({
   if (!bundle) notFound();
 
   const { set, cards } = bundle;
+
+  // CN-05C task 13: 1-hop prev/next in release-date order so Googlebot
+  // (and users) see an explicit release sequence over the catalogue.
+  // Different signal from the broader siblings grid: that offers
+  // multiple adjacent sets for discovery; this is a crisp 2-link chain
+  // Google can walk predictably across the whole set catalogue.
+  const allSets = await listSetsWithCounts();
+  const prevNext = buildOpPrevNextSet(allSets, set.id);
 
   // Group logical cards by name so parallels / secret / treasure /
   // special variants sit together (matches how a collector actually
@@ -185,6 +193,54 @@ export default async function SetPage({
             {set.code.toUpperCase()}, {set.name}
           </span>
         </nav>
+
+        {(prevNext.prev || prevNext.next) && (
+          <nav aria-label="Set release sequence" style={{
+            display: 'flex', gap: 10, flexWrap: 'wrap',
+            fontSize: 12.5, marginBottom: 16,
+          }}>
+            {prevNext.prev ? (
+              <Link
+                href={`/set/${encodeURIComponent(prevNext.prev.set.code.toLowerCase())}`}
+                rel="prev"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 10px', borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-light, #F9FAFB)',
+                  color: 'var(--text)', textDecoration: 'none',
+                  maxWidth: 320,
+                }}
+              >
+                <span aria-hidden style={{ color: 'var(--text-muted)' }}>←</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Previous set: </span>
+                  <strong>{prevNext.prev.set.name}</strong>
+                </span>
+              </Link>
+            ) : <span />}
+            {prevNext.next ? (
+              <Link
+                href={`/set/${encodeURIComponent(prevNext.next.set.code.toLowerCase())}`}
+                rel="next"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 10px', borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-light, #F9FAFB)',
+                  color: 'var(--text)', textDecoration: 'none',
+                  maxWidth: 320, marginLeft: 'auto',
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Next set: </span>
+                  <strong>{prevNext.next.set.name}</strong>
+                </span>
+                <span aria-hidden style={{ color: 'var(--text-muted)' }}>→</span>
+              </Link>
+            ) : null}
+          </nav>
+        )}
 
         <header className="op-page-hero" style={{ marginBottom: 24 }}>
           <div style={{ position: 'relative', zIndex: 1 }}>
@@ -295,4 +351,22 @@ export default async function SetPage({
       </div>
     </div>
   );
+}
+
+// CN-05C task 13: chronological prev/next across the OP catalogue.
+// listSetsWithCounts is 6h-cached, so this is free in the hot path.
+function buildOpPrevNextSet(
+  all: Awaited<ReturnType<typeof listSetsWithCounts>>,
+  currentSetId: string,
+): { prev: typeof all[number] | null; next: typeof all[number] | null } {
+  const dated = all
+    .map((entry) => ({ entry, t: entry.set.released_at ? Date.parse(entry.set.released_at) : NaN }))
+    .filter((x) => Number.isFinite(x.t))
+    .sort((a, b) => (a.t as number) - (b.t as number));
+  const idx = dated.findIndex((x) => x.entry.set.id === currentSetId);
+  if (idx < 0) return { prev: null, next: null };
+  return {
+    prev: idx > 0 ? dated[idx - 1]!.entry : null,
+    next: idx < dated.length - 1 ? dated[idx + 1]!.entry : null,
+  };
 }
