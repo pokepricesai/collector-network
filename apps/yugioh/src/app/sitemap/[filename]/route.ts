@@ -241,35 +241,41 @@ async function _printingInventoryRaw(): Promise<PrintingInventoryRow[]> {
   // resolve card names, giving ~172 round-trips across the 86k
   // printing catalogue. Rewritten in two passes with the card-name
   // lookup done ONCE and the printings fetched in concurrent waves.
+  //
+  // Page size is pinned to 1000 to match PostgREST's default
+  // `max_rows` cap — a larger page silently truncates every query
+  // and corrupts the inventory. The baseline is 14k cards + 86k
+  // printings on YGO today.
   const sb = getYugiohClient();
+  const PAGE = 1000; // PostgREST anon-client default max_rows
 
-  // Pass 1 — load the full tcg_cards name map in one scan (~14k
-  // rows). Single pass, ~2 round-trips at 10k per page.
+  // Pass 1 — load the full tcg_cards name map in a straight serial
+  // scan. 14 round-trips at 1000/page.
   const nameByCardId = new Map<string, string>();
-  {
-    const CARD_PAGE = 10_000;
-    for (let from = 0; from < 100_000; from += CARD_PAGE) {
-      const { data, error } = await sb
-        .from('tcg_cards')
-        .select('id,name')
-        .eq('game_id', 'ygo')
-        .range(from, from + CARD_PAGE - 1);
-      if (error) throw new Error(`[sitemap/printings] cards scan: ${error.message}`);
-      const rows = (data as Array<{ id: string; name: string }> | null) ?? [];
-      for (const r of rows) nameByCardId.set(r.id, r.name);
-      if (rows.length < CARD_PAGE) break;
-    }
+  for (let from = 0; from < 200_000; from += PAGE) {
+    const { data, error } = await sb
+      .from('tcg_cards')
+      .select('id,name')
+      .eq('game_id', 'ygo')
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`[sitemap/printings] cards scan: ${error.message}`);
+    const rows = (data as Array<{ id: string; name: string }> | null) ?? [];
+    for (const r of rows) nameByCardId.set(r.id, r.name);
+    if (rows.length < PAGE) break;
   }
 
-  // Pass 2 — printings. Concurrent waves of range queries so the
-  // 86k scan runs in parallel-equivalent time rather than serially.
+  // Pass 2 — printings fetched in concurrent waves. Each wave fires
+  // 10 range queries in parallel, so the 86-page scan runs in ~9
+  // sequential waves instead of 86 sequential round-trips. We stop
+  // the moment any query inside a wave returns short, because
+  // subsequent offsets within that wave or later waves are known
+  // empty — PostgREST serves rows in a stable order.
   interface PRow {
     tcg_card_id: string;
     collector_number: string | null;
     tcggraph_printing_key: string | null;
     updated_at: string | null;
   }
-  const PRINT_PAGE = 2000;
   const CONCURRENCY = 10;
   const SAFETY_CAP = 500_000;
   const out: PrintingInventoryRow[] = [];
@@ -277,21 +283,19 @@ async function _printingInventoryRaw(): Promise<PrintingInventoryRow[]> {
   while (waveStart < SAFETY_CAP) {
     const waves = await Promise.all(
       Array.from({ length: CONCURRENCY }, (_, i) => {
-        const from = waveStart + i * PRINT_PAGE;
+        const from = waveStart + i * PAGE;
         return sb
           .from('tcg_printings')
           .select('tcg_card_id,collector_number,tcggraph_printing_key,updated_at')
           .eq('game_id', 'ygo')
-          .range(from, from + PRINT_PAGE - 1);
+          .range(from, from + PAGE - 1);
       }),
     );
-    let anyRows = false;
-    let shortRead = false;
+    let hitTail = false;
     for (const { data, error } of waves) {
       if (error) throw new Error(`[sitemap/printings] printings scan: ${error.message}`);
       const rows = (data as PRow[] | null) ?? [];
-      if (rows.length > 0) anyRows = true;
-      if (rows.length < PRINT_PAGE) shortRead = true;
+      if (rows.length < PAGE) hitTail = true;
       for (const r of rows) {
         const name = nameByCardId.get(r.tcg_card_id);
         if (!name || !r.collector_number) continue;
@@ -305,11 +309,8 @@ async function _printingInventoryRaw(): Promise<PrintingInventoryRow[]> {
         });
       }
     }
-    if (!anyRows) break;
-    waveStart += CONCURRENCY * PRINT_PAGE;
-    // If any wave was short, the next wave will contain nothing.
-    // Stop one iteration early to avoid a redundant round-trip.
-    if (shortRead && waves[waves.length - 1]!.data?.length === 0) break;
+    waveStart += CONCURRENCY * PAGE;
+    if (hitTail) break;
   }
   return out;
 }
