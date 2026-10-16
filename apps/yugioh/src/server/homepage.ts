@@ -289,11 +289,21 @@ async function loadGradedHighlights(
 async function loadMostValuable(
   supabase: SupabaseClient,
 ): Promise<MostValuablePrinting[]> {
+  return loadMostValuableRetail(supabase, 8);
+}
+
+/** Public helper: top-N highest-priced live retail printings with
+ *  resolved printing / card / set rows. Used by both the homepage
+ *  (limit=8) and the editorial Most Valuable article (limit=20). */
+export async function loadMostValuableRetail(
+  supabase: SupabaseClient,
+  limit: number,
+): Promise<MostValuablePrinting[]> {
   // "Movers" fallback: no reliable history yet (forward-accumulating
   // ingest). We surface highest-priced current retail instead.
   const usd = await getMostValuableRetailPrintings(supabase, YGO_GAME_ID, {
     currency: 'USD',
-    limit: 8,
+    limit,
     minPrice: 100,
   });
   if (usd.length === 0) return [];

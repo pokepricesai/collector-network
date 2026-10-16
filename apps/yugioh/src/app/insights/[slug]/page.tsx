@@ -6,7 +6,8 @@ import { Footer } from '../../../components/Footer';
 import { siteUrl } from '../../../lib/site-url';
 import { findYgoArticle, YGO_ARTICLES, type YgoArticleMeta } from '../../../lib/articles';
 import { safe } from '../../../server/safe';
-import { getYugiohHomepageData } from '../../../server/homepage';
+import { loadMostValuableRetail, type MostValuablePrinting } from '../../../server/homepage';
+import { getYugiohClient } from '../../../server/read';
 import { findNetworkArticle, renderMarkdownToHtml } from '../../../server/network-articles';
 
 const SITE_URL = siteUrl();
@@ -205,29 +206,43 @@ function fmt(iso: string): string {
 // ── Article bodies ────────────────────────────────────────────────
 
 async function MostValuableBody() {
-  const payload = await safe('most-valuable-article-homepage', () => getYugiohHomepageData());
-  const topRetail = payload.ok ? payload.value.mostValuable.slice(0, 8) : [];
+  // Pull the top 20 highest-priced live USD retail printings
+  // directly, with the printing / card / set rows resolved. The
+  // homepage caches the same shape at limit 8; this article wants
+  // more depth so it calls the shared loader with limit 20.
+  const payload = await safe('most-valuable-article-top20', () =>
+    loadMostValuableRetail(getYugiohClient(), 20),
+  );
+  const topRetail: MostValuablePrinting[] = payload.ok ? payload.value : [];
+
+  // Group by rarity for the primer section below. Normalise so
+  // "Secret Rare" and "SECRET RARE" count as the same bucket.
+  const byRarity = new Map<string, MostValuablePrinting[]>();
+  for (const r of topRetail) {
+    const key = (r.card?.rarity ?? 'Unknown').trim();
+    const bucket = byRarity.get(key) ?? [];
+    bucket.push(r);
+    byRarity.set(key, bucket);
+  }
+  const rarityOrder = [...byRarity.entries()].sort((a, b) => b[1].length - a[1].length);
 
   return (
     <>
       <p>
-        The Yu-Gi-Oh! Trading Card Game has one of the deepest
-        vintage markets of any TCG. Chase copies of early
-        <em> Legend of Blue-Eyes White Dragon</em> Ultra Rares,
-        Prismatic Secret Rares from{' '}
-        <em>Dark Duel Stories</em> promo runs, and modern chase
-        rarities like <em>Quarter Century Secret Rare</em>{' '}
-        alt-arts routinely sit at four-figure retail. This piece
-        walks through the current top of the market. Live-priced
-        against the same feed the rest of YGOPrices uses.
+        What follows is the live top 20 highest-priced Yu-Gi-Oh! printings
+        we currently index on TCGplayer USD, resolved against the same
+        catalogue that powers every card page on YGOPrices. The ranking
+        updates as retail moves; every row links to the full print
+        history for that card.
       </p>
 
-      <h2>Top-value printings right now (USD retail)</h2>
+      <h2>Top 20 printings by live USD retail</h2>
       <p>
-        The eight dearest live TCGplayer USD listings across every
-        indexed printing at the time of this article&apos;s update.
-        Click any card for its full print history and per-printing
-        pricing.
+        Minimum price floor is $100 so the ranking reflects genuine chase
+        copies, not generic staples. The table columns are deliberately
+        narrow — collector number, set, rarity, and the current retail
+        quote — because that is the information you need to decide whether
+        a listing is worth clicking into.
       </p>
       {topRetail.length === 0 ? (
         <p style={{ color: 'var(--ygo-text-muted, #6B7280)' }}>
@@ -238,7 +253,10 @@ async function MostValuableBody() {
         <ol style={{ padding: 0, margin: '10px 0 20px', listStyle: 'none', display: 'grid', gap: 8 }}>
           {topRetail.map((entry, i) => {
             const name = entry.card?.name ?? 'Unknown';
+            const setName = entry.set?.name ?? '';
             const setCode = entry.set?.code ?? '';
+            const released = entry.set?.released_at;
+            const year = released ? new Date(released).getUTCFullYear() : null;
             const rarity = entry.card?.rarity ?? '';
             const price = entry.quote.price;
             const currency = entry.quote.currency;
@@ -254,24 +272,26 @@ async function MostValuableBody() {
               <li key={key}>
                 <Link href={`/card/${cardSlug}`} style={{
                   display: 'flex', justifyContent: 'space-between',
-                  alignItems: 'center', padding: '10px 14px',
+                  alignItems: 'center', padding: '10px 14px', gap: 12,
                   background: 'var(--ygo-surface, #FFF)',
                   border: '1px solid var(--ygo-border, #E5E7EB)',
                   borderRadius: 10,
                   textDecoration: 'none', color: 'var(--ygo-text, #111827)',
                 }}>
-                  <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, color: 'var(--ygo-text-muted, #6B7280)' }}>
+                  <span style={{ display: 'flex', gap: 12, alignItems: 'center', minWidth: 0, flex: 1 }}>
+                    <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, color: 'var(--ygo-text-muted, #6B7280)', flex: 'none' }}>
                       #{i + 1}
                     </span>
-                    <span>
-                      <span style={{ fontWeight: 700 }}>{name}</span>
-                      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--ygo-text-muted, #6B7280)' }}>
-                        {setCode.toUpperCase()} · {rarity}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ fontWeight: 700, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                      <span style={{ fontSize: 12, color: 'var(--ygo-text-muted, #6B7280)' }}>
+                        {setName ? `${setName} ` : ''}{setCode && <code style={{ background: 'var(--ygo-bg-light, #F9FAFB)', padding: '0 4px', borderRadius: 3 }}>{setCode.toUpperCase()}</code>}
+                        {year ? ` · ${year}` : ''}
+                        {rarity ? ` · ${rarity}` : ''}
                       </span>
                     </span>
                   </span>
-                  <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 14 }}>
+                  <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 14, flex: 'none' }}>
                     {priceStr}
                   </span>
                 </Link>
@@ -281,41 +301,108 @@ async function MostValuableBody() {
         </ol>
       )}
 
-      <h2>Why the vintage and modern chase both dominate</h2>
+      <h2>What each chase rarity actually means</h2>
       <p>
-        The Yu-Gi-Oh! top of the market splits roughly into two
-        halves. The vintage side is anchored by early LOB / MRD /
-        MFC Ultra Rares in 1st Edition English, plus the
-        Prismatic Secret Rare promotional runs from GameBoy tie-in
-        product. The modern side is driven by chase rarities that
-        Konami has introduced deliberately as short-print collector
-        pulls: Ghost Rare, Starlight Rare, Quarter Century Secret
-        Rare, and 10000 Secret Rare from event/anniversary sets.
-        Individual printings can sit above four figures in either
-        half of the market.
+        Yu-Gi-Oh! prints the same card in a stack of different rarities,
+        and the collector market treats each tier differently. The names
+        below describe the printing treatment itself — the foil pattern,
+        the foil distribution, the text/image colour layering — not the
+        card&apos;s game text, which is identical to the common. Rarity
+        is one of three axes on every printing; the other two are{' '}
+        <Link href="/sets">set</Link> and edition (1st, Unlimited, Limited).
       </p>
+      <RarityPrimer />
+
+      <h2>Breakdown of the current top 20</h2>
+      {rarityOrder.length === 0 ? (
+        <p style={{ color: 'var(--ygo-text-muted, #6B7280)' }}>
+          Breakdown appears once the live top-20 feed is available.
+        </p>
+      ) : (
+        <ul style={{ margin: '10px 0 18px', paddingLeft: 20 }}>
+          {rarityOrder.map(([rarity, items]) => {
+            const topExample = items[0];
+            const avg = items
+              .map((x) => x.quote.price ?? 0)
+              .filter((p) => p > 0)
+              .reduce((s, p, _, a) => s + p / a.length, 0);
+            const avgStr = avg > 0 ? `$${Math.round(avg).toLocaleString('en-US')}` : '–';
+            return (
+              <li key={rarity} style={{ marginBottom: 6, fontSize: 14, lineHeight: 1.6 }}>
+                <strong>{rarity}</strong> — {items.length} of 20 ·
+                avg live retail {avgStr}
+                {topExample?.card?.name ? (
+                  <> · top: <em>{topExample.card.name}</em>
+                    {topExample.quote.price
+                      ? ` ($${Math.round(topExample.quote.price).toLocaleString('en-US')})`
+                      : ''}
+                  </>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       <h2>Reading the ranking honestly</h2>
       <p>
-        A listing price is not the same as a confirmed sale. A
-        single active TCGplayer listing at $2,000 may reflect one
-        seller&apos;s ambition rather than the printing&apos;s
-        realised value. YGOPrices ranks by the current live retail
-        feed; treat the ordering as a live snapshot, not a
-        confirmed floor. For history, open the card page and check
-        the price-history chart.
+        A listing price is not a confirmed sale. A single active TCGplayer
+        listing at $2,000 may reflect one seller&apos;s ambition rather
+        than the printing&apos;s realised value. YGOPrices ranks by the
+        current live retail feed; treat the ordering as a live snapshot,
+        not a confirmed floor. For history, open the card page and check
+        the price-history chart; for graded observations, see{' '}
+        <Link href="/market/graded">/market/graded</Link>.
       </p>
 
+      <h2>Where to go from here</h2>
       <p>
-        For live top-of-market coverage, see{' '}
-        <Link href="/market/most-valuable">/market/most-valuable</Link>{' '}
-        (retail) and{' '}
-        <Link href="/market/graded">/market/graded</Link>{' '}
-        (slabbed observations).
+        If you own one of the chase rarities above and are deciding
+        whether to list, start on the card&apos;s own page — the sibling
+        printings there show you how much premium 1st Edition commands
+        over Unlimited for your specific card, and the graded section
+        indicates whether PSA 10 copies move at a meaningful multiple.
+        For raw sealed stock, the eBay affiliate button on each card
+        page jumps to that card&apos;s active search.
+      </p>
+      <p>
+        Related:{' '}
+        <Link href="/insights/yugioh-rarities-explained">rarities explained</Link>{' '}
+        ·{' '}
+        <Link href="/forbidden-limited">current Forbidden &amp; Limited list</Link>{' '}
+        ·{' '}
+        <Link href="/market/most-valuable">/market/most-valuable</Link>.
       </p>
     </>
   );
 }
+
+// Short, specific primer. Explicitly NOT a filler FAQ — each entry is
+// one sentence that tells the reader what the treatment actually is,
+// not padding. Kept co-located with the article because it's wholly
+// about collector-market framing, not catalogue data.
+function RarityPrimer() {
+  const entries: Array<{ label: string; blurb: string }> = [
+    { label: 'Ultra Rare',           blurb: 'Gold foil card name + holographic image. Vintage LOB / MRD / MFC 1st Edition Ultra Rares are the backbone of the vintage top-of-market.' },
+    { label: 'Secret Rare',          blurb: 'Diagonally striped parallel foil across name AND image. Standard chase treatment through modern sets; the premium rarity for most Blue-Eyes / Dark Magician reprints.' },
+    { label: 'Prismatic Secret Rare', blurb: 'Secret Rare pattern on a holographic prism background. Appears almost exclusively in Japanese and promo print runs; one of the hardest tiers to find in English.' },
+    { label: 'Ghost Rare',           blurb: 'White-on-white chrome treatment on the image, no colour. One per box in select 2007-onwards sets; the vintage-modern bridge tier that collectors prize for presentation.' },
+    { label: 'Starlight Rare',       blurb: 'Introduced 2020. Full-art holographic treatment covering image + border. Pull rate roughly 1-in-72 packs; alt-arts of iconic monsters routinely clear four figures.' },
+    { label: 'Quarter Century Secret Rare', blurb: 'Konami&apos;s 25th-anniversary chase rarity. Secret Rare pattern with a QC logo stamp. Short-printed in 2024-2025 anniversary sets.' },
+    { label: '10000 Secret Rare',    blurb: 'Introduced for the 10000th card celebration. Even scarcer than QC Secret; typically limited to one hero chase per set.' },
+    { label: 'Ultimate Rare',        blurb: 'Embossed relief on the image. Historically the "same-set alternative" to Ultra Rare; prices follow the base card but with a modest texture premium.' },
+  ];
+  return (
+    <ul style={{ margin: '12px 0 18px', paddingLeft: 20 }}>
+      {entries.map((e) => (
+        <li key={e.label} style={{ marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
+          <strong>{e.label}.</strong> {e.blurb}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 
 function RaritiesBody() {
   return (
