@@ -56,10 +56,12 @@ export default async function PartnersPage({ searchParams }: PageProps) {
         actions={
           <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
             <Link className="ui-btn ui-btn--primary ui-btn--sm" href="/admin/partners/new">+ Partner</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/morning">Morning queue</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/pipeline">Kanban</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/first-wave">First-wave ({firstWaveCount})</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/categories">Categories</Link>
             <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/offers">Offer catalogue</Link>
-            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/sponsorships">Sponsorships</Link>
+            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/partners/sponsorships">Won deals</Link>
           </span>
         }
       />
