@@ -59,7 +59,7 @@ export default async function MappingReviewPage({ params }: PageProps) {
         <Link href="/admin/pokemon-matching" style={{ fontSize: 12, color: 'var(--muted, #666)' }}>← Back to queue</Link>
       </div>
       <SectionHeader
-        eyebrow="PP-TCG-MATCH-01"
+        eyebrow="PP-TCG-MATCH-01A"
         title={pp?.card_name || mapping.pp_card_name || mapping.pp_card_slug}
         description={<>
           <StatusBadge
@@ -74,9 +74,20 @@ export default async function MappingReviewPage({ params }: PageProps) {
             label={mapping.review_status.replace(/_/g, ' ')}
           />
           {mapping.confidence && <> · confidence <StatusBadge state="info" label={mapping.confidence} /></>}
+          {mapping.pricing_eligibility && <> · pricing <StatusBadge state={({ bulk_safe: 'ok' as const, market_only: 'info' as const, identity_only: 'warning' as const, not_eligible: 'critical' as const, uncertain: 'pending' as const })[mapping.pricing_eligibility] || 'info'} label={mapping.pricing_eligibility} /></>}
+          {mapping.commercial_rank != null && <> · GSC rank <strong>#{mapping.commercial_rank}</strong></>}
           {mapping.reviewed_at && <> · last reviewed {new Date(mapping.reviewed_at).toLocaleString()} by {mapping.reviewer_display}</>}
         </>}
       />
+
+      {mapping.pricing_eligibility && mapping.pricing_eligibility !== 'bulk_safe' && mapping.pricing_eligibility !== 'not_eligible' && (
+        <Notice tone="warning">
+          <strong>Pricing applicability warning.</strong>{' '}
+          {mapping.pricing_eligibility === 'market_only' && 'This is a variant printing. TCGGraph aggregates raw/PSA10 across printings for one card id, so those values would misreport the variant. Only per-finish TCGplayer/Cardmarket market quotes are safe to activate for pricing on this row.'}
+          {mapping.pricing_eligibility === 'identity_only' && 'Card identity is verified but Phase-8 price activation is unsafe: variant tag has no TCG printing key, promo-reprint target, language mismatch, or duplicate PP-target clash.'}
+          {mapping.pricing_eligibility === 'uncertain' && 'The matcher found candidates but did not reach "verified" confidence. Approving the identity is OK; price activation requires a manual override.'}
+        </Notice>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {/* LEFT: existing PokePrices record */}

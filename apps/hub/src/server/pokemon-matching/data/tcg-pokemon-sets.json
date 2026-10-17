@@ -1,0 +1,5013 @@
+[
+  {
+    "code": "me55",
+    "name": "30th Celebration",
+    "language": "en",
+    "releasedAt": "2026-09-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "me55c",
+    "name": "30th Celebration: Classic Collection",
+    "language": "en",
+    "releasedAt": "2026-09-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "me5",
+    "name": "Pitch Black",
+    "language": "en",
+    "releasedAt": "2026-07-17",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "me4",
+    "name": "Chaos Rising",
+    "language": "en",
+    "releasedAt": "2026-05-22",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "me3",
+    "name": "Perfect Order",
+    "language": "en",
+    "releasedAt": "2026-03-27",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "me2pt5",
+    "name": "Ascended Heroes",
+    "language": "en",
+    "releasedAt": "2026-01-30",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "me2",
+    "name": "Phantasmal Flames",
+    "language": "en",
+    "releasedAt": "2025-11-14",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "me1",
+    "name": "Mega Evolution",
+    "language": "en",
+    "releasedAt": "2025-09-26",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mee",
+    "name": "Mega Evolution Energies",
+    "language": "en",
+    "releasedAt": "2025-09-26",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mep",
+    "name": "Mega Evolution Black Star Promos",
+    "language": "en",
+    "releasedAt": "2025-09-26",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "rsv10pt5",
+    "name": "White Flare",
+    "language": "en",
+    "releasedAt": "2025-07-18",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "zsv10pt5",
+    "name": "Black Bolt",
+    "language": "en",
+    "releasedAt": "2025-07-18",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv10",
+    "name": "Destined Rivals",
+    "language": "en",
+    "releasedAt": "2025-05-30",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv9",
+    "name": "Journey Together",
+    "language": "en",
+    "releasedAt": "2025-03-28",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd24",
+    "name": "McDonald's Collection 2024",
+    "language": "en",
+    "releasedAt": "2025-01-21",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv8pt5",
+    "name": "Prismatic Evolutions",
+    "language": "en",
+    "releasedAt": "2025-01-17",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv8",
+    "name": "Surging Sparks",
+    "language": "en",
+    "releasedAt": "2024-11-08",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv7",
+    "name": "Stellar Crown",
+    "language": "en",
+    "releasedAt": "2024-09-13",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tot24",
+    "name": "Trick or Trade 2024",
+    "language": "en",
+    "releasedAt": "2024-08-30",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv6pt5",
+    "name": "Shrouded Fable",
+    "language": "en",
+    "releasedAt": "2024-08-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ba2024",
+    "name": "Battle Academy 2024",
+    "language": "en",
+    "releasedAt": "2024-06-21",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv6",
+    "name": "Twilight Masquerade",
+    "language": "en",
+    "releasedAt": "2024-05-24",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv5",
+    "name": "Temporal Forces",
+    "language": "en",
+    "releasedAt": "2024-03-22",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv4pt5",
+    "name": "Paldean Fates",
+    "language": "en",
+    "releasedAt": "2024-01-26",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tcgc",
+    "name": "Trading Card Game Classic",
+    "language": "en",
+    "releasedAt": "2023-11-17",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv4",
+    "name": "Paradox Rift",
+    "language": "en",
+    "releasedAt": "2023-11-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv3pt5",
+    "name": "151",
+    "language": "en",
+    "releasedAt": "2023-09-22",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd23",
+    "name": "McDonald's Collection 2023",
+    "language": "en",
+    "releasedAt": "2023-09-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tot23",
+    "name": "Trick or Trade 2023",
+    "language": "en",
+    "releasedAt": "2023-09-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv3",
+    "name": "Obsidian Flames",
+    "language": "en",
+    "releasedAt": "2023-08-11",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sea",
+    "name": "Southeast Asia Exclusives",
+    "language": "en",
+    "releasedAt": "2023-08-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv2",
+    "name": "Paldea Evolved",
+    "language": "en",
+    "releasedAt": "2023-06-09",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sv1",
+    "name": "Scarlet & Violet",
+    "language": "en",
+    "releasedAt": "2023-03-31",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sve",
+    "name": "Scarlet & Violet Energies",
+    "language": "en",
+    "releasedAt": "2023-03-31",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh12pt5",
+    "name": "Crown Zenith",
+    "language": "en",
+    "releasedAt": "2023-01-20",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh12pt5gg",
+    "name": "Crown Zenith Galarian Gallery",
+    "language": "en",
+    "releasedAt": "2023-01-20",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "svp",
+    "name": "Scarlet & Violet Black Star Promos",
+    "language": "en",
+    "releasedAt": "2023-01-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh12",
+    "name": "Silver Tempest",
+    "language": "en",
+    "releasedAt": "2022-11-11",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh12tg",
+    "name": "Silver Tempest Trainer Gallery",
+    "language": "en",
+    "releasedAt": "2022-11-11",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh11",
+    "name": "Lost Origin",
+    "language": "en",
+    "releasedAt": "2022-09-09",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh11tg",
+    "name": "Lost Origin Trainer Gallery",
+    "language": "en",
+    "releasedAt": "2022-09-09",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tot22",
+    "name": "Trick or Trade 2022",
+    "language": "en",
+    "releasedAt": "2022-09-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd22",
+    "name": "McDonald's Collection 2022",
+    "language": "en",
+    "releasedAt": "2022-08-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pgo",
+    "name": "Pokémon GO",
+    "language": "en",
+    "releasedAt": "2022-07-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh10",
+    "name": "Astral Radiance",
+    "language": "en",
+    "releasedAt": "2022-05-27",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh10tg",
+    "name": "Astral Radiance Trainer Gallery",
+    "language": "en",
+    "releasedAt": "2022-05-27",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ba2022",
+    "name": "Battle Academy 2022",
+    "language": "en",
+    "releasedAt": "2022-04-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh9",
+    "name": "Brilliant Stars",
+    "language": "en",
+    "releasedAt": "2022-02-25",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh9tg",
+    "name": "Brilliant Stars Trainer Gallery",
+    "language": "en",
+    "releasedAt": "2022-02-25",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh8",
+    "name": "Fusion Strike",
+    "language": "en",
+    "releasedAt": "2021-11-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "cel25",
+    "name": "Celebrations",
+    "language": "en",
+    "releasedAt": "2021-10-08",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "cel25c",
+    "name": "Celebrations: Classic Collection",
+    "language": "en",
+    "releasedAt": "2021-10-08",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh7",
+    "name": "Evolving Skies",
+    "language": "en",
+    "releasedAt": "2021-08-27",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh6",
+    "name": "Chilling Reign",
+    "language": "en",
+    "releasedAt": "2021-06-18",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh5",
+    "name": "Battle Styles",
+    "language": "en",
+    "releasedAt": "2021-03-19",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh45",
+    "name": "Shining Fates",
+    "language": "en",
+    "releasedAt": "2021-02-19",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh45sv",
+    "name": "Shining Fates Shiny Vault",
+    "language": "en",
+    "releasedAt": "2021-02-19",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd21",
+    "name": "McDonald's Collection 2021",
+    "language": "en",
+    "releasedAt": "2021-02-09",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh4",
+    "name": "Vivid Voltage",
+    "language": "en",
+    "releasedAt": "2020-11-13",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh35",
+    "name": "Champion's Path",
+    "language": "en",
+    "releasedAt": "2020-09-25",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "fut20",
+    "name": "Pokémon Futsal Collection",
+    "language": "en",
+    "releasedAt": "2020-09-11",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh3",
+    "name": "Darkness Ablaze",
+    "language": "en",
+    "releasedAt": "2020-08-14",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ba2020",
+    "name": "Battle Academy 2020",
+    "language": "en",
+    "releasedAt": "2020-07-31",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh2",
+    "name": "Rebel Clash",
+    "language": "en",
+    "releasedAt": "2020-05-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swsh1",
+    "name": "Sword & Shield",
+    "language": "en",
+    "releasedAt": "2020-02-07",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "swshp",
+    "name": "SWSH Black Star Promos",
+    "language": "en",
+    "releasedAt": "2019-11-15",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm12",
+    "name": "Cosmic Eclipse",
+    "language": "en",
+    "releasedAt": "2019-11-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd19",
+    "name": "McDonald's Collection 2019",
+    "language": "en",
+    "releasedAt": "2019-10-15",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm115",
+    "name": "Hidden Fates",
+    "language": "en",
+    "releasedAt": "2019-08-23",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sma",
+    "name": "Hidden Fates Shiny Vault",
+    "language": "en",
+    "releasedAt": "2019-08-23",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm11",
+    "name": "Unified Minds",
+    "language": "en",
+    "releasedAt": "2019-08-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm10",
+    "name": "Unbroken Bonds",
+    "language": "en",
+    "releasedAt": "2019-05-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "det1",
+    "name": "Detective Pikachu",
+    "language": "en",
+    "releasedAt": "2019-04-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm9",
+    "name": "Team Up",
+    "language": "en",
+    "releasedAt": "2019-02-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm8",
+    "name": "Lost Thunder",
+    "language": "en",
+    "releasedAt": "2018-11-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd18",
+    "name": "McDonald's Collection 2018",
+    "language": "en",
+    "releasedAt": "2018-10-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm75",
+    "name": "Dragon Majesty",
+    "language": "en",
+    "releasedAt": "2018-09-07",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm7",
+    "name": "Celestial Storm",
+    "language": "en",
+    "releasedAt": "2018-08-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm6",
+    "name": "Forbidden Light",
+    "language": "en",
+    "releasedAt": "2018-05-04",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "smtk2",
+    "name": "SM Trainer Kit: Alolan Sandslash & Alolan Ninetales",
+    "language": "en",
+    "releasedAt": "2018-04-06",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm5",
+    "name": "Ultra Prism",
+    "language": "en",
+    "releasedAt": "2018-02-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd17",
+    "name": "McDonald's Collection 2017",
+    "language": "en",
+    "releasedAt": "2017-11-07",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm4",
+    "name": "Crimson Invasion",
+    "language": "en",
+    "releasedAt": "2017-11-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm35",
+    "name": "Shining Legends",
+    "language": "en",
+    "releasedAt": "2017-10-06",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm3",
+    "name": "Burning Shadows",
+    "language": "en",
+    "releasedAt": "2017-08-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm2",
+    "name": "Guardians Rising",
+    "language": "en",
+    "releasedAt": "2017-05-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "smtk1",
+    "name": "SM Trainer Kit: Lycanroc & Alolan Raichu",
+    "language": "en",
+    "releasedAt": "2017-04-21",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "sm1",
+    "name": "Sun & Moon",
+    "language": "en",
+    "releasedAt": "2017-02-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "smp",
+    "name": "SM Black Star Promos",
+    "language": "en",
+    "releasedAt": "2017-02-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy12",
+    "name": "Evolutions",
+    "language": "en",
+    "releasedAt": "2016-11-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd16",
+    "name": "McDonald's Collection 2016",
+    "language": "en",
+    "releasedAt": "2016-08-19",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy11",
+    "name": "Steam Siege",
+    "language": "en",
+    "releasedAt": "2016-08-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy10",
+    "name": "Fates Collide",
+    "language": "en",
+    "releasedAt": "2016-05-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xytk4",
+    "name": "XY Trainer Kit: Pikachu Libre & Suicune",
+    "language": "en",
+    "releasedAt": "2016-04-27",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "g1",
+    "name": "Generations",
+    "language": "en",
+    "releasedAt": "2016-02-22",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy9",
+    "name": "BREAKpoint",
+    "language": "en",
+    "releasedAt": "2016-02-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd15",
+    "name": "McDonald's Collection 2015",
+    "language": "en",
+    "releasedAt": "2015-11-27",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy8",
+    "name": "BREAKthrough",
+    "language": "en",
+    "releasedAt": "2015-11-04",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy7",
+    "name": "Ancient Origins",
+    "language": "en",
+    "releasedAt": "2015-08-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy6",
+    "name": "Roaring Skies",
+    "language": "en",
+    "releasedAt": "2015-05-06",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xytk3",
+    "name": "XY Trainer Kit: Latias & Latios",
+    "language": "en",
+    "releasedAt": "2015-04-29",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dc1",
+    "name": "Double Crisis",
+    "language": "en",
+    "releasedAt": "2015-03-25",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy5",
+    "name": "Primal Clash",
+    "language": "en",
+    "releasedAt": "2015-02-04",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xytk2",
+    "name": "XY Trainer Kit: Bisharp & Wigglytuff",
+    "language": "en",
+    "releasedAt": "2014-11-14",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy4",
+    "name": "Phantom Forces",
+    "language": "en",
+    "releasedAt": "2014-11-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy3",
+    "name": "Furious Fists",
+    "language": "en",
+    "releasedAt": "2014-08-13",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd14",
+    "name": "McDonald's Collection 2014",
+    "language": "en",
+    "releasedAt": "2014-05-23",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy2",
+    "name": "Flashfire",
+    "language": "en",
+    "releasedAt": "2014-05-07",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xytk1",
+    "name": "XY Trainer Kit: Sylveon & Noivern",
+    "language": "en",
+    "releasedAt": "2014-03-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy1",
+    "name": "XY",
+    "language": "en",
+    "releasedAt": "2014-02-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xy0",
+    "name": "Kalos Starter Set",
+    "language": "en",
+    "releasedAt": "2013-11-08",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw11",
+    "name": "Legendary Treasures",
+    "language": "en",
+    "releasedAt": "2013-11-06",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "xyp",
+    "name": "XY Black Star Promos",
+    "language": "en",
+    "releasedAt": "2013-10-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw10",
+    "name": "Plasma Blast",
+    "language": "en",
+    "releasedAt": "2013-08-14",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw9",
+    "name": "Plasma Freeze",
+    "language": "en",
+    "releasedAt": "2013-05-08",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw8",
+    "name": "Plasma Storm",
+    "language": "en",
+    "releasedAt": "2013-02-06",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw7",
+    "name": "Boundaries Crossed",
+    "language": "en",
+    "releasedAt": "2012-11-07",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dv1",
+    "name": "Dragon Vault",
+    "language": "en",
+    "releasedAt": "2012-10-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw6",
+    "name": "Dragons Exalted",
+    "language": "en",
+    "releasedAt": "2012-08-15",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd12",
+    "name": "McDonald's Collection 2012",
+    "language": "en",
+    "releasedAt": "2012-06-15",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw5",
+    "name": "Dark Explorers",
+    "language": "en",
+    "releasedAt": "2012-05-09",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw4",
+    "name": "Next Destinies",
+    "language": "en",
+    "releasedAt": "2012-02-08",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw3",
+    "name": "Noble Victories",
+    "language": "en",
+    "releasedAt": "2011-11-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bwtk",
+    "name": "BW Trainer Kit: Excadrill & Zoroark",
+    "language": "en",
+    "releasedAt": "2011-09-05",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw2",
+    "name": "Emerging Powers",
+    "language": "en",
+    "releasedAt": "2011-08-31",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcd11",
+    "name": "McDonald's Collection 2011",
+    "language": "en",
+    "releasedAt": "2011-06-17",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bw1",
+    "name": "Black & White",
+    "language": "en",
+    "releasedAt": "2011-04-25",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bwp",
+    "name": "BW Black Star Promos",
+    "language": "en",
+    "releasedAt": "2011-03-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "col1",
+    "name": "Call of Legends",
+    "language": "en",
+    "releasedAt": "2011-02-09",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "hgss4",
+    "name": "HS—Triumphant",
+    "language": "en",
+    "releasedAt": "2010-11-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "hgss3",
+    "name": "HS—Undaunted",
+    "language": "en",
+    "releasedAt": "2010-08-18",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "hgss2",
+    "name": "HS—Unleashed",
+    "language": "en",
+    "releasedAt": "2010-05-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "hgsstk",
+    "name": "HGSS Trainer Kit: Gyarados & Raichu",
+    "language": "en",
+    "releasedAt": "2010-05-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "hgss1",
+    "name": "HeartGold & SoulSilver",
+    "language": "en",
+    "releasedAt": "2010-02-10",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "hsp",
+    "name": "HGSS Black Star Promos",
+    "language": "en",
+    "releasedAt": "2010-02-10",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ru1",
+    "name": "Pokémon Rumble",
+    "language": "en",
+    "releasedAt": "2009-12-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pl4",
+    "name": "Arceus",
+    "language": "en",
+    "releasedAt": "2009-11-04",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pl3",
+    "name": "Supreme Victors",
+    "language": "en",
+    "releasedAt": "2009-08-19",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pl2",
+    "name": "Rising Rivals",
+    "language": "en",
+    "releasedAt": "2009-05-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop9",
+    "name": "POP Series 9",
+    "language": "en",
+    "releasedAt": "2009-03-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pl1",
+    "name": "Platinum",
+    "language": "en",
+    "releasedAt": "2009-02-11",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dp7",
+    "name": "Stormfront",
+    "language": "en",
+    "releasedAt": "2008-11-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ccp",
+    "name": "Countdown Calendar Promos",
+    "language": "en",
+    "releasedAt": "2008-10-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop8",
+    "name": "POP Series 8",
+    "language": "en",
+    "releasedAt": "2008-09-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dp6",
+    "name": "Legends Awakened",
+    "language": "en",
+    "releasedAt": "2008-08-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dp5",
+    "name": "Majestic Dawn",
+    "language": "en",
+    "releasedAt": "2008-05-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop7",
+    "name": "POP Series 7",
+    "language": "en",
+    "releasedAt": "2008-03-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dp4",
+    "name": "Great Encounters",
+    "language": "en",
+    "releasedAt": "2008-02-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dp3",
+    "name": "Secret Wonders",
+    "language": "en",
+    "releasedAt": "2007-11-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dptk",
+    "name": "DP Trainer Kit: Manaphy & Lucario",
+    "language": "en",
+    "releasedAt": "2007-09-03",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop6",
+    "name": "POP Series 6",
+    "language": "en",
+    "releasedAt": "2007-09-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dp2",
+    "name": "Mysterious Treasures",
+    "language": "en",
+    "releasedAt": "2007-08-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dp1",
+    "name": "Diamond & Pearl",
+    "language": "en",
+    "releasedAt": "2007-05-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "dpp",
+    "name": "DP Black Star Promos",
+    "language": "en",
+    "releasedAt": "2007-05-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop5",
+    "name": "POP Series 5",
+    "language": "en",
+    "releasedAt": "2007-03-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex16",
+    "name": "Power Keepers",
+    "language": "en",
+    "releasedAt": "2007-02-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex15",
+    "name": "Dragon Frontiers",
+    "language": "en",
+    "releasedAt": "2006-11-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex14",
+    "name": "Crystal Guardians",
+    "language": "en",
+    "releasedAt": "2006-08-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop4",
+    "name": "POP Series 4",
+    "language": "en",
+    "releasedAt": "2006-08-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex13",
+    "name": "Holon Phantoms",
+    "language": "en",
+    "releasedAt": "2006-05-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop3",
+    "name": "POP Series 3",
+    "language": "en",
+    "releasedAt": "2006-04-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tk2a",
+    "name": "EX Trainer Kit 2 Plusle",
+    "language": "en",
+    "releasedAt": "2006-03-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tk2b",
+    "name": "EX Trainer Kit 2 Minun",
+    "language": "en",
+    "releasedAt": "2006-03-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex12",
+    "name": "Legend Maker",
+    "language": "en",
+    "releasedAt": "2006-02-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex11",
+    "name": "Delta Species",
+    "language": "en",
+    "releasedAt": "2005-10-31",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex10",
+    "name": "Unseen Forces",
+    "language": "en",
+    "releasedAt": "2005-08-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop2",
+    "name": "POP Series 2",
+    "language": "en",
+    "releasedAt": "2005-08-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex9",
+    "name": "Emerald",
+    "language": "en",
+    "releasedAt": "2005-05-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex8",
+    "name": "Deoxys",
+    "language": "en",
+    "releasedAt": "2005-02-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex7",
+    "name": "Team Rocket Returns",
+    "language": "en",
+    "releasedAt": "2004-11-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "exbs",
+    "name": "EX Battle Stadium",
+    "language": "en",
+    "releasedAt": "2004-10-18",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex6",
+    "name": "FireRed & LeafGreen",
+    "language": "en",
+    "releasedAt": "2004-09-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pop1",
+    "name": "POP Series 1",
+    "language": "en",
+    "releasedAt": "2004-09-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "kwbp",
+    "name": "Kids WB Promos",
+    "language": "en",
+    "releasedAt": "2004-07-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex5",
+    "name": "Hidden Legends",
+    "language": "en",
+    "releasedAt": "2004-06-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tk1a",
+    "name": "EX Trainer Kit Latias",
+    "language": "en",
+    "releasedAt": "2004-06-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "tk1b",
+    "name": "EX Trainer Kit Latios",
+    "language": "en",
+    "releasedAt": "2004-06-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex4",
+    "name": "Team Magma vs Team Aqua",
+    "language": "en",
+    "releasedAt": "2004-03-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex3",
+    "name": "Dragon",
+    "language": "en",
+    "releasedAt": "2003-11-24",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "np",
+    "name": "Nintendo Black Star Promos",
+    "language": "en",
+    "releasedAt": "2003-10-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex2",
+    "name": "Sandstorm",
+    "language": "en",
+    "releasedAt": "2003-09-18",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ex1",
+    "name": "Ruby & Sapphire",
+    "language": "en",
+    "releasedAt": "2003-07-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ecard3",
+    "name": "Skyridge",
+    "language": "en",
+    "releasedAt": "2003-05-12",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ecard2",
+    "name": "Aquapolis",
+    "language": "en",
+    "releasedAt": "2003-01-15",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bp",
+    "name": "Best of Game",
+    "language": "en",
+    "releasedAt": "2002-12-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ecard1",
+    "name": "Expedition Base Set",
+    "language": "en",
+    "releasedAt": "2002-09-15",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "ereader",
+    "name": "e-Reader Sample Cards",
+    "language": "en",
+    "releasedAt": "2002-08-02",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "base6",
+    "name": "Legendary Collection",
+    "language": "en",
+    "releasedAt": "2002-05-24",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "neo4",
+    "name": "Neo Destiny",
+    "language": "en",
+    "releasedAt": "2002-02-28",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "neo3",
+    "name": "Neo Revelation",
+    "language": "en",
+    "releasedAt": "2001-09-21",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "si1",
+    "name": "Southern Islands",
+    "language": "en",
+    "releasedAt": "2001-07-31",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "neo2",
+    "name": "Neo Discovery",
+    "language": "en",
+    "releasedAt": "2001-06-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "neo1",
+    "name": "Neo Genesis",
+    "language": "en",
+    "releasedAt": "2000-12-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "gym2",
+    "name": "Gym Challenge",
+    "language": "en",
+    "releasedAt": "2000-10-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "gym1",
+    "name": "Gym Heroes",
+    "language": "en",
+    "releasedAt": "2000-08-14",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "base5",
+    "name": "Team Rocket",
+    "language": "en",
+    "releasedAt": "2000-04-24",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "base4",
+    "name": "Base Set 2",
+    "language": "en",
+    "releasedAt": "2000-02-24",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "base3",
+    "name": "Fossil",
+    "language": "en",
+    "releasedAt": "1999-10-10",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "basep",
+    "name": "Wizards Black Star Promos",
+    "language": "en",
+    "releasedAt": "1999-07-01",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "base2",
+    "name": "Jungle",
+    "language": "en",
+    "releasedAt": "1999-06-16",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "base1",
+    "name": "Base",
+    "language": "en",
+    "releasedAt": "1999-01-09",
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "bkp",
+    "name": "Burger King Promos",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "blister",
+    "name": "Blister Exclusives",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "deckex",
+    "name": "Deck Exclusives",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "fpp",
+    "name": "First Partner Pack",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "jumbo",
+    "name": "Jumbo Cards",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "lcc",
+    "name": "League & Championship Cards",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "mcap",
+    "name": "Miscellaneous Cards & Products",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pps",
+    "name": "Play! Pokémon Prize Pack Series",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "profp",
+    "name": "Professor Program Promos",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "pwcp",
+    "name": "Pikachu World Collection Promos",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2004",
+    "name": "World Championship Decks 2004",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2005",
+    "name": "World Championship Decks 2005",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2006",
+    "name": "World Championship Decks 2006",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2007",
+    "name": "World Championship Decks 2007",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2008",
+    "name": "World Championship Decks 2008",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2009",
+    "name": "World Championship Decks 2009",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2010",
+    "name": "World Championship Decks 2010",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2011",
+    "name": "World Championship Decks 2011",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2012",
+    "name": "World Championship Decks 2012",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2013",
+    "name": "World Championship Decks 2013",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2014",
+    "name": "World Championship Decks 2014",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2015",
+    "name": "World Championship Decks 2015",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2016",
+    "name": "World Championship Decks 2016",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2017",
+    "name": "World Championship Decks 2017",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2018",
+    "name": "World Championship Decks 2018",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2019",
+    "name": "World Championship Decks 2019",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2022",
+    "name": "World Championship Decks 2022",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2023",
+    "name": "World Championship Decks 2023",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "wcd2024",
+    "name": "World Championship Decks 2024",
+    "language": "en",
+    "releasedAt": null,
+    "cards": null,
+    "printings": null
+  },
+  {
+    "code": "g24172",
+    "name": "Unnumbered Promotional cards",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24194",
+    "name": "CoroCoro Promotional Cards",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24195",
+    "name": "How I Became a Pokemon Card",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24196",
+    "name": "Elementary School Competition",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24197",
+    "name": "64 Mario Stadium Best Photo Contest",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24198",
+    "name": "Pokemon Card Information Promotional cards",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24199",
+    "name": "Battle Road",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24200",
+    "name": "World Hobby Fair",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24201",
+    "name": "Champion Road",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24202",
+    "name": "Gym Challenge",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24203",
+    "name": "Pokemon Card Design Contest",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24204",
+    "name": "Pokemon Card Fan Club",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24205",
+    "name": "Unnumbered World Championships",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24206",
+    "name": "Vending Machine cards Series 1 (Blue)",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24207",
+    "name": "Vending Machine cards Series 2 (Red)",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "g24208",
+    "name": "Vending Machine cards Series 3 (Green)",
+    "language": "ja",
+    "releasedAt": "2026-10-04",
+    "printings": null
+  },
+  {
+    "code": "m6a",
+    "name": "MEGA Expansion 30th Celebration",
+    "language": "ja",
+    "releasedAt": "2026-09-16",
+    "printings": null
+  },
+  {
+    "code": "mf",
+    "name": "30th CELEBRATION Premium Deck Set Espeon & Umbreon",
+    "language": "ja",
+    "releasedAt": "2026-09-16",
+    "printings": null
+  },
+  {
+    "code": "m6",
+    "name": "Storm Emeralda",
+    "language": "ja",
+    "releasedAt": "2026-07-31",
+    "printings": null
+  },
+  {
+    "code": "mee",
+    "name": "Starter Set ex Eevee ex",
+    "language": "ja",
+    "releasedAt": "2026-07-31",
+    "printings": null
+  },
+  {
+    "code": "mem",
+    "name": "Starter Set ex Meowscarada ex",
+    "language": "ja",
+    "releasedAt": "2026-07-31",
+    "printings": null
+  },
+  {
+    "code": "mez",
+    "name": "Starter Set ex Zoroark ex",
+    "language": "ja",
+    "releasedAt": "2026-07-31",
+    "printings": null
+  },
+  {
+    "code": "m5",
+    "name": "Abyss Eye",
+    "language": "ja",
+    "releasedAt": "2026-05-22",
+    "printings": null
+  },
+  {
+    "code": "m4",
+    "name": "Ninja Spinner",
+    "language": "ja",
+    "releasedAt": "2026-03-13",
+    "printings": null
+  },
+  {
+    "code": "m3",
+    "name": "Nihil Zero",
+    "language": "ja",
+    "releasedAt": "2026-01-23",
+    "printings": null
+  },
+  {
+    "code": "g24567",
+    "name": "Start Deck 100 Battle Collection",
+    "language": "ja",
+    "releasedAt": "2025-12-19",
+    "printings": null
+  },
+  {
+    "code": "mp1",
+    "name": "Start Deck 100 Battle Collection CoroCiao Version",
+    "language": "ja",
+    "releasedAt": "2025-12-19",
+    "printings": null
+  },
+  {
+    "code": "g24568",
+    "name": "Japanese CD Promo",
+    "language": "ja",
+    "releasedAt": "2025-12-01",
+    "printings": null
+  },
+  {
+    "code": "m2a",
+    "name": "High Class Pack: MEGA Dream ex",
+    "language": "ja",
+    "releasedAt": "2025-11-28",
+    "printings": null
+  },
+  {
+    "code": "m2",
+    "name": "Inferno X",
+    "language": "ja",
+    "releasedAt": "2025-09-26",
+    "printings": null
+  },
+  {
+    "code": "mbg",
+    "name": "MEGA Starter Set Mega Gengar ex",
+    "language": "ja",
+    "releasedAt": "2025-09-12",
+    "printings": null
+  },
+  {
+    "code": "g24781",
+    "name": "Mega Evolution Era Unnumbered Energies",
+    "language": "ja",
+    "releasedAt": "2025-09-05",
+    "printings": null
+  },
+  {
+    "code": "mbd",
+    "name": "MEGA Starter Set Mega Diancie ex",
+    "language": "ja",
+    "releasedAt": "2025-09-05",
+    "printings": null
+  },
+  {
+    "code": "mp",
+    "name": "M-P Promotional Cards",
+    "language": "ja",
+    "releasedAt": "2025-08-08",
+    "printings": null
+  },
+  {
+    "code": "g24420",
+    "name": "Scarlet & Violet Era Unnumbered Energies",
+    "language": "ja",
+    "releasedAt": "2025-08-01",
+    "printings": null
+  },
+  {
+    "code": "m1l",
+    "name": "Mega Brave",
+    "language": "ja",
+    "releasedAt": "2025-08-01",
+    "printings": null
+  },
+  {
+    "code": "m1s",
+    "name": "Mega Symphonia",
+    "language": "ja",
+    "releasedAt": "2025-08-01",
+    "printings": null
+  },
+  {
+    "code": "sv11b",
+    "name": "Black Bolt",
+    "language": "ja",
+    "releasedAt": "2025-06-06",
+    "printings": null
+  },
+  {
+    "code": "sv11w",
+    "name": "White Flare",
+    "language": "ja",
+    "releasedAt": "2025-06-06",
+    "printings": null
+  },
+  {
+    "code": "sv10",
+    "name": "The Glory of Team Rocket",
+    "language": "ja",
+    "releasedAt": "2025-04-18",
+    "printings": null
+  },
+  {
+    "code": "sv9a",
+    "name": "Heat Wave Arena",
+    "language": "ja",
+    "releasedAt": "2025-03-14",
+    "printings": null
+  },
+  {
+    "code": "svod",
+    "name": "SV: ex Starter Set Steven's Beldum & Metagross ex",
+    "language": "ja",
+    "releasedAt": "2025-02-21",
+    "printings": null
+  },
+  {
+    "code": "svom",
+    "name": "SV: ex Starter Set Marnie's Morpeko & Grimmsnarl ex",
+    "language": "ja",
+    "releasedAt": "2025-02-21",
+    "printings": null
+  },
+  {
+    "code": "sv9",
+    "name": "Battle Partners",
+    "language": "ja",
+    "releasedAt": "2025-01-24",
+    "printings": null
+  },
+  {
+    "code": "svn",
+    "name": "Battle Partners Deck Build Box",
+    "language": "ja",
+    "releasedAt": "2025-01-24",
+    "printings": null
+  },
+  {
+    "code": "sv8a",
+    "name": "Terastal Fest ex",
+    "language": "ja",
+    "releasedAt": "2024-12-06",
+    "printings": null
+  },
+  {
+    "code": "g24324",
+    "name": "SVM: Generations Start Decks",
+    "language": "ja",
+    "releasedAt": "2024-11-22",
+    "printings": null
+  },
+  {
+    "code": "sv8",
+    "name": "Super Electric Breaker",
+    "language": "ja",
+    "releasedAt": "2024-10-18",
+    "printings": null
+  },
+  {
+    "code": "svp",
+    "name": "SV-P Promotional Cards",
+    "language": "ja",
+    "releasedAt": "2024-10-18",
+    "printings": null
+  },
+  {
+    "code": "sv7a",
+    "name": "Paradise Dragona",
+    "language": "ja",
+    "releasedAt": "2024-09-13",
+    "printings": null
+  },
+  {
+    "code": "svl",
+    "name": "SV: Ceruledge ex Stellar Tera Type Starter Set",
+    "language": "ja",
+    "releasedAt": "2024-08-30",
+    "printings": null
+  },
+  {
+    "code": "svln",
+    "name": "SV: Sylveon ex Stellar Tera Type Starter Set",
+    "language": "ja",
+    "releasedAt": "2024-08-30",
+    "printings": null
+  },
+  {
+    "code": "sv7",
+    "name": "Stellar Miracle",
+    "language": "ja",
+    "releasedAt": "2024-07-19",
+    "printings": null
+  },
+  {
+    "code": "svk",
+    "name": "SV: Stellar Miracle Deck Build Box",
+    "language": "ja",
+    "releasedAt": "2024-07-19",
+    "printings": null
+  },
+  {
+    "code": "sv6a",
+    "name": "Night Wanderer",
+    "language": "ja",
+    "releasedAt": "2024-06-07",
+    "printings": null
+  },
+  {
+    "code": "svjl",
+    "name": "SV: Terastal Charizard ex Battle Master Deck",
+    "language": "ja",
+    "releasedAt": "2024-05-17",
+    "printings": null
+  },
+  {
+    "code": "svjp",
+    "name": "SV: Chien-Pao ex Battle Master Deck",
+    "language": "ja",
+    "releasedAt": "2024-05-17",
+    "printings": null
+  },
+  {
+    "code": "sv6",
+    "name": "Transformation Mask",
+    "language": "ja",
+    "releasedAt": "2024-04-26",
+    "printings": null
+  },
+  {
+    "code": "sv5a",
+    "name": "Crimson Haze",
+    "language": "ja",
+    "releasedAt": "2024-03-22",
+    "printings": null
+  },
+  {
+    "code": "svi",
+    "name": "Battle Academy",
+    "language": "ja",
+    "releasedAt": "2024-03-08",
+    "printings": null
+  },
+  {
+    "code": "sv5k",
+    "name": "Wild Force",
+    "language": "ja",
+    "releasedAt": "2024-01-26",
+    "printings": null
+  },
+  {
+    "code": "sv5m",
+    "name": "Cyber Judge",
+    "language": "ja",
+    "releasedAt": "2024-01-26",
+    "printings": null
+  },
+  {
+    "code": "svhk",
+    "name": "SV: Ancient Koraidon ex Starter Deck & Build Set",
+    "language": "ja",
+    "releasedAt": "2024-01-26",
+    "printings": null
+  },
+  {
+    "code": "svhm",
+    "name": "SV: Future Miraidon ex Starter Deck & Build Set",
+    "language": "ja",
+    "releasedAt": "2024-01-26",
+    "printings": null
+  },
+  {
+    "code": "sv4a",
+    "name": "Shiny Treasure ex",
+    "language": "ja",
+    "releasedAt": "2023-12-01",
+    "printings": null
+  },
+  {
+    "code": "svg",
+    "name": "SV: Venusaur, Charizard & Blastoise Special Deck Set",
+    "language": "ja",
+    "releasedAt": "2023-11-10",
+    "printings": null
+  },
+  {
+    "code": "sv4k",
+    "name": "Ancient Roar",
+    "language": "ja",
+    "releasedAt": "2023-10-27",
+    "printings": null
+  },
+  {
+    "code": "sv4m",
+    "name": "Future Flash",
+    "language": "ja",
+    "releasedAt": "2023-10-27",
+    "printings": null
+  },
+  {
+    "code": "sv3a",
+    "name": "Raging Surf",
+    "language": "ja",
+    "releasedAt": "2023-09-22",
+    "printings": null
+  },
+  {
+    "code": "svel",
+    "name": "SV: Skeledirge ex Terastal Starter Set",
+    "language": "ja",
+    "releasedAt": "2023-09-22",
+    "printings": null
+  },
+  {
+    "code": "svem",
+    "name": "SV: Mewtwo ex Terastal Starter Set",
+    "language": "ja",
+    "releasedAt": "2023-09-22",
+    "printings": null
+  },
+  {
+    "code": "sv3",
+    "name": "Ruler of the Black Flame",
+    "language": "ja",
+    "releasedAt": "2023-07-28",
+    "printings": null
+  },
+  {
+    "code": "svf",
+    "name": "SV: Ruler of the Black Flame Deck Build Box",
+    "language": "ja",
+    "releasedAt": "2023-07-28",
+    "printings": null
+  },
+  {
+    "code": "wcs23",
+    "name": "2023 World Championships Yokohama Deck: Pikachu",
+    "language": "ja",
+    "releasedAt": "2023-07-28",
+    "printings": null
+  },
+  {
+    "code": "svd",
+    "name": "SV: ex Start Decks",
+    "language": "ja",
+    "releasedAt": "2023-07-07",
+    "printings": null
+  },
+  {
+    "code": "sv2a",
+    "name": "Pokemon Card 151",
+    "language": "ja",
+    "releasedAt": "2023-06-16",
+    "printings": null
+  },
+  {
+    "code": "svp1",
+    "name": "SV: ex Special Set",
+    "language": "ja",
+    "releasedAt": "2023-05-19",
+    "printings": null
+  },
+  {
+    "code": "sv2d",
+    "name": "Clay Burst",
+    "language": "ja",
+    "releasedAt": "2023-04-14",
+    "printings": null
+  },
+  {
+    "code": "sv2p",
+    "name": "Snow Hazard",
+    "language": "ja",
+    "releasedAt": "2023-04-14",
+    "printings": null
+  },
+  {
+    "code": "svc",
+    "name": "SV: ex Starter Set Pikachu ex & Pawmot",
+    "language": "ja",
+    "releasedAt": "2023-03-24",
+    "printings": null
+  },
+  {
+    "code": "sv1a",
+    "name": "Triplet Beat",
+    "language": "ja",
+    "releasedAt": "2023-03-10",
+    "printings": null
+  },
+  {
+    "code": "clf",
+    "name": "Pokemon TCG Classic: Venusaur",
+    "language": "ja",
+    "releasedAt": "2023-02-27",
+    "printings": null
+  },
+  {
+    "code": "cll",
+    "name": "Pokemon TCG Classic: Charizard",
+    "language": "ja",
+    "releasedAt": "2023-02-27",
+    "printings": null
+  },
+  {
+    "code": "clv",
+    "name": "Pokemon TCG Classic: Blastoise",
+    "language": "ja",
+    "releasedAt": "2023-02-27",
+    "printings": null
+  },
+  {
+    "code": "g23807",
+    "name": "SV: ex Starter Set Sprigatito & Lucario ex",
+    "language": "ja",
+    "releasedAt": "2023-01-20",
+    "printings": null
+  },
+  {
+    "code": "g23808",
+    "name": "SV: ex Starter Set Quaxly & Mimikyu ex",
+    "language": "ja",
+    "releasedAt": "2023-01-20",
+    "printings": null
+  },
+  {
+    "code": "sv1s",
+    "name": "Scarlet ex",
+    "language": "ja",
+    "releasedAt": "2023-01-20",
+    "printings": null
+  },
+  {
+    "code": "sv1v",
+    "name": "Violet ex",
+    "language": "ja",
+    "releasedAt": "2023-01-20",
+    "printings": null
+  },
+  {
+    "code": "svaw",
+    "name": "SV: ex Starter Set Fuecoco & Ampharos ex",
+    "language": "ja",
+    "releasedAt": "2023-01-20",
+    "printings": null
+  },
+  {
+    "code": "svb",
+    "name": "SV: Premium Trainer Box ex",
+    "language": "ja",
+    "releasedAt": "2023-01-20",
+    "printings": null
+  },
+  {
+    "code": "s12a",
+    "name": "VSTAR Universe",
+    "language": "ja",
+    "releasedAt": "2022-12-02",
+    "printings": null
+  },
+  {
+    "code": "s0",
+    "name": "Charizard VSTAR vs Rayquaza VMAX Special Deck Set",
+    "language": "ja",
+    "releasedAt": "2022-11-04",
+    "printings": null
+  },
+  {
+    "code": "s12",
+    "name": "Paradigm Trigger",
+    "language": "ja",
+    "releasedAt": "2022-10-21",
+    "printings": null
+  },
+  {
+    "code": "s11a",
+    "name": "Incandescent Arcana",
+    "language": "ja",
+    "releasedAt": "2022-09-02",
+    "printings": null
+  },
+  {
+    "code": "sp6",
+    "name": "VSTAR Special Set",
+    "language": "ja",
+    "releasedAt": "2022-08-05",
+    "printings": null
+  },
+  {
+    "code": "s11",
+    "name": "Lost Abyss",
+    "language": "ja",
+    "releasedAt": "2022-07-15",
+    "printings": null
+  },
+  {
+    "code": "spd",
+    "name": "Deoxys VSTAR & VMAX High-Class Deck",
+    "language": "ja",
+    "releasedAt": "2022-07-15",
+    "printings": null
+  },
+  {
+    "code": "spz",
+    "name": "Zeraora VSTAR & VMAX High-Class Deck",
+    "language": "ja",
+    "releasedAt": "2022-07-15",
+    "printings": null
+  },
+  {
+    "code": "s10b",
+    "name": "Pokemon GO",
+    "language": "ja",
+    "releasedAt": "2022-06-17",
+    "printings": null
+  },
+  {
+    "code": "s10a",
+    "name": "Dark Phantasma",
+    "language": "ja",
+    "releasedAt": "2022-05-13",
+    "printings": null
+  },
+  {
+    "code": "s10d",
+    "name": "Time Gazer",
+    "language": "ja",
+    "releasedAt": "2022-04-08",
+    "printings": null
+  },
+  {
+    "code": "s10p",
+    "name": "Space Juggler",
+    "language": "ja",
+    "releasedAt": "2022-04-08",
+    "printings": null
+  },
+  {
+    "code": "sn",
+    "name": "Start Deck 100 CoroCoro Comic Version",
+    "language": "ja",
+    "releasedAt": "2022-03-01",
+    "printings": null
+  },
+  {
+    "code": "s9a",
+    "name": "Battle Region",
+    "language": "ja",
+    "releasedAt": "2022-02-25",
+    "printings": null
+  },
+  {
+    "code": "sld",
+    "name": "Darkrai Starter Set VSTAR",
+    "language": "ja",
+    "releasedAt": "2022-02-25",
+    "printings": null
+  },
+  {
+    "code": "sll",
+    "name": "Lucario Starter Set VSTAR",
+    "language": "ja",
+    "releasedAt": "2022-02-25",
+    "printings": null
+  },
+  {
+    "code": "s9",
+    "name": "Star Birth",
+    "language": "ja",
+    "releasedAt": "2022-01-14",
+    "printings": null
+  },
+  {
+    "code": "sk",
+    "name": "VSTAR Premium Trainer Box",
+    "language": "ja",
+    "releasedAt": "2022-01-14",
+    "printings": null
+  },
+  {
+    "code": "g23859",
+    "name": "Start Deck 100",
+    "language": "ja",
+    "releasedAt": "2021-12-17",
+    "printings": null
+  },
+  {
+    "code": "s8b",
+    "name": "VMAX Climax",
+    "language": "ja",
+    "releasedAt": "2021-12-03",
+    "printings": null
+  },
+  {
+    "code": "s8ag",
+    "name": "25th Anniversary Golden Box",
+    "language": "ja",
+    "releasedAt": "2021-12-01",
+    "printings": null
+  },
+  {
+    "code": "sj",
+    "name": "Zacian & Zamazenta vs Eternatus Special Deck Set",
+    "language": "ja",
+    "releasedAt": "2021-11-05",
+    "printings": null
+  },
+  {
+    "code": "s8a",
+    "name": "25th Anniversary Collection",
+    "language": "ja",
+    "releasedAt": "2021-10-22",
+    "printings": null
+  },
+  {
+    "code": "s8ap",
+    "name": "Promo Card Pack 25th Anniversary Edition",
+    "language": "ja",
+    "releasedAt": "2021-10-22",
+    "printings": null
+  },
+  {
+    "code": "s8",
+    "name": "Fusion Arts",
+    "language": "ja",
+    "releasedAt": "2021-09-24",
+    "printings": null
+  },
+  {
+    "code": "sp5",
+    "name": "V-UNION Special Card Sets",
+    "language": "ja",
+    "releasedAt": "2021-08-20",
+    "printings": null
+  },
+  {
+    "code": "s7d",
+    "name": "Skyscraping Perfection",
+    "language": "ja",
+    "releasedAt": "2021-07-09",
+    "printings": null
+  },
+  {
+    "code": "s7r",
+    "name": "Blue Sky Stream",
+    "language": "ja",
+    "releasedAt": "2021-07-09",
+    "printings": null
+  },
+  {
+    "code": "sh",
+    "name": "Sword & Shield Family Pokemon Card Game",
+    "language": "ja",
+    "releasedAt": "2021-07-09",
+    "printings": null
+  },
+  {
+    "code": "sgg",
+    "name": "SS: Gengar VMAX High-Class Deck",
+    "language": "ja",
+    "releasedAt": "2021-07-07",
+    "printings": null
+  },
+  {
+    "code": "sgi",
+    "name": "SS: Inteleon VMAX High-Class Deck",
+    "language": "ja",
+    "releasedAt": "2021-07-07",
+    "printings": null
+  },
+  {
+    "code": "s6a",
+    "name": "Eevee Heroes",
+    "language": "ja",
+    "releasedAt": "2021-05-28",
+    "printings": null
+  },
+  {
+    "code": "sp4",
+    "name": "Eevee Heroes VMAX Special Set",
+    "language": "ja",
+    "releasedAt": "2021-05-28",
+    "printings": null
+  },
+  {
+    "code": "s6h",
+    "name": "Silver Lance",
+    "language": "ja",
+    "releasedAt": "2021-04-23",
+    "printings": null
+  },
+  {
+    "code": "s6k",
+    "name": "Jet-Black Spirit",
+    "language": "ja",
+    "releasedAt": "2021-04-23",
+    "printings": null
+  },
+  {
+    "code": "sp3",
+    "name": "SS: Silver Lance & Jet-Black Spirit Jumbo Pack Set",
+    "language": "ja",
+    "releasedAt": "2021-04-23",
+    "printings": null
+  },
+  {
+    "code": "s5a",
+    "name": "Peerless Fighters",
+    "language": "ja",
+    "releasedAt": "2021-03-19",
+    "printings": null
+  },
+  {
+    "code": "s5i",
+    "name": "Single Strike Master",
+    "language": "ja",
+    "releasedAt": "2021-01-22",
+    "printings": null
+  },
+  {
+    "code": "s5r",
+    "name": "Rapid Strike Master",
+    "language": "ja",
+    "releasedAt": "2021-01-22",
+    "printings": null
+  },
+  {
+    "code": "sf",
+    "name": "Single Strike & Rapid Strike Premium Trainer Boxes",
+    "language": "ja",
+    "releasedAt": "2021-01-22",
+    "printings": null
+  },
+  {
+    "code": "sc2",
+    "name": "Charizard Starter Set VMAX 2",
+    "language": "ja",
+    "releasedAt": "2020-12-04",
+    "printings": null
+  },
+  {
+    "code": "sef",
+    "name": "Venusaur Starter Set VMAX",
+    "language": "ja",
+    "releasedAt": "2020-12-04",
+    "printings": null
+  },
+  {
+    "code": "sek",
+    "name": "Blastoise Starter Set VMAX",
+    "language": "ja",
+    "releasedAt": "2020-12-04",
+    "printings": null
+  },
+  {
+    "code": "s4a",
+    "name": "Shiny Star V",
+    "language": "ja",
+    "releasedAt": "2020-11-20",
+    "printings": null
+  },
+  {
+    "code": "sp2",
+    "name": "VMAX Special Set",
+    "language": "ja",
+    "releasedAt": "2020-10-23",
+    "printings": null
+  },
+  {
+    "code": "s4",
+    "name": "Amazing Volt Tackle",
+    "language": "ja",
+    "releasedAt": "2020-09-18",
+    "printings": null
+  },
+  {
+    "code": "s3a",
+    "name": "Legendary Heartbeat",
+    "language": "ja",
+    "releasedAt": "2020-07-10",
+    "printings": null
+  },
+  {
+    "code": "sd",
+    "name": "V Starter Decks",
+    "language": "ja",
+    "releasedAt": "2020-07-10",
+    "printings": null
+  },
+  {
+    "code": "s3",
+    "name": "Infinity Zone",
+    "language": "ja",
+    "releasedAt": "2020-06-05",
+    "printings": null
+  },
+  {
+    "code": "s2a",
+    "name": "Explosive Walker",
+    "language": "ja",
+    "releasedAt": "2020-04-24",
+    "printings": null
+  },
+  {
+    "code": "g23854",
+    "name": "Charizard Starter Set VMAX",
+    "language": "ja",
+    "releasedAt": "2020-03-27",
+    "printings": null
+  },
+  {
+    "code": "g23855",
+    "name": "Grimmsnarl Starter Set VMAX",
+    "language": "ja",
+    "releasedAt": "2020-03-27",
+    "printings": null
+  },
+  {
+    "code": "s2",
+    "name": "Rebellion Crash",
+    "language": "ja",
+    "releasedAt": "2020-03-06",
+    "printings": null
+  },
+  {
+    "code": "s1a",
+    "name": "VMAX Rising",
+    "language": "ja",
+    "releasedAt": "2020-02-07",
+    "printings": null
+  },
+  {
+    "code": "sp1",
+    "name": "Zacian + Zamazenta Box",
+    "language": "ja",
+    "releasedAt": "2019-12-27",
+    "printings": null
+  },
+  {
+    "code": "g24817",
+    "name": "Sword & Shield Era Unnumbered Energies",
+    "language": "ja",
+    "releasedAt": "2019-12-06",
+    "printings": null
+  },
+  {
+    "code": "s1h",
+    "name": "Shield",
+    "language": "ja",
+    "releasedAt": "2019-12-06",
+    "printings": null
+  },
+  {
+    "code": "s1w",
+    "name": "Sword",
+    "language": "ja",
+    "releasedAt": "2019-12-06",
+    "printings": null
+  },
+  {
+    "code": "sb",
+    "name": "Sword & Shield Premium Trainer Box",
+    "language": "ja",
+    "releasedAt": "2019-12-06",
+    "printings": null
+  },
+  {
+    "code": "g23857",
+    "name": "Fighting Starter Set V",
+    "language": "ja",
+    "releasedAt": "2019-11-29",
+    "printings": null
+  },
+  {
+    "code": "g23858",
+    "name": "Fire Starter Set V",
+    "language": "ja",
+    "releasedAt": "2019-11-29",
+    "printings": null
+  },
+  {
+    "code": "g23860",
+    "name": "Grass Starter Set V",
+    "language": "ja",
+    "releasedAt": "2019-11-29",
+    "printings": null
+  },
+  {
+    "code": "g23861",
+    "name": "Lightning Starter Set V",
+    "language": "ja",
+    "releasedAt": "2019-11-29",
+    "printings": null
+  },
+  {
+    "code": "g23862",
+    "name": "Water Starter Set V",
+    "language": "ja",
+    "releasedAt": "2019-11-29",
+    "printings": null
+  },
+  {
+    "code": "sp",
+    "name": "Sword & Shield Promos",
+    "language": "ja",
+    "releasedAt": "2019-11-01",
+    "printings": null
+  },
+  {
+    "code": "bw",
+    "name": "Extra Regulation Box",
+    "language": "ja",
+    "releasedAt": "2019-10-04",
+    "printings": null
+  },
+  {
+    "code": "sm12a",
+    "name": "TAG TEAM GX: Tag All Stars",
+    "language": "ja",
+    "releasedAt": "2019-10-04",
+    "printings": null
+  },
+  {
+    "code": "sm12",
+    "name": "Alter Genesis",
+    "language": "ja",
+    "releasedAt": "2019-09-06",
+    "printings": null
+  },
+  {
+    "code": "sm11b",
+    "name": "Dream League",
+    "language": "ja",
+    "releasedAt": "2019-08-02",
+    "printings": null
+  },
+  {
+    "code": "sm11a",
+    "name": "Remix Bout",
+    "language": "ja",
+    "releasedAt": "2019-07-05",
+    "printings": null
+  },
+  {
+    "code": "sm11",
+    "name": "Miracle Twin",
+    "language": "ja",
+    "releasedAt": "2019-05-31",
+    "printings": null
+  },
+  {
+    "code": "smm",
+    "name": "Tag Team GX Starter Sets",
+    "language": "ja",
+    "releasedAt": "2019-05-31",
+    "printings": null
+  },
+  {
+    "code": "sm10b",
+    "name": "Sky Legend",
+    "language": "ja",
+    "releasedAt": "2019-04-26",
+    "printings": null
+  },
+  {
+    "code": "smp2",
+    "name": "Great Detective Pikachu",
+    "language": "ja",
+    "releasedAt": "2019-04-26",
+    "printings": null
+  },
+  {
+    "code": "sm10a",
+    "name": "GG End",
+    "language": "ja",
+    "releasedAt": "2019-04-05",
+    "printings": null
+  },
+  {
+    "code": "sml",
+    "name": "Sun & Moon Family Pokemon Card Game",
+    "language": "ja",
+    "releasedAt": "2019-03-15",
+    "printings": null
+  },
+  {
+    "code": "sm10",
+    "name": "Double Blaze",
+    "language": "ja",
+    "releasedAt": "2019-03-01",
+    "printings": null
+  },
+  {
+    "code": "smn",
+    "name": "Tag Team GX Deck Build Box",
+    "language": "ja",
+    "releasedAt": "2019-03-01",
+    "printings": null
+  },
+  {
+    "code": "sm9b",
+    "name": "Full Metal Wall",
+    "language": "ja",
+    "releasedAt": "2019-02-01",
+    "printings": null
+  },
+  {
+    "code": "smk",
+    "name": "Trainer Battle Decks",
+    "language": "ja",
+    "releasedAt": "2019-01-25",
+    "printings": null
+  },
+  {
+    "code": "sm9a",
+    "name": "Night Unison",
+    "language": "ja",
+    "releasedAt": "2019-01-11",
+    "printings": null
+  },
+  {
+    "code": "sm9",
+    "name": "Tag Bolt",
+    "language": "ja",
+    "releasedAt": "2018-12-07",
+    "printings": null
+  },
+  {
+    "code": "smj",
+    "name": "Tag Team GX Premium Trainer Box",
+    "language": "ja",
+    "releasedAt": "2018-12-07",
+    "printings": null
+  },
+  {
+    "code": "smi",
+    "name": "Flareon-GX, Vaporeon-GX & Jolteon-GX Starter Sets",
+    "language": "ja",
+    "releasedAt": "2018-11-23",
+    "printings": null
+  },
+  {
+    "code": "sm8b",
+    "name": "GX Ultra Shiny",
+    "language": "ja",
+    "releasedAt": "2018-11-02",
+    "printings": null
+  },
+  {
+    "code": "sm8a",
+    "name": "Dark Order",
+    "language": "ja",
+    "releasedAt": "2018-10-05",
+    "printings": null
+  },
+  {
+    "code": "sm8",
+    "name": "Super-Burst Impact",
+    "language": "ja",
+    "releasedAt": "2018-09-07",
+    "printings": null
+  },
+  {
+    "code": "sm7b",
+    "name": "Fairy Rise",
+    "language": "ja",
+    "releasedAt": "2018-08-03",
+    "printings": null
+  },
+  {
+    "code": "smh",
+    "name": "GX Starter Decks",
+    "language": "ja",
+    "releasedAt": "2018-07-13",
+    "printings": null
+  },
+  {
+    "code": "sm7a",
+    "name": "Thunderclap Spark",
+    "language": "ja",
+    "releasedAt": "2018-07-06",
+    "printings": null
+  },
+  {
+    "code": "sm7",
+    "name": "Sky-Splitting Charisma",
+    "language": "ja",
+    "releasedAt": "2018-06-01",
+    "printings": null
+  },
+  {
+    "code": "sm6b",
+    "name": "Champion Road",
+    "language": "ja",
+    "releasedAt": "2018-05-30",
+    "printings": null
+  },
+  {
+    "code": "sm6a",
+    "name": "Dragon Storm",
+    "language": "ja",
+    "releasedAt": "2018-04-06",
+    "printings": null
+  },
+  {
+    "code": "sm6",
+    "name": "Forbidden Light",
+    "language": "ja",
+    "releasedAt": "2018-03-02",
+    "printings": null
+  },
+  {
+    "code": "smg",
+    "name": "Ultra Sun & Ultra Moon Deck Build Boxes",
+    "language": "ja",
+    "releasedAt": "2018-02-16",
+    "printings": null
+  },
+  {
+    "code": "sm5plus",
+    "name": "Ultra Force",
+    "language": "ja",
+    "releasedAt": "2018-01-19",
+    "printings": null
+  },
+  {
+    "code": "sm5m",
+    "name": "Ultra Moon",
+    "language": "ja",
+    "releasedAt": "2017-12-08",
+    "printings": null
+  },
+  {
+    "code": "sm5s",
+    "name": "Ultra Sun",
+    "language": "ja",
+    "releasedAt": "2017-12-08",
+    "printings": null
+  },
+  {
+    "code": "smf",
+    "name": "Ultra Sun & Ultra Moon Premium Trainer Box",
+    "language": "ja",
+    "releasedAt": "2017-12-08",
+    "printings": null
+  },
+  {
+    "code": "sme",
+    "name": "Solgaleo-GX & Lunala-GX Legendary Starter Set",
+    "language": "ja",
+    "releasedAt": "2017-11-10",
+    "printings": null
+  },
+  {
+    "code": "sm4plus",
+    "name": "GX Battle Boost",
+    "language": "ja",
+    "releasedAt": "2017-10-20",
+    "printings": null
+  },
+  {
+    "code": "sm4a",
+    "name": "Ultradimensional Beasts",
+    "language": "ja",
+    "releasedAt": "2017-09-15",
+    "printings": null
+  },
+  {
+    "code": "sm4s",
+    "name": "Awakened Heroes",
+    "language": "ja",
+    "releasedAt": "2017-09-15",
+    "printings": null
+  },
+  {
+    "code": "sm3plus",
+    "name": "Shining Legends",
+    "language": "ja",
+    "releasedAt": "2017-07-15",
+    "printings": null
+  },
+  {
+    "code": "sm3h",
+    "name": "To Have Seen the Battle Rainbow",
+    "language": "ja",
+    "releasedAt": "2017-06-16",
+    "printings": null
+  },
+  {
+    "code": "sm3n",
+    "name": "Darkness that Consumes Light",
+    "language": "ja",
+    "releasedAt": "2017-06-16",
+    "printings": null
+  },
+  {
+    "code": "sm2plus",
+    "name": "Facing a New Trial",
+    "language": "ja",
+    "releasedAt": "2017-04-21",
+    "printings": null
+  },
+  {
+    "code": "smd",
+    "name": "Ash vs Team Rocket Deck Kit",
+    "language": "ja",
+    "releasedAt": "2017-04-21",
+    "printings": null
+  },
+  {
+    "code": "xy",
+    "name": "SM: The Best of XY",
+    "language": "ja",
+    "releasedAt": "2017-04-21",
+    "printings": null
+  },
+  {
+    "code": "sm2k",
+    "name": "Islands Await You",
+    "language": "ja",
+    "releasedAt": "2017-03-17",
+    "printings": null
+  },
+  {
+    "code": "sm2l",
+    "name": "Alolan Moonlight",
+    "language": "ja",
+    "releasedAt": "2017-03-17",
+    "printings": null
+  },
+  {
+    "code": "smc",
+    "name": "Tapu Bulu-GX Enhanced Starter Set",
+    "language": "ja",
+    "releasedAt": "2017-03-17",
+    "printings": null
+  },
+  {
+    "code": "g23692",
+    "name": "Sun & Moon",
+    "language": "ja",
+    "releasedAt": "2017-01-27",
+    "printings": null
+  },
+  {
+    "code": "g23880",
+    "name": "Enhanced Expansion Pack Sun & Moon",
+    "language": "ja",
+    "releasedAt": "2017-01-27",
+    "printings": null
+  },
+  {
+    "code": "smp1",
+    "name": "Rockruff Full Power Deck",
+    "language": "ja",
+    "releasedAt": "2016-12-15",
+    "printings": null
+  },
+  {
+    "code": "g24785",
+    "name": "Sun & Moon Era Unnumbered Energies",
+    "language": "ja",
+    "releasedAt": "2016-12-09",
+    "printings": null
+  },
+  {
+    "code": "sm1m",
+    "name": "Collection Moon",
+    "language": "ja",
+    "releasedAt": "2016-12-09",
+    "printings": null
+  },
+  {
+    "code": "sm1s",
+    "name": "Collection Sun",
+    "language": "ja",
+    "releasedAt": "2016-12-09",
+    "printings": null
+  },
+  {
+    "code": "sma",
+    "name": "Sun & Moon Starter Set",
+    "language": "ja",
+    "releasedAt": "2016-12-09",
+    "printings": null
+  },
+  {
+    "code": "smb",
+    "name": "Premium Trainer Box",
+    "language": "ja",
+    "releasedAt": "2016-12-09",
+    "printings": null
+  },
+  {
+    "code": "sm0",
+    "name": "Pikachu's New Friends",
+    "language": "ja",
+    "releasedAt": "2016-11-18",
+    "printings": null
+  },
+  {
+    "code": "smp",
+    "name": "Sun & Moon Promos",
+    "language": "ja",
+    "releasedAt": "2016-11-01",
+    "printings": null
+  },
+  {
+    "code": "cp6",
+    "name": "Expansion Pack 20th Anniversary",
+    "language": "ja",
+    "releasedAt": "2016-09-16",
+    "printings": null
+  },
+  {
+    "code": "cp5",
+    "name": "Mythical & Legendary Dream Shine Collection",
+    "language": "ja",
+    "releasedAt": "2016-07-16",
+    "printings": null
+  },
+  {
+    "code": "xy11bb",
+    "name": "Fever-Burst Fighter",
+    "language": "ja",
+    "releasedAt": "2016-06-17",
+    "printings": null
+  },
+  {
+    "code": "xy11br",
+    "name": "Cruel Traitor",
+    "language": "ja",
+    "releasedAt": "2016-06-17",
+    "printings": null
+  },
+  {
+    "code": "cp4",
+    "name": "Premium Champion Pack",
+    "language": "ja",
+    "releasedAt": "2016-04-16",
+    "printings": null
+  },
+  {
+    "code": "xy10",
+    "name": "Awakening Psychic King",
+    "language": "ja",
+    "releasedAt": "2016-03-18",
+    "printings": null
+  },
+  {
+    "code": "xyg",
+    "name": "Zygarde-EX Perfect Battle Deck",
+    "language": "ja",
+    "releasedAt": "2016-03-18",
+    "printings": null
+  },
+  {
+    "code": "xyh",
+    "name": "M Audino-EX Mega Battle Deck",
+    "language": "ja",
+    "releasedAt": "2016-03-18",
+    "printings": null
+  },
+  {
+    "code": "20th",
+    "name": "BREAK Starter Pack",
+    "language": "ja",
+    "releasedAt": "2016-02-27",
+    "printings": null
+  },
+  {
+    "code": "cp3",
+    "name": "PokeKyun Collection",
+    "language": "ja",
+    "releasedAt": "2016-01-29",
+    "printings": null
+  },
+  {
+    "code": "xy9",
+    "name": "Rage of the Broken Heavens",
+    "language": "ja",
+    "releasedAt": "2015-12-11",
+    "printings": null
+  },
+  {
+    "code": "xyf",
+    "name": "Golduck BREAK + Palkia-EX Combo Deck",
+    "language": "ja",
+    "releasedAt": "2015-10-09",
+    "printings": null
+  },
+  {
+    "code": "g23987",
+    "name": "Noivern BREAK Evolution Pack",
+    "language": "ja",
+    "releasedAt": "2015-09-26",
+    "printings": null
+  },
+  {
+    "code": "g23988",
+    "name": "Raichu BREAK Evolution Pack",
+    "language": "ja",
+    "releasedAt": "2015-09-26",
+    "printings": null
+  },
+  {
+    "code": "xy8bb",
+    "name": "Blue Shock",
+    "language": "ja",
+    "releasedAt": "2015-09-26",
+    "printings": null
+  },
+  {
+    "code": "xy8br",
+    "name": "Red Flash",
+    "language": "ja",
+    "releasedAt": "2015-09-26",
+    "printings": null
+  },
+  {
+    "code": "g23985",
+    "name": "M Master Deck Build Box Power Style",
+    "language": "ja",
+    "releasedAt": "2015-08-07",
+    "printings": null
+  },
+  {
+    "code": "g23986",
+    "name": "M Master Deck Build Box Speed Style",
+    "language": "ja",
+    "releasedAt": "2015-08-07",
+    "printings": null
+  },
+  {
+    "code": "cp2",
+    "name": "Legendary Shine Collection",
+    "language": "ja",
+    "releasedAt": "2015-07-18",
+    "printings": null
+  },
+  {
+    "code": "xye",
+    "name": "Emboar-EX vs Togekiss-EX Deck Kit",
+    "language": "ja",
+    "releasedAt": "2015-07-18",
+    "printings": null
+  },
+  {
+    "code": "xy7",
+    "name": "Bandit Ring",
+    "language": "ja",
+    "releasedAt": "2015-06-20",
+    "printings": null
+  },
+  {
+    "code": "xy6",
+    "name": "Emerald Break",
+    "language": "ja",
+    "releasedAt": "2015-03-14",
+    "printings": null
+  },
+  {
+    "code": "xyd",
+    "name": "M Rayquaza-EX Mega Battle Deck",
+    "language": "ja",
+    "releasedAt": "2015-03-14",
+    "printings": null
+  },
+  {
+    "code": "cp1",
+    "name": "Magma Gang vs Aqua Gang: Double Crisis",
+    "language": "ja",
+    "releasedAt": "2015-01-30",
+    "printings": null
+  },
+  {
+    "code": "xy5bg",
+    "name": "Gaia Volcano",
+    "language": "ja",
+    "releasedAt": "2014-12-13",
+    "printings": null
+  },
+  {
+    "code": "xy5bt",
+    "name": "Tidal Storm",
+    "language": "ja",
+    "releasedAt": "2014-12-13",
+    "printings": null
+  },
+  {
+    "code": "xyc",
+    "name": "Super Legend Set: Xerneas-EX & Yveltal-EX",
+    "language": "ja",
+    "releasedAt": "2014-11-14",
+    "printings": null
+  },
+  {
+    "code": "xy4",
+    "name": "Phantom Gate",
+    "language": "ja",
+    "releasedAt": "2014-09-13",
+    "printings": null
+  },
+  {
+    "code": "xyb",
+    "name": "Dialga-EX + Aegislash-EX Hyper Metal Chain Deck",
+    "language": "ja",
+    "releasedAt": "2014-09-13",
+    "printings": null
+  },
+  {
+    "code": "xy3",
+    "name": "Rising Fist",
+    "language": "ja",
+    "releasedAt": "2014-06-14",
+    "printings": null
+  },
+  {
+    "code": "xy2",
+    "name": "Wild Blaze",
+    "language": "ja",
+    "releasedAt": "2014-03-15",
+    "printings": null
+  },
+  {
+    "code": "xya",
+    "name": "M Charizard-EX Mega Battle Deck",
+    "language": "ja",
+    "releasedAt": "2014-03-15",
+    "printings": null
+  },
+  {
+    "code": "x30",
+    "name": "Xerneas Half Deck",
+    "language": "ja",
+    "releasedAt": "2014-01-31",
+    "printings": null
+  },
+  {
+    "code": "y30",
+    "name": "Yveltal Half Deck",
+    "language": "ja",
+    "releasedAt": "2014-01-31",
+    "printings": null
+  },
+  {
+    "code": "xybx",
+    "name": "Collection X",
+    "language": "ja",
+    "releasedAt": "2013-12-13",
+    "printings": null
+  },
+  {
+    "code": "xyby",
+    "name": "Collection Y",
+    "language": "ja",
+    "releasedAt": "2013-12-13",
+    "printings": null
+  },
+  {
+    "code": "g24153",
+    "name": "XY Era Unnumbered Energies",
+    "language": "ja",
+    "releasedAt": "2013-11-08",
+    "printings": null
+  },
+  {
+    "code": "hxy",
+    "name": "XY Beginning Set",
+    "language": "ja",
+    "releasedAt": "2013-11-08",
+    "printings": null
+  },
+  {
+    "code": "xyp",
+    "name": "XY Promos",
+    "language": "ja",
+    "releasedAt": "2013-08-01",
+    "printings": null
+  },
+  {
+    "code": "ebb",
+    "name": "EX Battle Boost",
+    "language": "ja",
+    "releasedAt": "2013-07-13",
+    "printings": null
+  },
+  {
+    "code": "g23937",
+    "name": "Mewtwo vs Genesect Deck Kit (Mewtwo)",
+    "language": "ja",
+    "releasedAt": "2013-07-13",
+    "printings": null
+  },
+  {
+    "code": "g23955",
+    "name": "Mewtwo vs Genesect Deck Kit (Genesect)",
+    "language": "ja",
+    "releasedAt": "2013-07-13",
+    "printings": null
+  },
+  {
+    "code": "bw9",
+    "name": "Megalo Cannon",
+    "language": "ja",
+    "releasedAt": "2013-03-15",
+    "printings": null
+  },
+  {
+    "code": "kplusk",
+    "name": "Blastoise + Kyurem-EX Combo Deck",
+    "language": "ja",
+    "releasedAt": "2013-03-15",
+    "printings": null
+  },
+  {
+    "code": "g23911",
+    "name": "Shiny Collection",
+    "language": "ja",
+    "releasedAt": "2013-02-01",
+    "printings": null
+  },
+  {
+    "code": "g23904",
+    "name": "Spiral Force",
+    "language": "ja",
+    "releasedAt": "2012-12-14",
+    "printings": null
+  },
+  {
+    "code": "g23905",
+    "name": "Thunder Knuckle",
+    "language": "ja",
+    "releasedAt": "2012-12-14",
+    "printings": null
+  },
+  {
+    "code": "pbg",
+    "name": "Team Plasma Battle Gift Set",
+    "language": "ja",
+    "releasedAt": "2012-11-16",
+    "printings": null
+  },
+  {
+    "code": "wak",
+    "name": "Everyone's Exciting Battle",
+    "language": "ja",
+    "releasedAt": "2012-11-16",
+    "printings": null
+  },
+  {
+    "code": "bkb",
+    "name": "Black Kyurem-EX Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2012-10-19",
+    "printings": null
+  },
+  {
+    "code": "bkw",
+    "name": "White Kyurem-EX Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2012-10-19",
+    "printings": null
+  },
+  {
+    "code": "bw7",
+    "name": "Plasma Gale",
+    "language": "ja",
+    "releasedAt": "2012-09-14",
+    "printings": null
+  },
+  {
+    "code": "mdb",
+    "name": "Master Deck Build Box EX",
+    "language": "ja",
+    "releasedAt": "2012-09-14",
+    "printings": null
+  },
+  {
+    "code": "ppd",
+    "name": "Team Plasma's Powered Half Deck",
+    "language": "ja",
+    "releasedAt": "2012-09-14",
+    "printings": null
+  },
+  {
+    "code": "g23901",
+    "name": "Freeze Bolt",
+    "language": "ja",
+    "releasedAt": "2012-07-13",
+    "printings": null
+  },
+  {
+    "code": "g23902",
+    "name": "Cold Flare",
+    "language": "ja",
+    "releasedAt": "2012-07-13",
+    "printings": null
+  },
+  {
+    "code": "hsz",
+    "name": "National Beginning Set",
+    "language": "ja",
+    "releasedAt": "2012-04-20",
+    "printings": null
+  },
+  {
+    "code": "kld",
+    "name": "Keldeo Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2012-04-20",
+    "printings": null
+  },
+  {
+    "code": "g23899",
+    "name": "Dragon Blast",
+    "language": "ja",
+    "releasedAt": "2012-03-16",
+    "printings": null
+  },
+  {
+    "code": "g23900",
+    "name": "Dragon Blade",
+    "language": "ja",
+    "releasedAt": "2012-03-16",
+    "printings": null
+  },
+  {
+    "code": "gbr",
+    "name": "Garchomp Half Deck",
+    "language": "ja",
+    "releasedAt": "2012-03-16",
+    "printings": null
+  },
+  {
+    "code": "szd",
+    "name": "Hydreigon Half Deck",
+    "language": "ja",
+    "releasedAt": "2012-03-16",
+    "printings": null
+  },
+  {
+    "code": "ds",
+    "name": "Dragon Selection",
+    "language": "ja",
+    "releasedAt": "2012-01-27",
+    "printings": null
+  },
+  {
+    "code": "bw4",
+    "name": "Dark Rush",
+    "language": "ja",
+    "releasedAt": "2011-12-16",
+    "printings": null
+  },
+  {
+    "code": "bgs",
+    "name": "Battle Gift Set: Thundurus vs Tornadus",
+    "language": "ja",
+    "releasedAt": "2011-11-18",
+    "printings": null
+  },
+  {
+    "code": "bkr",
+    "name": "Reshiram-EX Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2011-10-21",
+    "printings": null
+  },
+  {
+    "code": "bkz",
+    "name": "Zekrom-EX Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2011-10-21",
+    "printings": null
+  },
+  {
+    "code": "g23896",
+    "name": "Psycho Drive",
+    "language": "ja",
+    "releasedAt": "2011-09-16",
+    "printings": null
+  },
+  {
+    "code": "g23897",
+    "name": "Hail Blizzard",
+    "language": "ja",
+    "releasedAt": "2011-09-16",
+    "printings": null
+  },
+  {
+    "code": "bw2",
+    "name": "Red Collection",
+    "language": "ja",
+    "releasedAt": "2011-07-15",
+    "printings": null
+  },
+  {
+    "code": "btv",
+    "name": "Battle Theme Deck: Victini",
+    "language": "ja",
+    "releasedAt": "2011-06-17",
+    "printings": null
+  },
+  {
+    "code": "g23950",
+    "name": "Virizion Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2011-03-18",
+    "printings": null
+  },
+  {
+    "code": "g23951",
+    "name": "Terrakion Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2011-03-18",
+    "printings": null
+  },
+  {
+    "code": "g23952",
+    "name": "Cobalion Battle Strength Deck",
+    "language": "ja",
+    "releasedAt": "2011-03-18",
+    "printings": null
+  },
+  {
+    "code": "g23893",
+    "name": "Black Collection",
+    "language": "ja",
+    "releasedAt": "2010-12-17",
+    "printings": null
+  },
+  {
+    "code": "g23894",
+    "name": "White Collection",
+    "language": "ja",
+    "releasedAt": "2010-12-17",
+    "printings": null
+  },
+  {
+    "code": "bwp",
+    "name": "BW-P Promotional cards",
+    "language": "ja",
+    "releasedAt": "2010-12-01",
+    "printings": null
+  },
+  {
+    "code": "cs1",
+    "name": "Journey Partners Collection Sheet",
+    "language": "ja",
+    "releasedAt": "2010-09-18",
+    "printings": null
+  },
+  {
+    "code": "l3",
+    "name": "Clash at the Summit",
+    "language": "ja",
+    "releasedAt": "2010-07-08",
+    "printings": null
+  },
+  {
+    "code": "ll",
+    "name": "Lost Link",
+    "language": "ja",
+    "releasedAt": "2010-04-16",
+    "printings": null
+  },
+  {
+    "code": "g24021",
+    "name": "Revival Legends",
+    "language": "ja",
+    "releasedAt": "2010-02-11",
+    "printings": null
+  },
+  {
+    "code": "g24080",
+    "name": "Steelix Constructed Standard Deck",
+    "language": "ja",
+    "releasedAt": "2010-02-11",
+    "printings": null
+  },
+  {
+    "code": "g24081",
+    "name": "Tyranitar Constructed Standard Deck",
+    "language": "ja",
+    "releasedAt": "2010-02-11",
+    "printings": null
+  },
+  {
+    "code": "g24028",
+    "name": "Leafeon vs Metagross Expert Deck (Leafeon)",
+    "language": "ja",
+    "releasedAt": "2009-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24029",
+    "name": "Leafeon vs Metagross Expert Deck (Metagross)",
+    "language": "ja",
+    "releasedAt": "2009-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24056",
+    "name": "Battle Starter Deck (Blastoise)",
+    "language": "ja",
+    "releasedAt": "2009-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24057",
+    "name": "Battle Starter Deck (Magmortar)",
+    "language": "ja",
+    "releasedAt": "2009-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24058",
+    "name": "Battle Starter Deck (Raichu)",
+    "language": "ja",
+    "releasedAt": "2009-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24059",
+    "name": "Battle Starter Deck (Torterra)",
+    "language": "ja",
+    "releasedAt": "2009-11-20",
+    "printings": null
+  },
+  {
+    "code": "l1hg",
+    "name": "L1: HeartGold Collection",
+    "language": "ja",
+    "releasedAt": "2009-10-09",
+    "printings": null
+  },
+  {
+    "code": "l1ss",
+    "name": "L1: SoulSilver Collection",
+    "language": "ja",
+    "releasedAt": "2009-10-09",
+    "printings": null
+  },
+  {
+    "code": "lp",
+    "name": "Legends Promos",
+    "language": "ja",
+    "releasedAt": "2009-09-01",
+    "printings": null
+  },
+  {
+    "code": "g24144",
+    "name": "Movie Commemoration Random Pack",
+    "language": "ja",
+    "releasedAt": "2009-07-18",
+    "printings": null
+  },
+  {
+    "code": "g24151",
+    "name": "Melee! Pokemon Scramble",
+    "language": "ja",
+    "releasedAt": "2009-07-10",
+    "printings": null
+  },
+  {
+    "code": "g24054",
+    "name": "Arceus LV.X Deck: Grass & Fire",
+    "language": "ja",
+    "releasedAt": "2009-07-08",
+    "printings": null
+  },
+  {
+    "code": "g24055",
+    "name": "Arceus LV.X Deck: Lightning & Psychic",
+    "language": "ja",
+    "releasedAt": "2009-07-08",
+    "printings": null
+  },
+  {
+    "code": "pt4",
+    "name": "Advent of Arceus",
+    "language": "ja",
+    "releasedAt": "2009-07-08",
+    "printings": null
+  },
+  {
+    "code": "ptm",
+    "name": "Mewtwo LV.X Collection Pack",
+    "language": "ja",
+    "releasedAt": "2009-04-18",
+    "printings": null
+  },
+  {
+    "code": "ptr",
+    "name": "Regigigas LV.X Collection Pack",
+    "language": "ja",
+    "releasedAt": "2009-04-18",
+    "printings": null
+  },
+  {
+    "code": "pts",
+    "name": "Shaymin LV.X Collection Pack",
+    "language": "ja",
+    "releasedAt": "2009-04-18",
+    "printings": null
+  },
+  {
+    "code": "pt3",
+    "name": "Beat of the Frontier",
+    "language": "ja",
+    "releasedAt": "2009-03-06",
+    "printings": null
+  },
+  {
+    "code": "g24862",
+    "name": "LEGEND Era Unnumbered Energies",
+    "language": "ja",
+    "releasedAt": "2009-02-10",
+    "printings": null
+  },
+  {
+    "code": "g24030",
+    "name": "Infernape vs Gallade SP Deck Kit (Infernape)",
+    "language": "ja",
+    "releasedAt": "2008-12-26",
+    "printings": null
+  },
+  {
+    "code": "g24031",
+    "name": "Infernape vs Gallade SP Deck Kit (Gallade)",
+    "language": "ja",
+    "releasedAt": "2008-12-26",
+    "printings": null
+  },
+  {
+    "code": "g24032",
+    "name": "Garchomp vs Charizard SP Deck Kit (Garchomp)",
+    "language": "ja",
+    "releasedAt": "2008-12-26",
+    "printings": null
+  },
+  {
+    "code": "g24033",
+    "name": "Garchomp vs Charizard SP Deck Kit (Charizard)",
+    "language": "ja",
+    "releasedAt": "2008-12-26",
+    "printings": null
+  },
+  {
+    "code": "pt2",
+    "name": "Bonds to the End of Time",
+    "language": "ja",
+    "releasedAt": "2008-12-26",
+    "printings": null
+  },
+  {
+    "code": "g24035",
+    "name": "DPt Gift Box (Chimchar)",
+    "language": "ja",
+    "releasedAt": "2008-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24036",
+    "name": "DPt Gift Box (Pikachu)",
+    "language": "ja",
+    "releasedAt": "2008-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24037",
+    "name": "DPt Gift Box (Piplup)",
+    "language": "ja",
+    "releasedAt": "2008-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24038",
+    "name": "DPt Gift Box (Turtwig)",
+    "language": "ja",
+    "releasedAt": "2008-11-20",
+    "printings": null
+  },
+  {
+    "code": "g24042",
+    "name": "Entry Pack DPt (Dialga)",
+    "language": "ja",
+    "releasedAt": "2008-10-10",
+    "printings": null
+  },
+  {
+    "code": "g24043",
+    "name": "Entry Pack DPt (Giratina)",
+    "language": "ja",
+    "releasedAt": "2008-10-10",
+    "printings": null
+  },
+  {
+    "code": "g24044",
+    "name": "Entry Pack DPt (Palkia)",
+    "language": "ja",
+    "releasedAt": "2008-10-10",
+    "printings": null
+  },
+  {
+    "code": "pt1",
+    "name": "Galactic's Conquest",
+    "language": "ja",
+    "releasedAt": "2008-10-10",
+    "printings": null
+  },
+  {
+    "code": "g24136",
+    "name": "DPt-P Promotional cards",
+    "language": "ja",
+    "releasedAt": "2008-10-01",
+    "printings": null
+  },
+  {
+    "code": "g24145",
+    "name": "11th Movie Commemoration Set",
+    "language": "ja",
+    "releasedAt": "2008-08-01",
+    "printings": null
+  },
+  {
+    "code": "g24027",
+    "name": "Intense Fight in the Destroyed Sky",
+    "language": "ja",
+    "releasedAt": "2008-07-10",
+    "printings": null
+  },
+  {
+    "code": "g24045",
+    "name": "Giratina vs Dialga Deck Kit (Dialga)",
+    "language": "ja",
+    "releasedAt": "2008-07-10",
+    "printings": null
+  },
+  {
+    "code": "g24046",
+    "name": "Giratina vs Dialga Deck Kit (Giratina)",
+    "language": "ja",
+    "releasedAt": "2008-07-10",
+    "printings": null
+  },
+  {
+    "code": "g23978",
+    "name": "Temple of Anger",
+    "language": "ja",
+    "releasedAt": "2008-03-14",
+    "printings": null
+  },
+  {
+    "code": "g23979",
+    "name": "Cry from the Mysterious",
+    "language": "ja",
+    "releasedAt": "2008-03-14",
+    "printings": null
+  },
+  {
+    "code": "g24039",
+    "name": "Heatran vs Regigigas Deck Kit",
+    "language": "ja",
+    "releasedAt": "2008-03-14",
+    "printings": null
+  },
+  {
+    "code": "dp",
+    "name": "Entry Pack '08",
+    "language": "ja",
+    "releasedAt": "2007-11-30",
+    "printings": null
+  },
+  {
+    "code": "g23976",
+    "name": "Dawn Dash",
+    "language": "ja",
+    "releasedAt": "2007-10-26",
+    "printings": null
+  },
+  {
+    "code": "g23977",
+    "name": "Moonlit Pursuit",
+    "language": "ja",
+    "releasedAt": "2007-10-26",
+    "printings": null
+  },
+  {
+    "code": "g24052",
+    "name": "Magmortar vs Electivire Deck Kit",
+    "language": "ja",
+    "releasedAt": "2007-10-26",
+    "printings": null
+  },
+  {
+    "code": "g24146",
+    "name": "10th Movie Commemoration Set",
+    "language": "ja",
+    "releasedAt": "2007-08-03",
+    "printings": null
+  },
+  {
+    "code": "g23975",
+    "name": "Shining Darkness",
+    "language": "ja",
+    "releasedAt": "2007-07-05",
+    "printings": null
+  },
+  {
+    "code": "g24050",
+    "name": "Dialga LV.X Constructed Standard Deck",
+    "language": "ja",
+    "releasedAt": "2007-07-05",
+    "printings": null
+  },
+  {
+    "code": "g24051",
+    "name": "Palkia LV.X Constructed Standard Deck",
+    "language": "ja",
+    "releasedAt": "2007-07-05",
+    "printings": null
+  },
+  {
+    "code": "g24053",
+    "name": "World Champions Pack",
+    "language": "ja",
+    "releasedAt": "2007-07-05",
+    "printings": null
+  },
+  {
+    "code": "g24152",
+    "name": "PPP Promotional cards",
+    "language": "ja",
+    "releasedAt": "2007-05-01",
+    "printings": null
+  },
+  {
+    "code": "g23974",
+    "name": "Secret of the Lakes",
+    "language": "ja",
+    "releasedAt": "2007-03-02",
+    "printings": null
+  },
+  {
+    "code": "g24047",
+    "name": "Bastiodon the Defender Half Deck",
+    "language": "ja",
+    "releasedAt": "2007-03-02",
+    "printings": null
+  },
+  {
+    "code": "g24048",
+    "name": "Rampardos the Attacker Constructed Half Deck",
+    "language": "ja",
+    "releasedAt": "2007-03-02",
+    "printings": null
+  },
+  {
+    "code": "g24137",
+    "name": "DP-P Promotional cards",
+    "language": "ja",
+    "releasedAt": "2006-12-01",
+    "printings": null
+  },
+  {
+    "code": "g23973",
+    "name": "Space-Time Creation",
+    "language": "ja",
+    "releasedAt": "2006-11-30",
+    "printings": null
+  },
+  {
+    "code": "g24040",
+    "name": "Entry Pack",
+    "language": "ja",
+    "releasedAt": "2006-10-27",
+    "printings": null
+  },
+  {
+    "code": "g24147",
+    "name": "Movie Commemoration VS Pack: Sea's Manaphy",
+    "language": "ja",
+    "releasedAt": "2006-07-15",
+    "printings": null
+  },
+  {
+    "code": "g24090",
+    "name": "Offense and Defense of the Furthest Ends",
+    "language": "ja",
+    "releasedAt": "2006-06-29",
+    "printings": null
+  },
+  {
+    "code": "g24091",
+    "name": "Imprison! Gardevoir ex Constructed Standard Deck",
+    "language": "ja",
+    "releasedAt": "2006-06-29",
+    "printings": null
+  },
+  {
+    "code": "g24092",
+    "name": "Shockwave! Tyranitar ex Constructed Standard Deck",
+    "language": "ja",
+    "releasedAt": "2006-06-29",
+    "printings": null
+  },
+  {
+    "code": "g24099",
+    "name": "Miracle Crystal",
+    "language": "ja",
+    "releasedAt": "2006-03-10",
+    "printings": null
+  },
+  {
+    "code": "g24082",
+    "name": "Earth's Groudon ex Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2006-03-03",
+    "printings": null
+  },
+  {
+    "code": "g24083",
+    "name": "Ocean's Kyogre ex Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2006-03-03",
+    "printings": null
+  },
+  {
+    "code": "g24084",
+    "name": "Holon Phantom",
+    "language": "ja",
+    "releasedAt": "2006-01-27",
+    "printings": null
+  },
+  {
+    "code": "g24521",
+    "name": "Trainer Prize Cards",
+    "language": "ja",
+    "releasedAt": "2006-01-06",
+    "printings": null
+  },
+  {
+    "code": "g24093",
+    "name": "Gift Box Mew - Lucario (Mew Quarter Deck)",
+    "language": "ja",
+    "releasedAt": "2005-11-16",
+    "printings": null
+  },
+  {
+    "code": "g24094",
+    "name": "Gift Box Mew - Lucario (Lucario Quarter Deck)",
+    "language": "ja",
+    "releasedAt": "2005-11-16",
+    "printings": null
+  },
+  {
+    "code": "g24095",
+    "name": "Gift Box Mew - Lucario (Crawdaunt Quarter Deck)",
+    "language": "ja",
+    "releasedAt": "2005-11-16",
+    "printings": null
+  },
+  {
+    "code": "g24096",
+    "name": "Gift Box Mew - Lucario (Mightyena Quarter Deck)",
+    "language": "ja",
+    "releasedAt": "2005-11-16",
+    "printings": null
+  },
+  {
+    "code": "g24098",
+    "name": "Gift Box Mew - Lucario (Pokemon Star)",
+    "language": "ja",
+    "releasedAt": "2005-11-16",
+    "printings": null
+  },
+  {
+    "code": "g24085",
+    "name": "Holon Research Tower",
+    "language": "ja",
+    "releasedAt": "2005-10-28",
+    "printings": null
+  },
+  {
+    "code": "g24086",
+    "name": "Holon Research Tower Fire Quarter Deck",
+    "language": "ja",
+    "releasedAt": "2005-09-30",
+    "printings": null
+  },
+  {
+    "code": "g24087",
+    "name": "Holon Research Tower Lightning Quarter Deck",
+    "language": "ja",
+    "releasedAt": "2005-09-30",
+    "printings": null
+  },
+  {
+    "code": "g24088",
+    "name": "Holon Research Tower Water Quarter Deck",
+    "language": "ja",
+    "releasedAt": "2005-09-30",
+    "printings": null
+  },
+  {
+    "code": "g24148",
+    "name": "Movie Commemoration VS Pack: Aura's Lucario",
+    "language": "ja",
+    "releasedAt": "2005-07-16",
+    "printings": null
+  },
+  {
+    "code": "g24100",
+    "name": "Master Kit (Bulbasaur)",
+    "language": "ja",
+    "releasedAt": "2005-07-15",
+    "printings": null
+  },
+  {
+    "code": "g24158",
+    "name": "Master Kit (Torchic)",
+    "language": "ja",
+    "releasedAt": "2005-07-15",
+    "printings": null
+  },
+  {
+    "code": "g24159",
+    "name": "Master Kit (Side Deck)",
+    "language": "ja",
+    "releasedAt": "2005-07-15",
+    "printings": null
+  },
+  {
+    "code": "g24101",
+    "name": "Mirage Forest",
+    "language": "ja",
+    "releasedAt": "2005-06-30",
+    "printings": null
+  },
+  {
+    "code": "g24102",
+    "name": "Mirage's Mew Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2005-06-30",
+    "printings": null
+  },
+  {
+    "code": "g24103",
+    "name": "Golden Sky, Silvery Ocean",
+    "language": "ja",
+    "releasedAt": "2005-04-08",
+    "printings": null
+  },
+  {
+    "code": "g24154",
+    "name": "PokePark Forest",
+    "language": "ja",
+    "releasedAt": "2005-03-18",
+    "printings": null
+  },
+  {
+    "code": "g24835",
+    "name": "PokePark Blue",
+    "language": "ja",
+    "releasedAt": "2005-03-18",
+    "printings": null
+  },
+  {
+    "code": "g24104",
+    "name": "Feraligatr Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2005-03-05",
+    "printings": null
+  },
+  {
+    "code": "g24105",
+    "name": "Meganium Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2005-03-05",
+    "printings": null
+  },
+  {
+    "code": "g24106",
+    "name": "Typhlosion Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2005-03-05",
+    "printings": null
+  },
+  {
+    "code": "g24107",
+    "name": "Fighting Quick Construction Pack",
+    "language": "ja",
+    "releasedAt": "2005-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24108",
+    "name": "Fire Quick Construction Pack",
+    "language": "ja",
+    "releasedAt": "2005-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24109",
+    "name": "Grass Quick Construction Pack",
+    "language": "ja",
+    "releasedAt": "2005-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24110",
+    "name": "Lightning Quick Construction Pack",
+    "language": "ja",
+    "releasedAt": "2005-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24111",
+    "name": "Psychic Quick Construction Pack",
+    "language": "ja",
+    "releasedAt": "2005-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24112",
+    "name": "Water Quick Construction Pack",
+    "language": "ja",
+    "releasedAt": "2005-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24127",
+    "name": "Emerald Gift Box (Deoxys)",
+    "language": "ja",
+    "releasedAt": "2004-11-19",
+    "printings": null
+  },
+  {
+    "code": "g24130",
+    "name": "Emerald Gift Box (Rayquaza)",
+    "language": "ja",
+    "releasedAt": "2004-11-19",
+    "printings": null
+  },
+  {
+    "code": "g24134",
+    "name": "Black Deck Kit",
+    "language": "ja",
+    "releasedAt": "2004-11-19",
+    "printings": null
+  },
+  {
+    "code": "g24135",
+    "name": "Rocket Gang Strikes Back",
+    "language": "ja",
+    "releasedAt": "2004-11-19",
+    "printings": null
+  },
+  {
+    "code": "g24113",
+    "name": "Silver Deck Kit",
+    "language": "ja",
+    "releasedAt": "2004-10-15",
+    "printings": null
+  },
+  {
+    "code": "g24503",
+    "name": "Movie Commemoration VS Pack: Sky-Splitting Deoxys",
+    "language": "ja",
+    "releasedAt": "2004-07-17",
+    "printings": null
+  },
+  {
+    "code": "g24114",
+    "name": "Clash of the Blue Sky",
+    "language": "ja",
+    "releasedAt": "2004-07-01",
+    "printings": null
+  },
+  {
+    "code": "g24115",
+    "name": "Deoxys Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2004-07-01",
+    "printings": null
+  },
+  {
+    "code": "g24116",
+    "name": "Rayquaza Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2004-07-01",
+    "printings": null
+  },
+  {
+    "code": "g24117",
+    "name": "Flight of Legends",
+    "language": "ja",
+    "releasedAt": "2004-04-09",
+    "printings": null
+  },
+  {
+    "code": "g24612",
+    "name": "Random Constructed Starter Decks (Venusaur/Charizard/Blastoise)",
+    "language": "ja",
+    "releasedAt": "2004-03-19",
+    "printings": null
+  },
+  {
+    "code": "g24138",
+    "name": "PCG-P Promotional cards",
+    "language": "ja",
+    "releasedAt": "2004-02-01",
+    "printings": null
+  },
+  {
+    "code": "g24118",
+    "name": "Metagross Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2004-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24119",
+    "name": "Undone Seal",
+    "language": "ja",
+    "releasedAt": "2004-01-16",
+    "printings": null
+  },
+  {
+    "code": "g24120",
+    "name": "Gift Box (Latias)",
+    "language": "ja",
+    "releasedAt": "2003-11-17",
+    "printings": null
+  },
+  {
+    "code": "g24121",
+    "name": "Gift Box (Latios)",
+    "language": "ja",
+    "releasedAt": "2003-11-17",
+    "printings": null
+  },
+  {
+    "code": "g24122",
+    "name": "Aqua Deck Kit",
+    "language": "ja",
+    "releasedAt": "2003-10-24",
+    "printings": null
+  },
+  {
+    "code": "g24123",
+    "name": "Magma Deck Kit",
+    "language": "ja",
+    "releasedAt": "2003-10-24",
+    "printings": null
+  },
+  {
+    "code": "g24124",
+    "name": "Magma VS Aqua: Two Ambitions",
+    "language": "ja",
+    "releasedAt": "2003-10-24",
+    "printings": null
+  },
+  {
+    "code": "g24149",
+    "name": "Movie Commemoration VS Pack",
+    "language": "ja",
+    "releasedAt": "2003-07-19",
+    "printings": null
+  },
+  {
+    "code": "g24125",
+    "name": "Flygon Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2003-06-25",
+    "printings": null
+  },
+  {
+    "code": "g24126",
+    "name": "Salamence Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2003-06-25",
+    "printings": null
+  },
+  {
+    "code": "g24128",
+    "name": "Rulers of the Heavens",
+    "language": "ja",
+    "releasedAt": "2003-06-25",
+    "printings": null
+  },
+  {
+    "code": "g24139",
+    "name": "Miracle of the Desert",
+    "language": "ja",
+    "releasedAt": "2003-04-18",
+    "printings": null
+  },
+  {
+    "code": "g24129",
+    "name": "ADV Expansion Pack",
+    "language": "ja",
+    "releasedAt": "2003-01-31",
+    "printings": null
+  },
+  {
+    "code": "g24131",
+    "name": "Mudkip Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2003-01-31",
+    "printings": null
+  },
+  {
+    "code": "g24132",
+    "name": "Torchic Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2003-01-31",
+    "printings": null
+  },
+  {
+    "code": "g24133",
+    "name": "Treecko Constructed Starter Deck",
+    "language": "ja",
+    "releasedAt": "2003-01-31",
+    "printings": null
+  },
+  {
+    "code": "g24140",
+    "name": "ADV-P Promotional cards",
+    "language": "ja",
+    "releasedAt": "2003-01-01",
+    "printings": null
+  },
+  {
+    "code": "g24155",
+    "name": "PLAY Promotional cards",
+    "language": "ja",
+    "releasedAt": "2003-01-01",
+    "printings": null
+  },
+  {
+    "code": "g23734",
+    "name": "Mysterious Mountains",
+    "language": "ja",
+    "releasedAt": "2002-10-04",
+    "printings": null
+  },
+  {
+    "code": "g23733",
+    "name": "Split Earth",
+    "language": "ja",
+    "releasedAt": "2002-08-23",
+    "printings": null
+  },
+  {
+    "code": "g24150",
+    "name": "Theater Limited VS Pack",
+    "language": "ja",
+    "releasedAt": "2002-07-13",
+    "printings": null
+  },
+  {
+    "code": "g23732",
+    "name": "Wind from the Sea",
+    "language": "ja",
+    "releasedAt": "2002-05-24",
+    "printings": null
+  },
+  {
+    "code": "g23731",
+    "name": "The Town on No Map",
+    "language": "ja",
+    "releasedAt": "2002-03-08",
+    "printings": null
+  },
+  {
+    "code": "g24156",
+    "name": "McDonald's Pokémon-e Minimum Pack",
+    "language": "ja",
+    "releasedAt": "2002-01-26",
+    "printings": null
+  },
+  {
+    "code": "g24157",
+    "name": "T Promotional cards",
+    "language": "ja",
+    "releasedAt": "2002-01-01",
+    "printings": null
+  },
+  {
+    "code": "g23730",
+    "name": "Base Expansion Pack",
+    "language": "ja",
+    "releasedAt": "2001-12-01",
+    "printings": null
+  },
+  {
+    "code": "g24167",
+    "name": "Pokemon-e Starter Deck",
+    "language": "ja",
+    "releasedAt": "2001-12-01",
+    "printings": null
+  },
+  {
+    "code": "g24141",
+    "name": "Pokemon Web",
+    "language": "ja",
+    "releasedAt": "2001-10-20",
+    "printings": null
+  },
+  {
+    "code": "g24180",
+    "name": "Pokemon VS",
+    "language": "ja",
+    "releasedAt": "2001-08-19",
+    "printings": null
+  },
+  {
+    "code": "g24142",
+    "name": "J Promotional cards",
+    "language": "ja",
+    "releasedAt": "2001-08-01",
+    "printings": null
+  },
+  {
+    "code": "g24143",
+    "name": "P Promotional cards",
+    "language": "ja",
+    "releasedAt": "2001-07-01",
+    "printings": null
+  },
+  {
+    "code": "g23729",
+    "name": "Darkness, and to Light...",
+    "language": "ja",
+    "releasedAt": "2001-04-20",
+    "printings": null
+  },
+  {
+    "code": "g24160",
+    "name": "Intro Pack Neo (Chikorita)",
+    "language": "ja",
+    "releasedAt": "2001-04-06",
+    "printings": null
+  },
+  {
+    "code": "g24161",
+    "name": "Intro Pack Neo (Totodile)",
+    "language": "ja",
+    "releasedAt": "2001-04-06",
+    "printings": null
+  },
+  {
+    "code": "g23720",
+    "name": "Awakening Legends",
+    "language": "ja",
+    "releasedAt": "2000-11-23",
+    "printings": null
+  },
+  {
+    "code": "npf3",
+    "name": "Neo Premium File 3",
+    "language": "ja",
+    "releasedAt": "2000-11-23",
+    "printings": null
+  },
+  {
+    "code": "g23728",
+    "name": "Crossing the Ruins...",
+    "language": "ja",
+    "releasedAt": "2000-07-07",
+    "printings": null
+  },
+  {
+    "code": "npf2",
+    "name": "Neo Premium File 2",
+    "language": "ja",
+    "releasedAt": "2000-07-07",
+    "printings": null
+  },
+  {
+    "code": "g23727",
+    "name": "Gold, Silver, to a New World...",
+    "language": "ja",
+    "releasedAt": "2000-02-04",
+    "printings": null
+  },
+  {
+    "code": "npf1",
+    "name": "Neo Premium File 1",
+    "language": "ja",
+    "releasedAt": "1999-12-10",
+    "printings": null
+  },
+  {
+    "code": "g24019",
+    "name": "Southern Island",
+    "language": "ja",
+    "releasedAt": "1999-07-30",
+    "printings": null
+  },
+  {
+    "code": "g24168",
+    "name": "Intro Pack (Bulbasaur)",
+    "language": "ja",
+    "releasedAt": "1999-07-30",
+    "printings": null
+  },
+  {
+    "code": "g24169",
+    "name": "Intro Pack (Squirtle)",
+    "language": "ja",
+    "releasedAt": "1999-07-30",
+    "printings": null
+  },
+  {
+    "code": "g24597",
+    "name": "Quick Starter Gift Set (Green Deck)",
+    "language": "ja",
+    "releasedAt": "1998-12-01",
+    "printings": null
+  },
+  {
+    "code": "g24598",
+    "name": "Quick Starter Gift Set (Red Deck)",
+    "language": "ja",
+    "releasedAt": "1998-12-01",
+    "printings": null
+  },
+  {
+    "code": "g23725",
+    "name": "Leaders' Stadium",
+    "language": "ja",
+    "releasedAt": "1998-10-24",
+    "printings": null
+  },
+  {
+    "code": "nopromo",
+    "name": "Player Placement Trainer Promos",
+    "language": "ja",
+    "releasedAt": "1998-08-01",
+    "printings": null
+  },
+  {
+    "code": "g24175",
+    "name": "City Gym Decks",
+    "language": "ja",
+    "releasedAt": "1998-07-25",
+    "printings": null
+  },
+  {
+    "code": "g23726",
+    "name": "Challenge from the Darkness",
+    "language": "ja",
+    "releasedAt": "1998-06-25",
+    "printings": null
+  },
+  {
+    "code": "g23724",
+    "name": "Rocket Gang",
+    "language": "ja",
+    "releasedAt": "1997-11-21",
+    "printings": null
+  },
+  {
+    "code": "g23723",
+    "name": "Mystery of the Fossils",
+    "language": "ja",
+    "releasedAt": "1997-06-21",
+    "printings": null
+  },
+  {
+    "code": "g23722",
+    "name": "Pokemon Jungle",
+    "language": "ja",
+    "releasedAt": "1997-03-05",
+    "printings": null
+  },
+  {
+    "code": "g23721",
+    "name": "Expansion Pack",
+    "language": "ja",
+    "releasedAt": "1996-10-20",
+    "printings": null
+  },
+  {
+    "code": "g23740",
+    "name": "Expansion Pack (No Rarity)",
+    "language": "ja",
+    "releasedAt": "1996-10-20",
+    "printings": null
+  }
+]

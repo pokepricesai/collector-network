@@ -15,6 +15,8 @@ export type ReviewStatus =
 
 export type Confidence = 'verified' | 'high' | 'medium' | 'low' | null;
 
+export type PricingEligibility = 'bulk_safe' | 'market_only' | 'identity_only' | 'not_eligible' | 'uncertain';
+
 export interface MappingRow {
   id: string;
   pp_card_slug: string;
@@ -29,6 +31,8 @@ export interface MappingRow {
   match_method: string | null;
   confidence: Confidence;
   review_status: ReviewStatus;
+  pricing_eligibility: PricingEligibility | null;
+  commercial_rank: number | null;
   reviewer_display: string | null;
   reviewed_at: string | null;
   activation_eligible: boolean;
@@ -61,14 +65,19 @@ export interface StatusCounts {
   by_status: Record<ReviewStatus, number>;
   by_status_confidence: Array<{ review_status: ReviewStatus; confidence: Confidence; pp_language: string; n: number }>;
   verified_pending_bulk: number;
+  by_pricing_eligibility: Record<PricingEligibility, number>;
+  bulk_safe_pending: number;
+  market_only_pending: number;
+  identity_only_pending: number;
   with_tcg_price_snapshot: number;
   activation_eligible: number;
 }
 
 export async function fetchStatusCounts(sb: SupabaseClient): Promise<StatusCounts> {
-  const { data: v, error } = await sb
-    .from('pokemon_tcg_mapping_status_v')
-    .select('review_status, confidence, pp_language, n');
+  const [{ data: v, error }, pe] = await Promise.all([
+    sb.from('pokemon_tcg_mapping_status_v').select('review_status, confidence, pp_language, n'),
+    sb.from('pokemon_tcg_mappings').select('pricing_eligibility, review_status'),
+  ]);
   if (error) throw new Error(`status view: ${error.message}`);
   const rows = v || [];
   const by_status: Record<string, number> = {};
@@ -82,9 +91,19 @@ export async function fetchStatusCounts(sb: SupabaseClient): Promise<StatusCount
       verified_pending_bulk += n;
     }
   }
-  // Snapshot counts kept for future expansion
-  const activation_eligible = 0;
-  const with_tcg_price_snapshot = 0;
+
+  const by_pricing_eligibility: Record<string, number> = { bulk_safe: 0, market_only: 0, identity_only: 0, not_eligible: 0, uncertain: 0 };
+  let bulk_safe_pending = 0, market_only_pending = 0, identity_only_pending = 0;
+  for (const r of (pe.data || [])) {
+    const k = (r.pricing_eligibility ?? 'uncertain') as string;
+    by_pricing_eligibility[k] = (by_pricing_eligibility[k] || 0) + 1;
+    if (r.review_status === 'pending_review') {
+      if (k === 'bulk_safe') bulk_safe_pending++;
+      if (k === 'market_only') market_only_pending++;
+      if (k === 'identity_only') identity_only_pending++;
+    }
+  }
+
   return {
     total,
     by_status: by_status as Record<ReviewStatus, number>,
@@ -95,17 +114,33 @@ export async function fetchStatusCounts(sb: SupabaseClient): Promise<StatusCount
       n: Number(r.n),
     })),
     verified_pending_bulk,
-    with_tcg_price_snapshot,
-    activation_eligible,
+    by_pricing_eligibility: by_pricing_eligibility as Record<PricingEligibility, number>,
+    bulk_safe_pending,
+    market_only_pending,
+    identity_only_pending,
+    with_tcg_price_snapshot: 0,
+    activation_eligible: 0,
   };
 }
+
+export type FilterPreset =
+  | 'none'
+  | 'promos'
+  | 'japanese'
+  | 'vintage'
+  | 'unsupported_variants'
+  | 'needs_review'
+  | 'no_equivalent'
+  | 'high_traffic';
 
 export interface ListFilters {
   status?: ReviewStatus | 'all';
   confidence?: Exclude<Confidence, null> | 'all';
   language?: 'en' | 'jp' | 'all';
-  era?: string | 'all';           // not stored yet; filter by set_name regex on client
-  search?: string;                // substring on pp_card_name / pp_slug / pp_set_name / tcg_name
+  pricing_eligibility?: PricingEligibility | 'all';
+  preset?: FilterPreset;
+  search?: string;
+  sort?: 'default' | 'commercial';
   limit?: number;
   offset?: number;
 }
@@ -116,17 +151,38 @@ export async function listMappings(
 ): Promise<{ rows: MappingRow[]; total: number }> {
   let q = sb
     .from('pokemon_tcg_mappings')
-    .select('id, pp_card_slug, pp_set_name, pp_card_name, pp_language, tcg_card_id, tcg_printing_key, tcg_set_code, tcg_language, tcg_name, match_method, confidence, review_status, reviewer_display, reviewed_at, activation_eligible, last_price_check_passed_at, notes, previous_review_status, updated_at', { count: 'exact' })
-    .order('pp_set_name', { ascending: true })
-    .order('pp_card_slug', { ascending: true });
+    .select('id, pp_card_slug, pp_set_name, pp_card_name, pp_language, tcg_card_id, tcg_printing_key, tcg_set_code, tcg_language, tcg_name, match_method, confidence, review_status, pricing_eligibility, commercial_rank, reviewer_display, reviewed_at, activation_eligible, last_price_check_passed_at, notes, previous_review_status, updated_at', { count: 'exact' });
+
+  if (filters.sort === 'commercial') {
+    q = q.order('commercial_rank', { ascending: true, nullsFirst: false })
+         .order('pp_card_slug', { ascending: true });
+  } else {
+    q = q.order('pp_set_name', { ascending: true })
+         .order('pp_card_slug', { ascending: true });
+  }
 
   if (filters.status && filters.status !== 'all') q = q.eq('review_status', filters.status);
   if (filters.confidence && filters.confidence !== 'all') q = q.eq('confidence', filters.confidence);
   if (filters.language && filters.language !== 'all') q = q.eq('pp_language', filters.language);
+  if (filters.pricing_eligibility && filters.pricing_eligibility !== 'all') q = q.eq('pricing_eligibility', filters.pricing_eligibility);
+
+  // Presets
+  if (filters.preset === 'promos') {
+    q = q.or('pp_set_name.ilike.%Promo%,pp_set_name.ilike.%Black Star%,pp_set_name.ilike.%Championship%,pp_set_name.ilike.%McDonald%,pp_set_name.ilike.%Topps%');
+  }
+  if (filters.preset === 'japanese') q = q.eq('pp_language', 'jp');
+  if (filters.preset === 'vintage') {
+    q = q.or('pp_set_name.in.("Base Set","Jungle","Fossil","Base Set 2","Team Rocket","Gym Heroes","Gym Challenge","Neo Genesis","Neo Discovery","Neo Revelation","Neo Destiny")');
+  }
+  if (filters.preset === 'unsupported_variants') {
+    q = q.or('pp_card_name.ilike.%[Mirror Holo]%,pp_card_name.ilike.%[Jumbo]%,pp_card_name.ilike.%[Prize Pack]%,pp_card_name.ilike.%[Rainbow Foil]%,pp_card_name.ilike.%[Stamped]%,pp_card_name.ilike.%[Prism]%,pp_card_name.ilike.%[Gold Star]%,pp_card_name.ilike.%[Sparkle]%,pp_card_name.ilike.%[Tekno]%');
+  }
+  if (filters.preset === 'needs_review') q = q.eq('review_status', 'pending_review');
+  if (filters.preset === 'no_equivalent') q = q.eq('review_status', 'no_tcg_equivalent');
+  if (filters.preset === 'high_traffic') q = q.not('commercial_rank', 'is', null);
 
   if (filters.search && filters.search.trim()) {
-    const s = filters.search.trim();
-    // Search across pp_card_name, pp_set_name, pp_card_slug, tcg_name
+    const s = filters.search.trim().replace(/,/g, '');
     q = q.or(`pp_card_name.ilike.%${s}%,pp_set_name.ilike.%${s}%,pp_card_slug.ilike.%${s}%,tcg_name.ilike.%${s}%`);
   }
 
