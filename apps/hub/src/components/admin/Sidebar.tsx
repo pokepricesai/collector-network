@@ -40,10 +40,11 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string 
   {
     label: 'Operations',
     items: [
-      { href: '/admin/tasks',      label: 'Tasks' },
-      { href: '/admin/approvals',  label: 'Approvals' },
-      { href: '/admin/jobs',       label: 'Jobs' },
-      { href: '/admin/health',     label: 'Health' },
+      { href: '/admin/tasks',             label: 'Tasks' },
+      { href: '/admin/approvals',         label: 'Approvals' },
+      { href: '/admin/jobs',              label: 'Jobs' },
+      { href: '/admin/health',            label: 'Health' },
+      { href: '/admin/pokemon-matching',  label: 'Pokémon matching' },
     ],
   },
   {

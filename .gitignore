@@ -47,3 +47,6 @@ coverage
 .env*
 /tmp
 scripts/_cn06b/
+scripts/_cn-data-test/
+scripts/_cn-data-test-01/
+scripts/_pp-data-test-02/
