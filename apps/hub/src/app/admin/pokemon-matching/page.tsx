@@ -148,6 +148,9 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
           <MetricCard label="Approval samples pending" value={approvalSample.pending.toLocaleString()} helper={`${approvalSample.passed} ✓ / ${approvalSample.failed} ✗ / ${approvalSample.total} total`} />
           <MetricCard label="FX USD→EUR (latest)" value={fxFreshness.usd_eur != null ? fxFreshness.usd_eur.toFixed(4) : 'none'} helper={fxFreshness.as_of ?? undefined} state={fxFreshness.as_of ? 'ok' : 'muted'} />
         </section>
+        <div style={{ marginTop: 10, display: 'flex', gap: 12, fontSize: 12 }}>
+          <Link href="/admin/pokemon-matching/approval-samples" style={{ color: 'var(--primary)' }}>Review approval samples →</Link>
+        </div>
 
         {cursor && (
           <div style={{ marginTop: 14, padding: 10, background: '#f6f8fa', border: '1px solid #d0d7de', borderRadius: 4, fontSize: 12 }}>
