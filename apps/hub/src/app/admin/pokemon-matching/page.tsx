@@ -7,6 +7,7 @@ import {
   fetchStatusCounts, listMappings, listSetAliases,
   listIngestionRuns, listOpenSetAlerts, fetchDataHealthCounts,
   fetchIngestionCursor, fetchFxFreshness, fetchPromoProposalCount,
+  fetchApprovalSampleCount,
   type MappingRow, type ReviewStatus, type Confidence,
   type PricingEligibility, type FilterPreset,
 } from '@/server/pokemon-matching/queries';
@@ -61,7 +62,7 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
   const page = Math.max(Number(sp.page ?? 1), 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [counts, listResult, aliases, ingestionRuns, openAlerts, health, cursor, fxFreshness, promoCounts] = await Promise.all([
+  const [counts, listResult, aliases, ingestionRuns, openAlerts, health, cursor, fxFreshness, promoCounts, approvalSample] = await Promise.all([
     fetchStatusCounts(sb),
     listMappings(sb, { status, confidence, language, pricing_eligibility, preset, sort, search, limit: PAGE_SIZE, offset }),
     listSetAliases(sb),
@@ -71,6 +72,7 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
     fetchIngestionCursor(sb),
     fetchFxFreshness(sb),
     fetchPromoProposalCount(sb),
+    fetchApprovalSampleCount(sb),
   ]);
   const lastRun = ingestionRuns.find(r => r.kind === 'full_catalogue') ?? ingestionRuns[0] ?? null;
   const lastDiscovery = ingestionRuns.find(r => r.kind === 'set_discovery') ?? null;
@@ -142,7 +144,8 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
           <MetricCard label="Graded price rows" value={health.prices_graded.toLocaleString()} />
           <MetricCard label="bulk_safe w/ provider match" value={health.bulk_safe_with_provider_price.toLocaleString()} state="ok" />
           <MetricCard label="Open set alerts" value={health.open_set_alerts.toLocaleString()} state={health.open_set_alerts > 0 ? 'ok' : 'muted'} />
-          <MetricCard label="Promo proposals (pending)" value={promoCounts.proposed.toLocaleString()} helper={promoCounts.approved > 0 ? `${promoCounts.approved} approved` : undefined} />
+          <MetricCard label="Promo sets · approved" value={promoCounts.approved.toLocaleString()} helper={promoCounts.needs_more_data > 0 ? `${promoCounts.needs_more_data} need more data` : undefined} state={promoCounts.approved > 0 ? 'ok' : 'muted'} />
+          <MetricCard label="Approval samples pending" value={approvalSample.pending.toLocaleString()} helper={`${approvalSample.passed} ✓ / ${approvalSample.failed} ✗ / ${approvalSample.total} total`} />
           <MetricCard label="FX USD→EUR (latest)" value={fxFreshness.usd_eur != null ? fxFreshness.usd_eur.toFixed(4) : 'none'} helper={fxFreshness.as_of ?? undefined} state={fxFreshness.as_of ? 'ok' : 'muted'} />
         </section>
 

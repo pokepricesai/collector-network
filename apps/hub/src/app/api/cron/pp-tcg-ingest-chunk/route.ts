@@ -225,6 +225,14 @@ export async function GET(req: Request) {
   const tracker = { credits: 0, requests: 0 };
   const todayUtc = new Date().toISOString().slice(0, 10);
   const catalogueVersion = `daily-${todayUtc}`;
+  // MIGRATE-05: operator-triggered bounded test runs can pass
+  // ?max_sets=N to cap the number of sets processed in this
+  // invocation (default is SET_BATCH=25).
+  const url = new URL(req.url);
+  const maxSetsOverride = Number(url.searchParams.get('max_sets'));
+  const effectiveSetBatch = Number.isFinite(maxSetsOverride) && maxSetsOverride > 0
+    ? Math.min(maxSetsOverride, SET_BATCH)
+    : SET_BATCH;
 
   // 1. Load (and advance if needed) the cursor
   const { data: cursorRow, error: cErr } = await sb
@@ -236,16 +244,29 @@ export async function GET(req: Request) {
   if (cErr) return NextResponse.json({ ok: false, error: `cursor read: ${cErr.message}` }, { status: 500 });
   if (!cursorRow) return NextResponse.json({ ok: false, error: 'cursor row missing — rerun migration' }, { status: 500 });
 
-  const sameDay = cursorRow.cycle_started_at && String(cursorRow.cycle_started_at).slice(0, 10) === todayUtc;
+  // MIGRATE-05: cycle_date is the authoritative "which UTC day"
+  // marker. Fall back to inferring from cycle_started_at for rows
+  // that pre-date the column.
+  const cursorDay = (cursorRow as any).cycle_date
+    ?? (cursorRow.cycle_started_at ? String(cursorRow.cycle_started_at).slice(0, 10) : null);
+  const sameDay = cursorDay === todayUtc;
   const alreadyDone = cursorRow.state === 'completed_for_day' && sameDay;
   if (alreadyDone) {
-    return NextResponse.json({ ok: true, skipped: 'completed_for_day', last_set_code: cursorRow.last_set_code, cycle_credits: cursorRow.cycle_credits_spent });
+    return NextResponse.json({
+      ok: true,
+      skipped: 'completed_for_day',
+      cycle_date: cursorDay,
+      last_set_code: cursorRow.last_set_code,
+      cycle_credits: cursorRow.cycle_credits_spent,
+    });
   }
 
-  // Fresh cycle? Reset counters.
-  if (!sameDay || cursorRow.state === 'idle') {
+  // Fresh cycle? Reset counters. ("fresh" = different UTC day OR
+  // cursor is idle/failed from a prior aborted cycle.)
+  if (!sameDay || cursorRow.state === 'idle' || cursorRow.state === 'failed') {
     await sb.from('pokemon_tcg_ingestion_cursor').update({
       state: 'running',
+      cycle_date: todayUtc,
       cycle_started_at: new Date().toISOString(),
       cycle_credits_spent: 0,
       cycle_sets_processed: 0,
@@ -338,7 +359,7 @@ export async function GET(req: Request) {
 
   for (const s of remaining) {
     if (Date.now() - t0 > TIME_BUDGET_MS) break;
-    if (setsProcessed >= SET_BATCH) break;
+    if (setsProcessed >= effectiveSetBatch) break;
     // Budget guard: last known remaining must stay above the floor
     if (lastRemaining != null && lastRemaining < CREDITS_RESERVED_FOR_OTHER_SITES + 100) {
       // Open an alert and stop

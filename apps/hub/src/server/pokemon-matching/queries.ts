@@ -362,12 +362,24 @@ export async function fetchFxFreshness(sb: SupabaseClient): Promise<{ as_of: str
   return { as_of: (data as any).as_of, usd_eur: Number((data as any).rate) };
 }
 
-export async function fetchPromoProposalCount(sb: SupabaseClient): Promise<{ proposed: number; approved: number }> {
-  const [p, a] = await Promise.all([
+export async function fetchPromoProposalCount(sb: SupabaseClient): Promise<{ proposed: number; approved: number; needs_more_data: number; rejected: number }> {
+  const [p, a, n, r] = await Promise.all([
     sb.from('pokemon_tcg_promo_set_proposals').select('id', { count: 'exact', head: true }).eq('review_state', 'proposed'),
     sb.from('pokemon_tcg_promo_set_proposals').select('id', { count: 'exact', head: true }).eq('review_state', 'approved'),
+    sb.from('pokemon_tcg_promo_set_proposals').select('id', { count: 'exact', head: true }).eq('review_state', 'needs_more_data'),
+    sb.from('pokemon_tcg_promo_set_proposals').select('id', { count: 'exact', head: true }).eq('review_state', 'rejected'),
   ]);
-  return { proposed: p.count ?? 0, approved: a.count ?? 0 };
+  return { proposed: p.count ?? 0, approved: a.count ?? 0, needs_more_data: n.count ?? 0, rejected: r.count ?? 0 };
+}
+
+export async function fetchApprovalSampleCount(sb: SupabaseClient): Promise<{ total: number; pending: number; passed: number; failed: number }> {
+  const [total, pending, passed, failed] = await Promise.all([
+    sb.from('pokemon_tcg_mapping_approval_samples').select('id', { count: 'exact', head: true }),
+    sb.from('pokemon_tcg_mapping_approval_samples').select('id', { count: 'exact', head: true }).is('passed', null),
+    sb.from('pokemon_tcg_mapping_approval_samples').select('id', { count: 'exact', head: true }).eq('passed', true),
+    sb.from('pokemon_tcg_mapping_approval_samples').select('id', { count: 'exact', head: true }).eq('passed', false),
+  ]);
+  return { total: total.count ?? 0, pending: pending.count ?? 0, passed: passed.count ?? 0, failed: failed.count ?? 0 };
 }
 
 export async function listIngestionRuns(sb: SupabaseClient, limit = 10): Promise<IngestionRunRow[]> {
