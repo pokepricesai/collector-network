@@ -327,6 +327,49 @@ export interface IngestionRunRow {
   error_message: string | null;
 }
 
+export interface IngestionCursorRow {
+  provider: string;
+  kind: string;
+  state: 'idle' | 'running' | 'completed_for_day' | 'failed';
+  last_set_code: string | null;
+  last_language: string | null;
+  cycle_started_at: string | null;
+  cycle_completed_at: string | null;
+  cycle_credits_spent: number;
+  cycle_sets_processed: number;
+  cycle_cards_upserted: number;
+  updated_at: string;
+}
+
+export async function fetchIngestionCursor(sb: SupabaseClient): Promise<IngestionCursorRow | null> {
+  const { data, error } = await sb
+    .from('pokemon_tcg_ingestion_cursor')
+    .select('*')
+    .eq('provider', 'tcggraph')
+    .eq('kind', 'daily_catalogue')
+    .maybeSingle();
+  if (error) throw new Error(`cursor: ${error.message}`);
+  return (data as IngestionCursorRow | null);
+}
+
+export async function fetchFxFreshness(sb: SupabaseClient): Promise<{ as_of: string | null; usd_eur: number | null }> {
+  const { data } = await sb.from('pokemon_tcg_fx_rates')
+    .select('as_of, rate')
+    .eq('base', 'USD').eq('quote', 'EUR')
+    .order('as_of', { ascending: false })
+    .limit(1).maybeSingle();
+  if (!data) return { as_of: null, usd_eur: null };
+  return { as_of: (data as any).as_of, usd_eur: Number((data as any).rate) };
+}
+
+export async function fetchPromoProposalCount(sb: SupabaseClient): Promise<{ proposed: number; approved: number }> {
+  const [p, a] = await Promise.all([
+    sb.from('pokemon_tcg_promo_set_proposals').select('id', { count: 'exact', head: true }).eq('review_state', 'proposed'),
+    sb.from('pokemon_tcg_promo_set_proposals').select('id', { count: 'exact', head: true }).eq('review_state', 'approved'),
+  ]);
+  return { proposed: p.count ?? 0, approved: a.count ?? 0 };
+}
+
 export async function listIngestionRuns(sb: SupabaseClient, limit = 10): Promise<IngestionRunRow[]> {
   const { data, error } = await sb
     .from('pokemon_tcg_ingestion_runs')

@@ -6,6 +6,7 @@ import { listNetworkSites } from '@/server/admin/sites';
 import {
   fetchStatusCounts, listMappings, listSetAliases,
   listIngestionRuns, listOpenSetAlerts, fetchDataHealthCounts,
+  fetchIngestionCursor, fetchFxFreshness, fetchPromoProposalCount,
   type MappingRow, type ReviewStatus, type Confidence,
   type PricingEligibility, type FilterPreset,
 } from '@/server/pokemon-matching/queries';
@@ -60,16 +61,20 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
   const page = Math.max(Number(sp.page ?? 1), 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [counts, listResult, aliases, ingestionRuns, openAlerts, health] = await Promise.all([
+  const [counts, listResult, aliases, ingestionRuns, openAlerts, health, cursor, fxFreshness, promoCounts] = await Promise.all([
     fetchStatusCounts(sb),
     listMappings(sb, { status, confidence, language, pricing_eligibility, preset, sort, search, limit: PAGE_SIZE, offset }),
     listSetAliases(sb),
-    listIngestionRuns(sb, 5),
+    listIngestionRuns(sb, 10),
     listOpenSetAlerts(sb, 10),
     fetchDataHealthCounts(sb),
+    fetchIngestionCursor(sb),
+    fetchFxFreshness(sb),
+    fetchPromoProposalCount(sb),
   ]);
   const lastRun = ingestionRuns.find(r => r.kind === 'full_catalogue') ?? ingestionRuns[0] ?? null;
   const lastDiscovery = ingestionRuns.find(r => r.kind === 'set_discovery') ?? null;
+  const lastHistoryBatch = ingestionRuns.find(r => r.kind === 'history_batch') ?? null;
 
   const buildHref = (overrides: Record<string, string | number | undefined>) => {
     const q = new URLSearchParams();
@@ -130,15 +135,33 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
       <div style={{ height: 16 }} />
 
       {/* NEW: Data Health panel */}
-      <Panel title="Data health · TCGGraph ingestion" eyebrow="PP-TCG-MIGRATE-01 · provider tables (read-only)">
+      <Panel title="Data health · TCGGraph ingestion" eyebrow="PP-TCG-MIGRATE-04 · chunked daily ingestion + FX + promo proposals">
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           <MetricCard label="Provider cards ingested" value={health.provider_cards.toLocaleString()} helper="(card × printing_key)" />
           <MetricCard label="Market price rows" value={health.prices_market.toLocaleString()} />
           <MetricCard label="Graded price rows" value={health.prices_graded.toLocaleString()} />
-          <MetricCard label="Approved mappings w/ provider match" value={health.mapped_with_provider_price.toLocaleString()} />
           <MetricCard label="bulk_safe w/ provider match" value={health.bulk_safe_with_provider_price.toLocaleString()} state="ok" />
           <MetricCard label="Open set alerts" value={health.open_set_alerts.toLocaleString()} state={health.open_set_alerts > 0 ? 'ok' : 'muted'} />
+          <MetricCard label="Promo proposals (pending)" value={promoCounts.proposed.toLocaleString()} helper={promoCounts.approved > 0 ? `${promoCounts.approved} approved` : undefined} />
+          <MetricCard label="FX USD→EUR (latest)" value={fxFreshness.usd_eur != null ? fxFreshness.usd_eur.toFixed(4) : 'none'} helper={fxFreshness.as_of ?? undefined} state={fxFreshness.as_of ? 'ok' : 'muted'} />
         </section>
+
+        {cursor && (
+          <div style={{ marginTop: 14, padding: 10, background: '#f6f8fa', border: '1px solid #d0d7de', borderRadius: 4, fontSize: 12 }}>
+            <strong>Chunked daily ingestion cursor</strong>
+            <div style={{ marginTop: 4, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 6 }}>
+              <div>state: <StatusBadge state={cursor.state === 'running' ? 'running' : cursor.state === 'completed_for_day' ? 'success' : cursor.state === 'failed' ? 'failed' : 'info'} label={cursor.state} /></div>
+              <div>last set: <code>{cursor.last_set_code ?? '—'}</code> ({cursor.last_language ?? '—'})</div>
+              <div>cycle started: {cursor.cycle_started_at ? new Date(cursor.cycle_started_at).toLocaleString() : '—'}</div>
+              <div>cycle credits: <strong>{cursor.cycle_credits_spent.toLocaleString()}</strong></div>
+              <div>sets processed this cycle: <strong>{cursor.cycle_sets_processed}</strong> / 683</div>
+              <div>cards upserted this cycle: <strong>{cursor.cycle_cards_upserted.toLocaleString()}</strong></div>
+            </div>
+            {cursor.cycle_completed_at && (
+              <div style={{ marginTop: 4, color: '#1a5c1a' }}>cycle completed: {new Date(cursor.cycle_completed_at).toLocaleString()}</div>
+            )}
+          </div>
+        )}
         <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{ padding: 10, background: '#f6f8fa', border: '1px solid #d0d7de', borderRadius: 4, fontSize: 12 }}>
             <strong>Last full catalogue ingestion</strong>

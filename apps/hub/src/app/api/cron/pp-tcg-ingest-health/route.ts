@@ -19,7 +19,16 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const LOW_CREDITS_WARN = 20_000;   // open a Hub alert at this level
+// Percentage-based alert thresholds. First time monthly usage crosses
+// each level in a given calendar month, we open a Hub alert. The dedupe
+// key is month + threshold so we don't repeat.
+const MONTHLY_LIMIT_DEFAULT = 150_000;
+const THRESHOLDS: Array<{ pct: number; label: string }> = [
+  { pct: 0.70, label: '70%' },
+  { pct: 0.85, label: '85%' },
+  { pct: 0.95, label: '95%' },
+];
+const LOW_CREDITS_WARN = 20_000;    // legacy; kept for the hard floor alert
 
 function getApiKey(): string {
   const k = process.env.TCGGRAPH_API_KEY;
@@ -59,22 +68,44 @@ export async function GET(req: Request) {
     },
   });
 
-  // Low-balance alert (reuses the pokemon_tcg_set_alerts table —
-  // not strictly a set alert but same operator-visible stream).
-  if (Number.isFinite(remaining) && remaining < LOW_CREDITS_WARN) {
-    const { count } = await sb.from('pokemon_tcg_set_alerts')
-      .select('id', { count: 'exact', head: true })
-      .eq('provider', 'tcggraph')
-      .eq('kind', 'card_count_changed')
-      .eq('tcg_set_code', '__CREDITS__')
-      .is('acknowledged_at', null);
-    if ((count ?? 0) === 0) {
+  // Percentage-based alerts: 70% / 85% / 95% of monthly limit used.
+  // Dedupe key is set_code='__CREDITS_<pct>_<YYYY-MM>' so we don't
+  // re-open the same threshold alert each day within a month.
+  if (Number.isFinite(remaining) && Number.isFinite(limit) && limit > 0) {
+    const used = limit - remaining;
+    const usedPct = used / limit;
+    const monthStamp = new Date().toISOString().slice(0, 7);
+    for (const th of THRESHOLDS) {
+      if (usedPct < th.pct) continue;
+      const dedupeKey = `__CREDITS_${th.label}_${monthStamp}`;
+      const { count } = await sb.from('pokemon_tcg_set_alerts')
+        .select('id', { count: 'exact', head: true })
+        .eq('provider', 'tcggraph')
+        .eq('tcg_set_code', dedupeKey);
+      if ((count ?? 0) > 0) continue;
       await sb.from('pokemon_tcg_set_alerts').insert({
         provider: 'tcggraph',
         kind: 'card_count_changed',
-        tcg_set_code: '__CREDITS__',
-        tcg_set_name: 'TCGGraph monthly credit balance low',
-        payload: { monthly_remaining: remaining, monthly_limit: limit, threshold: LOW_CREDITS_WARN },
+        tcg_set_code: dedupeKey,
+        tcg_set_name: `TCGGraph monthly credit usage hit ${th.label} (${used.toLocaleString()}/${limit.toLocaleString()})`,
+        payload: { threshold_pct: th.pct, used, remaining, limit, month: monthStamp },
+      });
+    }
+  }
+
+  // Hard floor — legacy alert kept in case percentage-based math breaks
+  if (Number.isFinite(remaining) && remaining < LOW_CREDITS_WARN) {
+    const dedupeKey = `__CREDITS_FLOOR_${new Date().toISOString().slice(0,7)}`;
+    const { count } = await sb.from('pokemon_tcg_set_alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('provider', 'tcggraph')
+      .eq('tcg_set_code', dedupeKey);
+    if ((count ?? 0) === 0) {
+      await sb.from('pokemon_tcg_set_alerts').insert({
+        provider: 'tcggraph', kind: 'card_count_changed',
+        tcg_set_code: dedupeKey,
+        tcg_set_name: `TCGGraph monthly remaining below floor ${LOW_CREDITS_WARN.toLocaleString()}`,
+        payload: { monthly_remaining: remaining, monthly_limit: limit, floor: LOW_CREDITS_WARN },
       });
     }
   }
