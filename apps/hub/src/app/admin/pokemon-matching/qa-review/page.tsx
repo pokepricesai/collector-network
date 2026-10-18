@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 type RiskClass =
-  | 'verified_independent'
+  | 'catalogue_corroborated'
   | 'internally_consistent'
   | 'ambiguous_variant'
   | 'conflicting_identity'
@@ -16,7 +16,7 @@ type RiskClass =
   | 'unverifiable';
 
 const RISK_LABELS: Record<RiskClass, string> = {
-  verified_independent: 'Independently confirmed',
+  catalogue_corroborated: 'Catalogue-corroborated',
   internally_consistent: 'Internally consistent',
   ambiguous_variant: 'Ambiguous / duplicate target',
   conflicting_identity: 'Conflicting identity',
@@ -25,7 +25,7 @@ const RISK_LABELS: Record<RiskClass, string> = {
 };
 
 const RISK_TONE: Record<RiskClass, 'success' | 'info' | 'warning' | 'danger'> = {
-  verified_independent: 'success',
+  catalogue_corroborated: 'success',
   internally_consistent: 'info',
   ambiguous_variant: 'warning',
   conflicting_identity: 'danger',
@@ -71,7 +71,7 @@ export default async function QaReviewPage({ searchParams }: { searchParams: Pro
   const sites = await listNetworkSites(sb);
 
   // Headline counts
-  const classes: RiskClass[] = ['verified_independent', 'internally_consistent', 'ambiguous_variant', 'conflicting_identity', 'pricing_restriction', 'unverifiable'];
+  const classes: RiskClass[] = ['catalogue_corroborated', 'internally_consistent', 'ambiguous_variant', 'conflicting_identity', 'pricing_restriction', 'unverifiable'];
   const counts: Partial<Record<RiskClass, number>> = {};
   for (const c of classes) {
     const { count } = await sb.from('pokemon_tcg_mapping_qa')
@@ -116,7 +116,7 @@ export default async function QaReviewPage({ searchParams }: { searchParams: Pro
     .eq('prior_pricing_eligibility', 'bulk_safe')
     .eq('recommended_pricing_eligibility', 'identity_only');
 
-  const bulkApproveReady = counts.verified_independent ?? 0;
+  const bulkApproveReady = counts.catalogue_corroborated ?? 0;
   const operatorReviewTotal = (counts.ambiguous_variant ?? 0) + (counts.conflicting_identity ?? 0) + (counts.pricing_restriction ?? 0) + (counts.unverifiable ?? 0);
 
   return (
@@ -127,7 +127,7 @@ export default async function QaReviewPage({ searchParams }: { searchParams: Pro
       <SectionHeader
         eyebrow="PP-TCG-MATCH"
         title="Automated QA review"
-        description={`Full-cohort automated audit of ${total.toLocaleString()} mappings. Operator reviews the small risk-flagged residual; verified_independent is safe to bulk approve.`}
+        description={`Full-cohort automated audit of ${total.toLocaleString()} mappings. Identity-safe approval and pricing-eligibility correction are SEPARATE operator decisions (see §4 of the reconciliation doc).`}
       />
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 14 }}>
