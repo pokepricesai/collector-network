@@ -21,10 +21,16 @@ export default function BulkApproveForm({ initialEligible }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const onPreview = () => startTransition(async () => {
-    const res = await bulkApproveDryRun({ pricing_eligibility: eligibility, language });
-    if (!res.ok) { setError(res.error ?? 'error'); setPreview(null); return; }
-    setError(null);
-    setPreview(res);
+    try {
+      const res = await bulkApproveDryRun({ pricing_eligibility: eligibility, language });
+      if (!res || !res.ok) { setError(res?.error ?? 'preview returned no payload'); setPreview(null); return; }
+      setError(null);
+      setPreview(res);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`preview threw: ${msg}`);
+      setPreview(null);
+    }
   });
 
   const onStart = () => startTransition(async () => {
@@ -82,10 +88,11 @@ export default function BulkApproveForm({ initialEligible }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 13 }}>
-        <strong>{initialEligible.toLocaleString()}</strong> rows currently have review_status=pending_review +
-        confidence=verified. Only rows with pricing_eligibility=<code>bulk_safe</code> are safe to bulk-approve
-        for Phase-8 price activation. Variant printings (<code>market_only</code>) and clash/promo rows
-        (<code>identity_only</code>) must be reviewed manually before any price can be activated.
+        <strong>{Number(initialEligible || 0).toLocaleString('en-US')}</strong> rows currently have
+        {' '}pricing_eligibility=<code>bulk_safe</code> and review_status=pending_review.
+        Only these are safe to bulk-approve for Phase-8 price activation.
+        Variant printings (<code>market_only</code>) and clash/promo rows (<code>identity_only</code>)
+        must be reviewed manually before any price can be activated.
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
@@ -134,24 +141,29 @@ export default function BulkApproveForm({ initialEligible }: Props) {
         )}
       </div>
 
-      {preview && !activeBatch && (
-        <div style={{ fontSize: 13, padding: 10, background: '#f1f8f1', border: '1px solid #cfe3cf', borderRadius: 4 }}>
-          <strong>Dry run:</strong> {preview.total_eligible?.toLocaleString()} rows match pricing_eligibility={eligibility}
-          {language !== 'all' && ` (${language})`}. Will approve up to {Math.min(preview.total_eligible ?? 0, limitTotal).toLocaleString()} this run.
-          {preview.preview && preview.preview.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>Sample (first 20):</div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11 }}>
-                {preview.preview.map((p) => (
-                  <li key={p.pp_card_slug}>
-                    [{p.pricing_eligibility}] {p.pp_card_name || p.pp_card_slug} → {p.tcg_name || '(no name)'}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+      {preview && !activeBatch && (() => {
+        const totalEligible = Number(preview.total_eligible ?? 0);
+        const previewRows = Array.isArray(preview.preview) ? preview.preview : [];
+        const limit = Number(limitTotal) || 100;
+        return (
+          <div style={{ fontSize: 13, padding: 10, background: '#f1f8f1', border: '1px solid #cfe3cf', borderRadius: 4 }}>
+            <strong>Dry run:</strong> {totalEligible.toLocaleString('en-US')} rows match pricing_eligibility={eligibility}
+            {language !== 'all' && ` (${language})`}. Will approve up to {Math.min(totalEligible, limit).toLocaleString('en-US')} this run.
+            {previewRows.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>Sample (first {previewRows.length}):</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11 }}>
+                  {previewRows.map((p, i) => (
+                    <li key={p?.pp_card_slug ?? `row-${i}`}>
+                      [{String(p?.pricing_eligibility ?? '—')}] {p?.pp_card_name || p?.pp_card_slug || '(no name)'} → {p?.tcg_name || '(no name)'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {activeBatch && (
         <div style={{ fontSize: 13, padding: 10, background: activeBatch.state === 'failed' ? '#fdf1f1' : '#eaf3fb', border: '1px solid #c0d7e5', borderRadius: 4 }}>

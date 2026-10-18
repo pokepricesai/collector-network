@@ -74,50 +74,86 @@ export interface StatusCounts {
 }
 
 export async function fetchStatusCounts(sb: SupabaseClient): Promise<StatusCounts> {
-  const [{ data: v, error }, pe] = await Promise.all([
-    sb.from('pokemon_tcg_mapping_status_v').select('review_status, confidence, pp_language, n'),
-    sb.from('pokemon_tcg_mappings').select('pricing_eligibility, review_status'),
+  // We previously tried to pull every mapping row and count locally, but
+  // PostgREST silently caps SELECT at max_rows=1000, so the counts were
+  // clamped — this is what produced the "1,000 rows currently…" display
+  // bug on the admin page. Fix: ask Postgres for each count directly via
+  // HEAD queries, which are bounded + fast and ignore row caps.
+  const ELIGIBILITIES = ['bulk_safe', 'market_only', 'identity_only', 'not_eligible', 'uncertain'] as const;
+  const REVIEW_STATUSES = ['unmatched', 'pending_review', 'approved', 'rejected', 'no_tcg_equivalent', 'needs_price_verification'] as const;
+
+  const total_q = sb.from('pokemon_tcg_mappings').select('id', { count: 'exact', head: true }).eq('provider', 'tcggraph');
+
+  const eligCounts = ELIGIBILITIES.map(e => ({ eligibility: e, q:
+    sb.from('pokemon_tcg_mappings').select('id', { count: 'exact', head: true })
+      .eq('provider', 'tcggraph')
+      .eq('pricing_eligibility', e),
+  }));
+  const eligPendingCounts = ELIGIBILITIES.map(e => ({ eligibility: e, q:
+    sb.from('pokemon_tcg_mappings').select('id', { count: 'exact', head: true })
+      .eq('provider', 'tcggraph')
+      .eq('review_status', 'pending_review')
+      .eq('pricing_eligibility', e),
+  }));
+  const statusCounts = REVIEW_STATUSES.map(s => ({ status: s, q:
+    sb.from('pokemon_tcg_mappings').select('id', { count: 'exact', head: true })
+      .eq('provider', 'tcggraph')
+      .eq('review_status', s),
+  }));
+
+  const verifiedPendingBulk_q = sb.from('pokemon_tcg_mappings')
+    .select('id', { count: 'exact', head: true })
+    .eq('provider', 'tcggraph')
+    .eq('review_status', 'pending_review')
+    .eq('confidence', 'verified');
+
+  const [totalRes, verifiedPendingRes, ...everything] = await Promise.all([
+    total_q,
+    verifiedPendingBulk_q,
+    ...eligCounts.map(e => e.q),
+    ...eligPendingCounts.map(e => e.q),
+    ...statusCounts.map(s => s.q),
   ]);
-  if (error) throw new Error(`status view: ${error.message}`);
-  const rows = v || [];
-  const by_status: Record<string, number> = {};
-  let total = 0;
-  let verified_pending_bulk = 0;
-  for (const r of rows) {
-    const n = Number(r.n);
-    total += n;
-    by_status[r.review_status] = (by_status[r.review_status] || 0) + n;
-    if (r.review_status === 'pending_review' && r.confidence === 'verified') {
-      verified_pending_bulk += n;
-    }
+  if (totalRes.error) throw new Error(`total count: ${totalRes.error.message}`);
+  if (verifiedPendingRes.error) throw new Error(`verified pending: ${verifiedPendingRes.error.message}`);
+
+  const total = totalRes.count ?? 0;
+  const verified_pending_bulk = verifiedPendingRes.count ?? 0;
+
+  const nElig = ELIGIBILITIES.length;
+  const by_pricing_eligibility: Record<string, number> = {};
+  for (let i = 0; i < nElig; i++) {
+    const key = ELIGIBILITIES[i] ?? 'uncertain';
+    const res = everything[i];
+    if (res?.error) throw new Error(`elig count ${key}: ${res.error.message}`);
+    by_pricing_eligibility[key] = res?.count ?? 0;
   }
 
-  const by_pricing_eligibility: Record<string, number> = { bulk_safe: 0, market_only: 0, identity_only: 0, not_eligible: 0, uncertain: 0 };
-  let bulk_safe_pending = 0, market_only_pending = 0, identity_only_pending = 0;
-  for (const r of (pe.data || [])) {
-    const k = (r.pricing_eligibility ?? 'uncertain') as string;
-    by_pricing_eligibility[k] = (by_pricing_eligibility[k] || 0) + 1;
-    if (r.review_status === 'pending_review') {
-      if (k === 'bulk_safe') bulk_safe_pending++;
-      if (k === 'market_only') market_only_pending++;
-      if (k === 'identity_only') identity_only_pending++;
-    }
+  const eligPendingByKey: Record<string, number> = {};
+  for (let i = 0; i < nElig; i++) {
+    const key = ELIGIBILITIES[i] ?? 'uncertain';
+    const res = everything[nElig + i];
+    if (res?.error) throw new Error(`elig pending ${key}: ${res.error.message}`);
+    eligPendingByKey[key] = res?.count ?? 0;
+  }
+
+  const by_status: Record<string, number> = {};
+  for (let i = 0; i < REVIEW_STATUSES.length; i++) {
+    const key = REVIEW_STATUSES[i] ?? 'unmatched';
+    const res = everything[nElig * 2 + i];
+    if (res?.error) throw new Error(`status count ${key}: ${res.error.message}`);
+    by_status[key] = res?.count ?? 0;
   }
 
   return {
     total,
     by_status: by_status as Record<ReviewStatus, number>,
-    by_status_confidence: rows.map(r => ({
-      review_status: r.review_status as ReviewStatus,
-      confidence: r.confidence as Confidence,
-      pp_language: r.pp_language as string,
-      n: Number(r.n),
-    })),
+    by_status_confidence: [],         // retained in type for backward compat; unused
     verified_pending_bulk,
     by_pricing_eligibility: by_pricing_eligibility as Record<PricingEligibility, number>,
-    bulk_safe_pending,
-    market_only_pending,
-    identity_only_pending,
+    bulk_safe_pending:     eligPendingByKey.bulk_safe     ?? 0,
+    market_only_pending:   eligPendingByKey.market_only   ?? 0,
+    identity_only_pending: eligPendingByKey.identity_only ?? 0,
     with_tcg_price_snapshot: 0,
     activation_eligible: 0,
   };

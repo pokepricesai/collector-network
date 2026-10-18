@@ -274,14 +274,22 @@ export interface BulkChunkResult extends ActionResult {
   preview?: Array<{ pp_card_slug: string; pp_card_name: string | null; tcg_name: string | null; pricing_eligibility: string | null }>;
 }
 
-async function selectEligibleQuery(
+// Explicitly bounded preview sample size. The admin UI only needs
+// a handful of representative rows; never return more than this
+// regardless of what the caller asks for.
+const PREVIEW_SAMPLE_SIZE = 20;
+
+function buildEligibleFilter(
   sb: any,
   pricing_eligibility: BulkEligibilityFilter,
   language?: 'en' | 'jp' | 'all',
+  options: { withSelect?: string } = {},
 ) {
+  const sel = options.withSelect
+    ?? 'id, pp_card_slug, pp_card_name, tcg_card_id, tcg_printing_key, tcg_name, pp_language, pricing_eligibility';
   let q = sb
     .from('pokemon_tcg_mappings')
-    .select('id, pp_card_slug, pp_card_name, tcg_card_id, tcg_printing_key, tcg_name, pp_language, pricing_eligibility', { count: 'exact' })
+    .select(sel, { count: 'exact' })
     .eq('provider', 'tcggraph')
     .eq('review_status', 'pending_review')
     .eq('confidence', 'verified')
@@ -291,29 +299,62 @@ async function selectEligibleQuery(
   return q;
 }
 
-/** Dry-run preview: count eligible + sample 20 rows. No writes. */
+/** Dry-run preview: real count + bounded sample. No writes.
+ *  Two separate queries so the count is always exact (unaffected by
+ *  PostgREST's max_rows limit) and the sample is independently bounded. */
 export async function bulkApproveDryRun(options: {
   pricing_eligibility?: BulkEligibilityFilter;
   language?: 'en' | 'jp' | 'all';
 } = {}): Promise<BulkChunkResult> {
-  const { sb } = await requireAdmin('/admin/pokemon-matching');
-  const pe = options.pricing_eligibility ?? 'bulk_safe';
+  try {
+    const { sb } = await requireAdmin('/admin/pokemon-matching');
+    const pe = options.pricing_eligibility ?? 'bulk_safe';
+    const lang = options.language ?? 'all';
 
-  const q = await selectEligibleQuery(sb, pe, options.language);
-  const { data, count, error } = await q.order('pp_card_slug', { ascending: true }).limit(20);
-  if (error) return { ok: false, error: error.message };
+    // Query 1: HEAD count — bounded, no row payload.
+    let countQ = sb
+      .from('pokemon_tcg_mappings')
+      .select('id', { count: 'exact', head: true })
+      .eq('provider', 'tcggraph')
+      .eq('review_status', 'pending_review')
+      .eq('confidence', 'verified')
+      .eq('pricing_eligibility', pe)
+      .not('tcg_card_id', 'is', null);
+    if (lang !== 'all') countQ = countQ.eq('pp_language', lang);
 
-  return {
-    ok: true,
-    message: `dry-run: ${count ?? 0} rows match pricing_eligibility=${pe}` + (options.language && options.language !== 'all' ? ` language=${options.language}` : ''),
-    total_eligible: count ?? 0,
-    preview: (data || []).map((r: any) => ({
-      pp_card_slug: r.pp_card_slug,
-      pp_card_name: r.pp_card_name,
-      tcg_name: r.tcg_name,
-      pricing_eligibility: r.pricing_eligibility,
-    })),
-  };
+    const countRes = await countQ;
+    if (countRes.error) return { ok: false, error: `count: ${countRes.error.message}` };
+    const total_eligible = countRes.count ?? 0;
+
+    // Query 2: bounded sample for the UI.
+    const sampleQ = buildEligibleFilter(sb, pe, lang)
+      .order('pp_card_slug', { ascending: true })
+      .limit(PREVIEW_SAMPLE_SIZE);
+    const sampleRes = await sampleQ;
+    if (sampleRes.error) return { ok: false, error: `sample: ${sampleRes.error.message}` };
+
+    const sample = Array.isArray(sampleRes.data) ? sampleRes.data : [];
+    const preview = sample.map((r: any) => ({
+      pp_card_slug: String(r?.pp_card_slug ?? ''),
+      pp_card_name: r?.pp_card_name ?? null,
+      tcg_name:     r?.tcg_name ?? null,
+      pricing_eligibility: r?.pricing_eligibility ?? null,
+    }));
+
+    return {
+      ok: true,
+      message: `dry-run: ${total_eligible.toLocaleString('en-US')} rows match pricing_eligibility=${pe}` + (lang !== 'all' ? ` language=${lang}` : ''),
+      total_eligible,
+      preview,
+    };
+  } catch (err: unknown) {
+    // Catch anything the Supabase client or the admin guard might throw
+    // (network failures, timeouts, redirect signals that bubble up in
+    // odd ways). Server-side swallow + surface — the client renders a
+    // friendly error instead of hitting the admin error boundary.
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `preview failed: ${message}` };
+  }
 }
 
 /** Start a new bulk-approve batch run. Returns batch_id to resume via tick. */
@@ -325,9 +366,16 @@ export async function bulkApproveStart(options: {
   const { admin, sb } = await requireAdmin('/admin/pokemon-matching');
   const pe = options.pricing_eligibility ?? 'bulk_safe';
 
-  // Count what we'd process
-  const q = await selectEligibleQuery(sb, pe, options.language);
-  const { count, error: countErr } = await q.range(0, 0);
+  // Count what we'd process (HEAD-only, no row payload)
+  let countQ = sb.from('pokemon_tcg_mappings')
+    .select('id', { count: 'exact', head: true })
+    .eq('provider', 'tcggraph')
+    .eq('review_status', 'pending_review')
+    .eq('confidence', 'verified')
+    .eq('pricing_eligibility', pe)
+    .not('tcg_card_id', 'is', null);
+  if (options.language && options.language !== 'all') countQ = countQ.eq('pp_language', options.language);
+  const { count, error: countErr } = await countQ;
   if (countErr) return { ok: false, error: countErr.message };
 
   const totalEligible = Math.min(count ?? 0, options.limit_total ?? 100_000);

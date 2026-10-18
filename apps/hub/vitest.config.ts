@@ -10,6 +10,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      // Node tests do not run inside Next.js, so the server-only guard
+      // import becomes a hard failure. Point it at an empty shim.
+      'server-only': path.resolve(__dirname, 'src/server/__mocks__/server-only.ts'),
     },
   },
 });
