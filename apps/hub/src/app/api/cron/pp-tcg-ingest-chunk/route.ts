@@ -244,9 +244,17 @@ export async function GET(req: Request) {
   if (cErr) return NextResponse.json({ ok: false, error: `cursor read: ${cErr.message}` }, { status: 500 });
   if (!cursorRow) return NextResponse.json({ ok: false, error: 'cursor row missing — rerun migration' }, { status: 500 });
 
-  // MIGRATE-05: cycle_date is the authoritative "which UTC day"
-  // marker. Fall back to inferring from cycle_started_at for rows
-  // that pre-date the column.
+  // MIGRATE-05 / APPROVAL-02: cycle_date is the day a cycle STARTED.
+  // Day-boundary semantics:
+  //   • completed_for_day + sameDay → short-circuit (done today)
+  //   • completed_for_day + !sameDay → start a fresh cycle (new day)
+  //   • idle / failed → start a fresh cycle
+  //   • running + sameDay → continue the current cycle
+  //   • running + !sameDay → CONTINUE the current cycle. A partially-
+  //     done cycle crossing midnight must NOT wipe last_set_code. If
+  //     a run has been stuck in `running` for more than 36h, we treat
+  //     it as stale and reset — that's the operational safety net
+  //     against a cycle that genuinely wedged.
   const cursorDay = (cursorRow as any).cycle_date
     ?? (cursorRow.cycle_started_at ? String(cursorRow.cycle_started_at).slice(0, 10) : null);
   const sameDay = cursorDay === todayUtc;
@@ -261,9 +269,17 @@ export async function GET(req: Request) {
     });
   }
 
-  // Fresh cycle? Reset counters. ("fresh" = different UTC day OR
-  // cursor is idle/failed from a prior aborted cycle.)
-  if (!sameDay || cursorRow.state === 'idle' || cursorRow.state === 'failed') {
+  const STALE_RUN_MS = 36 * 60 * 60 * 1000;
+  const cycleStartedAt = cursorRow.cycle_started_at ? new Date(cursorRow.cycle_started_at).getTime() : 0;
+  const cycleStale = cursorRow.state === 'running' && cycleStartedAt > 0 && (Date.now() - cycleStartedAt) > STALE_RUN_MS;
+
+  const freshCycleNeeded =
+    cursorRow.state === 'idle' ||
+    cursorRow.state === 'failed' ||
+    (cursorRow.state === 'completed_for_day' && !sameDay) ||
+    cycleStale;
+
+  if (freshCycleNeeded) {
     await sb.from('pokemon_tcg_ingestion_cursor').update({
       state: 'running',
       cycle_date: todayUtc,
@@ -281,7 +297,8 @@ export async function GET(req: Request) {
     cursorRow.cycle_sets_processed = 0;
     cursorRow.cycle_cards_upserted = 0;
   } else {
-    // Mark running (idempotent even if already running)
+    // state === 'running': continue regardless of UTC day boundary.
+    // Preserve last_set_code so the cycle resumes where it left off.
     await sb.from('pokemon_tcg_ingestion_cursor').update({ state: 'running' }).eq('id', cursorRow.id);
   }
 
