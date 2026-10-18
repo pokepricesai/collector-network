@@ -149,7 +149,8 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
           <MetricCard label="FX USD→EUR (latest)" value={fxFreshness.usd_eur != null ? fxFreshness.usd_eur.toFixed(4) : 'none'} helper={fxFreshness.as_of ?? undefined} state={fxFreshness.as_of ? 'ok' : 'muted'} />
         </section>
         <div style={{ marginTop: 10, display: 'flex', gap: 12, fontSize: 12 }}>
-          <Link href="/admin/pokemon-matching/approval-samples" style={{ color: 'var(--primary)' }}>Review approval samples →</Link>
+          <Link href="/admin/pokemon-matching/qa-review" style={{ color: 'var(--primary)', fontWeight: 600 }}>Automated QA review →</Link>
+          <Link href="/admin/pokemon-matching/approval-samples" style={{ color: '#666' }}>Legacy sample review →</Link>
         </div>
 
         {cursor && (
