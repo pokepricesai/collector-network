@@ -5,6 +5,7 @@ import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import {
   fetchStatusCounts, listMappings, listSetAliases,
+  listIngestionRuns, listOpenSetAlerts, fetchDataHealthCounts,
   type MappingRow, type ReviewStatus, type Confidence,
   type PricingEligibility, type FilterPreset,
 } from '@/server/pokemon-matching/queries';
@@ -59,11 +60,16 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
   const page = Math.max(Number(sp.page ?? 1), 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [counts, listResult, aliases] = await Promise.all([
+  const [counts, listResult, aliases, ingestionRuns, openAlerts, health] = await Promise.all([
     fetchStatusCounts(sb),
     listMappings(sb, { status, confidence, language, pricing_eligibility, preset, sort, search, limit: PAGE_SIZE, offset }),
     listSetAliases(sb),
+    listIngestionRuns(sb, 5),
+    listOpenSetAlerts(sb, 10),
+    fetchDataHealthCounts(sb),
   ]);
+  const lastRun = ingestionRuns.find(r => r.kind === 'full_catalogue') ?? ingestionRuns[0] ?? null;
+  const lastDiscovery = ingestionRuns.find(r => r.kind === 'set_discovery') ?? null;
 
   const buildHref = (overrides: Record<string, string | number | undefined>) => {
     const q = new URLSearchParams();
@@ -120,6 +126,58 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
         PokePrices pages) is intentionally disabled. Public URLs, SEO, images and <code>card_trends</code> are
         untouched.
       </Notice>
+
+      <div style={{ height: 16 }} />
+
+      {/* NEW: Data Health panel */}
+      <Panel title="Data health · TCGGraph ingestion" eyebrow="PP-TCG-MIGRATE-01 · provider tables (read-only)">
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+          <MetricCard label="Provider cards ingested" value={health.provider_cards.toLocaleString()} helper="(card × printing_key)" />
+          <MetricCard label="Market price rows" value={health.prices_market.toLocaleString()} />
+          <MetricCard label="Graded price rows" value={health.prices_graded.toLocaleString()} />
+          <MetricCard label="Approved mappings w/ provider match" value={health.mapped_with_provider_price.toLocaleString()} />
+          <MetricCard label="bulk_safe w/ provider match" value={health.bulk_safe_with_provider_price.toLocaleString()} state="ok" />
+          <MetricCard label="Open set alerts" value={health.open_set_alerts.toLocaleString()} state={health.open_set_alerts > 0 ? 'ok' : 'muted'} />
+        </section>
+        <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ padding: 10, background: '#f6f8fa', border: '1px solid #d0d7de', borderRadius: 4, fontSize: 12 }}>
+            <strong>Last full catalogue ingestion</strong>
+            {lastRun ? (
+              <div style={{ marginTop: 4 }}>
+                <div>state: <StatusBadge state={lastRun.state === 'completed' ? 'success' : lastRun.state === 'failed' ? 'failed' : lastRun.state === 'running' ? 'running' : 'info'} label={lastRun.state} /></div>
+                <div>started: {new Date(lastRun.started_at).toLocaleString()}</div>
+                {lastRun.finished_at && <div>finished: {new Date(lastRun.finished_at).toLocaleString()}</div>}
+                <div>credits: {lastRun.credits_spent.toLocaleString()} · requests: {lastRun.requests_made.toLocaleString()}</div>
+                <div>cards: {lastRun.cards_ingested.toLocaleString()} · market: {lastRun.prices_market_rows.toLocaleString()} · graded: {lastRun.prices_graded_rows.toLocaleString()}</div>
+                {lastRun.error_message && <div style={{ color: '#8b1a1a', marginTop: 4 }}>error: {lastRun.error_message}</div>}
+              </div>
+            ) : <div style={{ marginTop: 4, color: '#666' }}>no runs yet · run <code>node scripts/pp-tcg-migrate-01-ingest.mjs</code> manually</div>}
+          </div>
+          <div style={{ padding: 10, background: '#f6f8fa', border: '1px solid #d0d7de', borderRadius: 4, fontSize: 12 }}>
+            <strong>Last set-discovery run</strong>
+            {lastDiscovery ? (
+              <div style={{ marginTop: 4 }}>
+                <div>state: <StatusBadge state={lastDiscovery.state === 'completed' ? 'success' : lastDiscovery.state === 'failed' ? 'failed' : 'info'} label={lastDiscovery.state} /></div>
+                <div>started: {new Date(lastDiscovery.started_at).toLocaleString()}</div>
+                <div>credits: {lastDiscovery.credits_spent.toLocaleString()} · sets seen: {lastDiscovery.sets_observed.toLocaleString()} · alerts opened: {lastDiscovery.alerts_opened.toLocaleString()}</div>
+              </div>
+            ) : <div style={{ marginTop: 4, color: '#666' }}>no discovery runs yet · run <code>node scripts/pp-tcg-migrate-01-discover.mjs</code> manually</div>}
+          </div>
+        </div>
+        {openAlerts.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Open set alerts ({openAlerts.length})</div>
+            <div style={{ fontSize: 12, maxHeight: 180, overflowY: 'auto', border: '1px solid #ddd', borderRadius: 4 }}>
+              {openAlerts.map(a => (
+                <div key={a.id} style={{ padding: '6px 10px', borderBottom: '1px solid #eee' }}>
+                  <StatusBadge state="info" label={a.kind} />
+                  <strong style={{ marginLeft: 6 }}>{a.tcg_set_code}</strong> {a.tcg_set_name} ({a.tcg_language}) · first seen {new Date(a.first_seen_at).toLocaleString()}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Panel>
 
       <div style={{ height: 16 }} />
 

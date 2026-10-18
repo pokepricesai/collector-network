@@ -310,6 +310,89 @@ export async function listSetAliases(sb: SupabaseClient): Promise<Array<{ id: st
   return data || [];
 }
 
+export interface IngestionRunRow {
+  id: string;
+  kind: string;
+  pp_language: string | null;
+  started_at: string;
+  finished_at: string | null;
+  state: 'running' | 'completed' | 'failed' | 'cancelled';
+  credits_spent: number;
+  requests_made: number;
+  cards_ingested: number;
+  prices_market_rows: number;
+  prices_graded_rows: number;
+  sets_observed: number;
+  alerts_opened: number;
+  error_message: string | null;
+}
+
+export async function listIngestionRuns(sb: SupabaseClient, limit = 10): Promise<IngestionRunRow[]> {
+  const { data, error } = await sb
+    .from('pokemon_tcg_ingestion_runs')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`ingestion runs: ${error.message}`);
+  return (data as IngestionRunRow[]) || [];
+}
+
+export interface SetAlertRow {
+  id: string;
+  kind: string;
+  tcg_set_code: string;
+  tcg_set_name: string | null;
+  tcg_language: string | null;
+  payload: Record<string, unknown>;
+  first_seen_at: string;
+  acknowledged_at: string | null;
+}
+
+export async function listOpenSetAlerts(sb: SupabaseClient, limit = 25): Promise<SetAlertRow[]> {
+  const { data, error } = await sb
+    .from('pokemon_tcg_set_alerts')
+    .select('id, kind, tcg_set_code, tcg_set_name, tcg_language, payload, first_seen_at, acknowledged_at')
+    .is('acknowledged_at', null)
+    .order('first_seen_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`set alerts: ${error.message}`);
+  return (data as SetAlertRow[]) || [];
+}
+
+export interface DataHealthCounts {
+  provider_cards: number;
+  prices_market: number;
+  prices_graded: number;
+  mapped_with_provider_price: number;
+  bulk_safe_with_provider_price: number;
+  open_set_alerts: number;
+}
+
+export async function fetchDataHealthCounts(sb: SupabaseClient): Promise<DataHealthCounts> {
+  const [pcN, mkN, gdN, openAlerts, mappedPriced, bulkPriced] = await Promise.all([
+    sb.from('pokemon_tcg_provider_cards').select('id', { count: 'exact', head: true }).eq('provider', 'tcggraph'),
+    sb.from('pokemon_tcg_prices_market').select('id', { count: 'exact', head: true }).eq('provider', 'tcggraph'),
+    sb.from('pokemon_tcg_prices_graded').select('id', { count: 'exact', head: true }).eq('provider', 'tcggraph'),
+    sb.from('pokemon_tcg_set_alerts').select('id', { count: 'exact', head: true }).is('acknowledged_at', null),
+    // Mapped rows pointing to a TCG card that has at least one provider price row:
+    // Approximation: count mappings with tcg_card_id not null AND confidence verified.
+    // The actual price-present count comes from a view we'd add later; this is a floor.
+    sb.from('pokemon_tcg_mappings').select('id', { count: 'exact', head: true })
+      .eq('provider', 'tcggraph').eq('confidence', 'verified').not('tcg_card_id', 'is', null),
+    sb.from('pokemon_tcg_mappings').select('id', { count: 'exact', head: true })
+      .eq('provider', 'tcggraph').eq('pricing_eligibility', 'bulk_safe').not('tcg_card_id', 'is', null),
+  ]);
+  if (pcN.error) throw new Error(`provider cards: ${pcN.error.message}`);
+  return {
+    provider_cards: pcN.count ?? 0,
+    prices_market: mkN.count ?? 0,
+    prices_graded: gdN.count ?? 0,
+    mapped_with_provider_price: mappedPriced.count ?? 0,
+    bulk_safe_with_provider_price: bulkPriced.count ?? 0,
+    open_set_alerts: openAlerts.count ?? 0,
+  };
+}
+
 export async function listRecentAudit(sb: SupabaseClient, limit = 25): Promise<Array<Record<string, unknown>>> {
   const { data, error } = await sb
     .from('pokemon_tcg_mapping_audit')
