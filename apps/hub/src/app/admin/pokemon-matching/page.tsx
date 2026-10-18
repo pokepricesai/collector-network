@@ -9,7 +9,7 @@ import {
   type PricingEligibility, type FilterPreset,
 } from '@/server/pokemon-matching/queries';
 import BulkApproveForm from './BulkApproveForm';
-import SetAliasPanel from './SetAliasPanel';
+import SetAliasSection from './SetAliasSection';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -29,17 +29,32 @@ interface PageProps {
 
 const PAGE_SIZE = 50;
 
+function reviewReason(r: MappingRow): string {
+  if (r.review_status === 'approved') return '—';
+  if (r.review_status === 'no_tcg_equivalent') return 'no TCGGraph counterpart';
+  if (r.review_status === 'unmatched') return 'matcher found no candidate';
+  if (r.notes) return r.notes;
+  if (r.confidence === 'verified' && r.pricing_eligibility === 'bulk_safe') return 'ready for bulk approve';
+  if (r.confidence === 'verified' && r.pricing_eligibility === 'market_only') return 'variant printing — identity verified, graded prices aggregated';
+  if (r.confidence === 'verified' && r.pricing_eligibility === 'identity_only') return 'identity verified; price activation unsafe (variant / promo / clash)';
+  if (r.confidence === 'medium') return 'set resolution partial — manual check';
+  if (r.confidence === 'low') return 'multiple candidates, no set resolution';
+  return 'needs review';
+}
+
 export default async function PokemonMatchingPage({ searchParams }: PageProps) {
   const { admin, sb } = await requireAdmin('/admin/pokemon-matching');
   const sites = await listNetworkSites(sb);
   const sp = await searchParams;
 
+  // Queue defaults: pending_review + sort by commercial importance so
+  // high-traffic cards surface first.
   const status = sp.status ?? 'pending_review';
   const confidence = sp.confidence ?? 'all';
   const language = sp.language ?? 'all';
   const pricing_eligibility = sp.pricing_eligibility ?? 'all';
   const preset = sp.preset ?? 'none';
-  const sort = sp.sort ?? 'default';
+  const sort = sp.sort ?? 'commercial';
   const search = sp.search ?? '';
   const page = Math.max(Number(sp.page ?? 1), 1);
   const offset = (page - 1) * PAGE_SIZE;
@@ -62,50 +77,54 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
 
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
 
+  // Derived numbers for the overview
+  const total = counts.total;
+  const approved = counts.by_status.approved || 0;
+  const pending = counts.by_status.pending_review || 0;
+  const unmatched = counts.by_status.unmatched || 0;
+  const noEquivalent = counts.by_status.no_tcg_equivalent || 0;
+
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/pokemon-matching">
       <SectionHeader
-        eyebrow="Operations · PP-TCG-MATCH-01A"
+        eyebrow="Operations · PP-TCG-MATCH-02"
         title="Pokémon → TCGGraph matching"
-        description="Progressively map PokePrices records. Approvals are persisted. No live pricing is changed."
+        description="Automated identity matching plus a manual queue for exceptions. Approvals are persisted. No live pricing is changed."
       />
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 14 }}>
-        <MetricCard label="PP records total" value={counts.total.toLocaleString()} />
-        <MetricCard label="Approved" value={(counts.by_status.approved || 0).toLocaleString()} helper={counts.total ? `${((counts.by_status.approved || 0) / counts.total * 100).toFixed(1)}%` : undefined} />
-        <MetricCard label="Pending review" value={(counts.by_status.pending_review || 0).toLocaleString()} />
-        <MetricCard label="Unmatched" value={(counts.by_status.unmatched || 0).toLocaleString()} />
-        <MetricCard label="Rejected" value={(counts.by_status.rejected || 0).toLocaleString()} />
-        <MetricCard label="No TCG equivalent" value={(counts.by_status.no_tcg_equivalent || 0).toLocaleString()} />
-      </section>
-
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 14 }}>
-        <MetricCard label="bulk_safe pending" value={counts.bulk_safe_pending.toLocaleString()} state="ok" helper="Clean normal printing" />
-        <MetricCard label="market_only pending" value={counts.market_only_pending.toLocaleString()} helper="Variant printing — market quotes only" />
-        <MetricCard label="identity_only pending" value={counts.identity_only_pending.toLocaleString()} helper="Variant or clash — manual" />
-        <MetricCard label="verified pending (total)" value={counts.verified_pending_bulk.toLocaleString()} helper="all pricing_eligibility" />
-      </section>
-
-      <Notice tone="info">
-        Approvals in this workbench do not switch live pricing. Phase-8 activation (reading TCGGraph prices onto PokePrices
-        pages) is intentionally disabled. Public URLs, SEO, images and <code>card_trends</code> are untouched.
-      </Notice>
+      {/* A — Matching overview */}
+      <Panel title="Matching overview" eyebrow="A · live counts">
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+          <MetricCard label="Total cards" value={total.toLocaleString()} />
+          <MetricCard label="Automatically verified" value={(counts.by_pricing_eligibility.bulk_safe + counts.by_pricing_eligibility.market_only + counts.by_pricing_eligibility.identity_only).toLocaleString()} helper={`${(((counts.by_pricing_eligibility.bulk_safe + counts.by_pricing_eligibility.market_only + counts.by_pricing_eligibility.identity_only) / Math.max(total, 1)) * 100).toFixed(1)}%`} state="ok" />
+          <MetricCard label="Price-compatible (bulk_safe)" value={counts.by_pricing_eligibility.bulk_safe.toLocaleString()} />
+          <MetricCard label="Variant restricted (market_only)" value={counts.by_pricing_eligibility.market_only.toLocaleString()} />
+          <MetricCard label="Identity-only / unsafe price" value={counts.by_pricing_eligibility.identity_only.toLocaleString()} />
+          <MetricCard label="Awaiting manual review" value={counts.by_pricing_eligibility.uncertain.toLocaleString()} />
+          <MetricCard label="No TCG equivalent" value={noEquivalent.toLocaleString()} />
+          <MetricCard label="Approved" value={approved.toLocaleString()} />
+        </section>
+      </Panel>
 
       <div style={{ height: 16 }} />
 
-      <Panel title="Bulk approve" eyebrow="Resumable + idempotent · requires pricing_eligibility=bulk_safe">
+      {/* B — Automatic matching */}
+      <Panel title="Automatic matching" eyebrow="B · one explicit, resumable bulk approve">
         <BulkApproveForm initialEligible={counts.bulk_safe_pending} />
       </Panel>
 
       <div style={{ height: 16 }} />
 
-      <Panel title={`Set aliases (${aliases.length})`} eyebrow="Resolves broad PP sets to specific TCGGraph set codes">
-        <SetAliasPanel initialAliases={aliases} />
-      </Panel>
+      <Notice tone="info">
+        Approvals in this workbench do not switch live pricing. Phase-8 activation (reading TCGGraph prices onto
+        PokePrices pages) is intentionally disabled. Public URLs, SEO, images and <code>card_trends</code> are
+        untouched.
+      </Notice>
 
       <div style={{ height: 16 }} />
 
-      <Panel title="Mapping queue" eyebrow="Filterable list">
+      {/* C — Cards needing my review */}
+      <Panel title={`Cards needing my review (${listResult.total.toLocaleString()})`} eyebrow="C · prioritised by commercial importance">
         <FilterBar>
           <form method="GET" action="/admin/pokemon-matching" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
             <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12 }}>
@@ -115,10 +134,10 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
                 <option value="promos">Promos</option>
                 <option value="japanese">Japanese</option>
                 <option value="vintage">Vintage/WOTC</option>
-                <option value="unsupported_variants">Unsupported variants</option>
+                <option value="unsupported_variants">Conflicting variants</option>
+                <option value="high_traffic">High traffic (GSC)</option>
                 <option value="needs_review">Needs review</option>
                 <option value="no_equivalent">No TCG equivalent</option>
-                <option value="high_traffic">High traffic (GSC)</option>
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12 }}>
@@ -164,8 +183,8 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
             <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12 }}>
               <span>Sort</span>
               <select name="sort" defaultValue={sort} className="ui-select">
-                <option value="default">Set + slug</option>
                 <option value="commercial">High traffic first</option>
+                <option value="default">Set + slug</option>
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12, flex: 1, minWidth: 220 }}>
@@ -187,14 +206,13 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
               key: 'pp',
               header: 'PokePrices card',
               render: (r) => (
-                <div>
+                <Link href={`/admin/pokemon-matching/${encodeURIComponent(r.pp_card_slug)}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
                   <div style={{ fontWeight: 600 }}>{r.pp_card_name || r.pp_card_slug}</div>
                   <div style={{ fontSize: 11, color: 'var(--muted, #888)' }}>
                     {r.pp_set_name} · {r.pp_language}
                     {r.commercial_rank != null && <> · <strong>GSC #{r.commercial_rank}</strong></>}
-                    {' · slug ' + r.pp_card_slug}
                   </div>
-                </div>
+                </Link>
               ),
             },
             {
@@ -217,21 +235,20 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
               key: 'conf',
               header: 'Confidence',
               render: (r) => r.confidence ? <StatusBadge state={({
-                verified: 'ok' as const,
-                high: 'approved' as const,
-                medium: 'info' as const,
-                low: 'warning' as const,
-              })[r.confidence] || 'info'} label={r.confidence} /> : <span style={{ color: 'var(--muted, #888)' }}>—</span>,
+                verified: 'ok' as const, high: 'approved' as const, medium: 'info' as const, low: 'warning' as const,
+              })[r.confidence] || 'info'} label={r.confidence} /> : <span>—</span>,
+            },
+            {
+              key: 'reason',
+              header: 'Reason review needed',
+              render: (r) => <span style={{ fontSize: 11, color: '#555' }}>{reviewReason(r)}</span>,
             },
             {
               key: 'elig',
-              header: 'Pricing elig.',
+              header: 'Pricing',
               render: (r) => r.pricing_eligibility ? <StatusBadge state={({
-                bulk_safe: 'ok' as const,
-                market_only: 'info' as const,
-                identity_only: 'warning' as const,
-                not_eligible: 'critical' as const,
-                uncertain: 'pending' as const,
+                bulk_safe: 'ok' as const, market_only: 'info' as const, identity_only: 'warning' as const,
+                not_eligible: 'critical' as const, uncertain: 'pending' as const,
               })[r.pricing_eligibility] || 'info'} label={r.pricing_eligibility} /> : <span>—</span>,
             },
             {
@@ -239,20 +256,12 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
               header: 'Status',
               render: (r) => <StatusBadge
                 state={({
-                  approved: 'approved' as const,
-                  pending_review: 'pending' as const,
-                  rejected: 'rejected' as const,
-                  unmatched: 'warning' as const,
-                  no_tcg_equivalent: 'info' as const,
+                  approved: 'approved' as const, pending_review: 'pending' as const, rejected: 'rejected' as const,
+                  unmatched: 'warning' as const, no_tcg_equivalent: 'info' as const,
                   needs_price_verification: 'in_progress' as const,
                 })[r.review_status] || 'pending'}
                 label={r.review_status.replace(/_/g, ' ')}
               />,
-            },
-            {
-              key: 'actions',
-              header: '',
-              render: (r) => <Link className="ui-btn ui-btn--secondary ui-btn--sm" href={`/admin/pokemon-matching/${encodeURIComponent(r.pp_card_slug)}`}>Review</Link>,
             },
           ]}
           rows={listResult.rows}
@@ -267,6 +276,11 @@ export default async function PokemonMatchingPage({ searchParams }: PageProps) {
           </div>
         )}
       </Panel>
+
+      <div style={{ height: 16 }} />
+
+      {/* D — Set-alias management (collapsible, secondary) */}
+      <SetAliasSection initialAliases={aliases} />
     </AdminShell>
   );
 }
