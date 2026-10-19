@@ -376,7 +376,13 @@ export async function GET(req: Request) {
   };
 
   // 4. Get the ordered list of sets we still need to process this cycle
-  // Order: EN sets first (by set code), then JA sets (by set code).
+  //
+  // JA-INGEST-FIX: TCGGraph publishes some set codes (e.g. xy6, sv3,
+  // sm9) in BOTH English and Japanese catalogues with the same code
+  // and different `tcg_set_name`. The dedup key must be the composite
+  // (code, language) so each catalogue is refreshed independently.
+  // Deduping by set_code alone drops ~20 JA catalogues per cycle and
+  // leaves ~3,130 JA cards stale (observed 2026-10-19).
   const { data: observed } = await sb.from('pokemon_tcg_sets_observed')
     .select('tcg_set_code, tcg_set_name, tcg_language')
     .order('observed_at', { ascending: false });
@@ -384,12 +390,13 @@ export async function GET(req: Request) {
     await finish('failed', { error_message: 'no sets observed yet; run discovery first' });
     return NextResponse.json({ ok: false, error: 'no sets observed; run /api/cron/pp-tcg-discover first' }, { status: 500 });
   }
-  // Unique set codes, EN first then JA.
+  // Unique (set_code, language) pairs, EN first then JA, each alphabetical.
   const uniqSets: SetRow[] = [];
-  const seenCode = new Set<string>();
+  const seenPair = new Set<string>();
   for (const s of observed as SetRow[]) {
-    if (seenCode.has(s.tcg_set_code)) continue;
-    seenCode.add(s.tcg_set_code);
+    const key = `${s.tcg_set_code}|${s.tcg_language}`;
+    if (seenPair.has(key)) continue;
+    seenPair.add(key);
     uniqSets.push({ tcg_set_code: s.tcg_set_code, tcg_set_name: s.tcg_set_name, tcg_language: s.tcg_language });
   }
   uniqSets.sort((a, b) => {
@@ -397,9 +404,10 @@ export async function GET(req: Request) {
     return a.tcg_set_code.localeCompare(b.tcg_set_code);
   });
 
-  // Skip to just-after the cursor
+  // Skip to just-after the cursor. Composite key (code, language) so a
+  // JA-only cycle resumes correctly after processing all EN variants.
   const cursorIdx = cursorRow.last_set_code
-    ? uniqSets.findIndex(s => s.tcg_set_code === cursorRow.last_set_code)
+    ? uniqSets.findIndex(s => s.tcg_set_code === cursorRow.last_set_code && s.tcg_language === (cursorRow.last_language ?? s.tcg_language))
     : -1;
   const remaining = uniqSets.slice(cursorIdx + 1);
   if (remaining.length === 0) {
@@ -415,6 +423,7 @@ export async function GET(req: Request) {
   let setsProcessed = 0;
   let cardsUpserted = 0;
   let lastSetCode = cursorRow.last_set_code as string | null;
+  let lastLanguage = cursorRow.last_language as string | null;
   let lastRemaining: number | null = null;
   const providerCards: Array<Record<string, unknown>> = [];
   const marketRows: Array<Record<string, unknown>> = [];
@@ -450,6 +459,7 @@ export async function GET(req: Request) {
       cardsUpserted += cards.length;
       setsProcessed += 1;
       lastSetCode = s.tcg_set_code;
+      lastLanguage = s.tcg_language;
       // Read the latest `remaining` from the last response — we tracked it via the fetchJson wrapper.
       // Simpler: ping /v1/games/pokemon once at the end to get the latest number.
     } catch (err) {
@@ -494,12 +504,13 @@ export async function GET(req: Request) {
     lastRemaining = r.remaining;
   } catch { /* non-fatal */ }
 
-  // 8. Advance cursor
+  // 8. Advance cursor. allDoneNow uses uniqSets.length which now counts
+  // (code, language) PAIRS, so JA-only variants count toward completion.
   const allDoneNow = cursorIdx + 1 + setsProcessed >= uniqSets.length;
   await sb.from('pokemon_tcg_ingestion_cursor').update({
     state: allDoneNow ? 'completed_for_day' : 'running',
     last_set_code: lastSetCode,
-    last_language: remaining.length > 0 ? remaining[Math.min(setsProcessed - 1, remaining.length - 1)]?.tcg_language ?? null : null,
+    last_language: lastLanguage,
     cycle_credits_spent: (cursorRow.cycle_credits_spent ?? 0) + (observedSpend() ?? tracker.credits_billed),
     cycle_sets_processed: (cursorRow.cycle_sets_processed ?? 0) + setsProcessed,
     cycle_cards_upserted: (cursorRow.cycle_cards_upserted ?? 0) + cardsUpserted,
