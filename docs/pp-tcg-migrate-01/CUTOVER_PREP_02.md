@@ -153,7 +153,17 @@ UPDATE pokemon_tcg_pilot_cohort
 echo "1" | vercel env add PP_USE_TCGGRAPH_IMAGES production
 ```
 
-Any Vercel deploy must have the flag before it takes effect; use `vercel deploy --prod` or wait for the next automatic deploy.
+### Step 2b — REDEPLOY (required)
+
+**Vercel environment-variable changes do NOT propagate to running functions.** A fresh build must run after the env change for the new value to be picked up. Trigger it explicitly:
+
+```bash
+vercel deploy --prod
+# or push an empty commit:
+git commit --allow-empty -m "chore: redeploy for env change" && git push
+```
+
+Verify the new deployment is READY before moving to step 3 — otherwise the ISR revalidation runs against the old build and the pilot card still serves legacy.
 
 ### Step 3 — Invalidate the ISR cache for that card
 
