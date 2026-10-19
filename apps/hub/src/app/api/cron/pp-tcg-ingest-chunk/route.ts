@@ -43,16 +43,49 @@ interface SetRow {
   tcg_language: string;
 }
 
-async function fetchJson<T = unknown>(url: string, apiKey: string, tracker: { credits: number; requests: number }): Promise<{ status: number; body: T | null; remaining: number | null }> {
+interface RequestTracker {
+  /** Sum of `x-credits-cost` headers that TCGGraph actually billed. The
+   *  provider sets this header on paid endpoints; some free endpoints
+   *  omit it entirely. We no longer bill the default `1` to our tracker
+   *  for a missing header — that was the source of a ~68% overcount vs
+   *  the authoritative `x-credits-remaining` counter. */
+  credits_billed: number;
+  /** Count of requests where the header was present but zero (cache hits,
+   *  prefetched routes). Pure telemetry. */
+  requests_free: number;
+  /** Count of requests where no x-credits-cost header was returned at all.
+   *  These should correspond to free endpoints — tracked separately so we
+   *  can detect regressions. */
+  requests_unmetered: number;
+  requests: number;
+  /** Delta between the first and latest `x-credits-remaining` headers we
+   *  saw within this run. This is the AUTHORITATIVE spend figure. */
+  remaining_first: number | null;
+  remaining_last: number | null;
+}
+
+async function fetchJson<T = unknown>(url: string, apiKey: string, tracker: RequestTracker): Promise<{ status: number; body: T | null; remaining: number | null }> {
   tracker.requests += 1;
   const r = await fetch(url, {
     headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
   });
-  const cost = Number(r.headers.get('x-credits-cost'));
-  const remaining = Number(r.headers.get('x-credits-remaining'));
-  tracker.credits += Number.isFinite(cost) && cost > 0 ? cost : 1;
+  const costHeader = r.headers.get('x-credits-cost');
+  const remainingHeader = r.headers.get('x-credits-remaining');
+  const cost = costHeader == null ? null : Number(costHeader);
+  const remaining = remainingHeader == null ? null : Number(remainingHeader);
+  if (cost == null || !Number.isFinite(cost)) {
+    tracker.requests_unmetered += 1;
+  } else if (cost === 0) {
+    tracker.requests_free += 1;
+  } else {
+    tracker.credits_billed += cost;
+  }
+  if (remaining != null && Number.isFinite(remaining)) {
+    if (tracker.remaining_first == null) tracker.remaining_first = remaining;
+    tracker.remaining_last = remaining;
+  }
   const body = (await r.json().catch(() => null)) as T | null;
-  return { status: r.status, body, remaining: Number.isFinite(remaining) ? remaining : null };
+  return { status: r.status, body, remaining: Number.isFinite(remaining as number) ? (remaining as number) : null };
 }
 
 function sanitizeFinish(f: unknown): string | null {
@@ -84,7 +117,7 @@ type Card = {
   }>;
 };
 
-async function listCardsInSet(setCode: string, language: string, apiKey: string, tracker: { credits: number; requests: number }): Promise<Card[]> {
+async function listCardsInSet(setCode: string, language: string, apiKey: string, tracker: RequestTracker): Promise<Card[]> {
   const all: Card[] = [];
   let page = 1;
   while (true) {
@@ -222,7 +255,20 @@ export async function GET(req: Request) {
   const t0 = Date.now();
   const sb = createServiceRoleSupabase();
   const apiKey = getApiKey();
-  const tracker = { credits: 0, requests: 0 };
+  const tracker: RequestTracker = {
+    credits_billed: 0,
+    requests_free: 0,
+    requests_unmetered: 0,
+    requests: 0,
+    remaining_first: null,
+    remaining_last: null,
+  };
+  // Authoritative spend = delta of the TCGGraph counter observed by this run.
+  // Computed on finish; may be null if no priced calls were made.
+  const observedSpend = () =>
+    tracker.remaining_first != null && tracker.remaining_last != null
+      ? tracker.remaining_first - tracker.remaining_last
+      : null;
   const todayUtc = new Date().toISOString().slice(0, 10);
   const catalogueVersion = `daily-${todayUtc}`;
   // MIGRATE-05: operator-triggered bounded test runs can pass
@@ -325,7 +371,7 @@ export async function GET(req: Request) {
   const finish = async (state: 'completed' | 'failed', extra: Record<string, unknown> = {}) => {
     await sb.from('pokemon_tcg_ingestion_runs').update({
       state, finished_at: new Date().toISOString(),
-      credits_spent: tracker.credits, requests_made: tracker.requests, ...extra,
+      credits_spent: observedSpend() ?? tracker.credits_billed, requests_made: tracker.requests, ...extra,
     }).eq('id', run.id);
   };
 
@@ -413,7 +459,7 @@ export async function GET(req: Request) {
       }).eq('id', cursorRow.id);
       return NextResponse.json({
         ok: false, error: `set ${s.tcg_set_code}: ${(err as Error).message}`,
-        sets_processed: setsProcessed, credits_spent: tracker.credits,
+        sets_processed: setsProcessed, credits_spent: observedSpend() ?? tracker.credits_billed,
       }, { status: 500 });
     }
   }
@@ -454,7 +500,7 @@ export async function GET(req: Request) {
     state: allDoneNow ? 'completed_for_day' : 'running',
     last_set_code: lastSetCode,
     last_language: remaining.length > 0 ? remaining[Math.min(setsProcessed - 1, remaining.length - 1)]?.tcg_language ?? null : null,
-    cycle_credits_spent: (cursorRow.cycle_credits_spent ?? 0) + tracker.credits,
+    cycle_credits_spent: (cursorRow.cycle_credits_spent ?? 0) + (observedSpend() ?? tracker.credits_billed),
     cycle_sets_processed: (cursorRow.cycle_sets_processed ?? 0) + setsProcessed,
     cycle_cards_upserted: (cursorRow.cycle_cards_upserted ?? 0) + cardsUpserted,
     updated_at: new Date().toISOString(),
@@ -472,14 +518,24 @@ export async function GET(req: Request) {
     },
   });
 
+  const authoritativeSpend = observedSpend();
   return NextResponse.json({
     ok: true,
     sets_processed: setsProcessed,
     cards_upserted: cardsUpserted,
-    credits_spent: tracker.credits,
+    // Authoritative: delta of x-credits-remaining observed by this run.
+    credits_spent: authoritativeSpend ?? tracker.credits_billed,
+    // Diagnostic: all three locally-computed counters for transparency.
+    credits_telemetry: {
+      authoritative_observed_delta: authoritativeSpend,
+      billed_from_cost_headers: tracker.credits_billed,
+      requests_total: tracker.requests,
+      requests_free: tracker.requests_free,
+      requests_unmetered: tracker.requests_unmetered,
+    },
     monthly_remaining: lastRemaining,
     cycle_complete: allDoneNow,
-    cycle_total_credits: (cursorRow.cycle_credits_spent ?? 0) + tracker.credits,
+    cycle_total_credits: (cursorRow.cycle_credits_spent ?? 0) + (authoritativeSpend ?? tracker.credits_billed),
     cycle_total_sets: (cursorRow.cycle_sets_processed ?? 0) + setsProcessed,
     last_set_code: lastSetCode,
     sets_remaining: uniqSets.length - (cursorIdx + 1 + setsProcessed),
