@@ -117,9 +117,19 @@ type Card = {
   }>;
 };
 
-async function listCardsInSet(setCode: string, language: string, apiKey: string, tracker: RequestTracker): Promise<Card[]> {
+interface ListCardsResult {
+  cards: Card[];
+  /** True only when pagination terminated naturally via hasMore=false
+   *  (or an empty page). False means we hit the page-20 safety cap —
+   *  the response is INCOMPLETE and the reclassification detector
+   *  must not mark anything from this set this cycle. */
+  complete: boolean;
+}
+
+async function listCardsInSet(setCode: string, language: string, apiKey: string, tracker: RequestTracker): Promise<ListCardsResult> {
   const all: Card[] = [];
   let page = 1;
+  let complete = false;
   while (true) {
     const u = new URL('https://api.tcggraph.com/v1/cards');
     u.searchParams.set('game', 'pokemon');
@@ -131,11 +141,11 @@ async function listCardsInSet(setCode: string, language: string, apiKey: string,
     if (r.status !== 200 || !r.body) throw new Error(`cards ${setCode} p${page}: HTTP ${r.status}`);
     const rows = r.body.data ?? [];
     all.push(...rows);
-    if (!r.body.meta?.hasMore || rows.length === 0) break;
+    if (!r.body.meta?.hasMore || rows.length === 0) { complete = true; break; }
     page += 1;
-    if (page > 20) break;
+    if (page > 20) break;  // INCOMPLETE — safety cap; `complete` stays false
   }
-  return all;
+  return { cards: all, complete };
 }
 
 function cardToProviderRows(card: Card, catalogueVersion: string) {
@@ -428,6 +438,13 @@ export async function GET(req: Request) {
   const providerCards: Array<Record<string, unknown>> = [];
   const marketRows: Array<Record<string, unknown>> = [];
   const gradedRows: Array<Record<string, unknown>> = [];
+  // PP-TCG-PRINTING-RECLASS-CLOSEOUT §2 — per-set reclassification
+  // input, captured ONLY when pagination completed naturally.
+  const reclassWorkPerSet: Array<{
+    setCode: string;
+    language: string;
+    apiCards: Array<{ id: string; printing_keys: string[] }>;
+  }> = [];
 
   for (const s of remaining) {
     if (Date.now() - t0 > TIME_BUDGET_MS) break;
@@ -449,12 +466,29 @@ export async function GET(req: Request) {
 
     try {
       // Fetch all cards in this set + language
-      const cards = await listCardsInSet(s.tcg_set_code, s.tcg_language, apiKey, tracker);
+      const listed = await listCardsInSet(s.tcg_set_code, s.tcg_language, apiKey, tracker);
+      const cards = listed.cards;
       for (const c of cards) {
         const { providerCardRows, marketRows: mr, gradedRows: gr } = cardToProviderRows(c, catalogueVersion);
         providerCards.push(...providerCardRows);
         marketRows.push(...mr);
         gradedRows.push(...gr);
+      }
+      // Printing-reclassification detection — only run when pagination
+      // was COMPLETE for this set. Safe-fail: if listed.complete is
+      // false (we hit the page-20 cap or any error path), we have an
+      // incomplete picture and must NOT mark anything.
+      if (listed.complete && cards.length > 0) {
+        reclassWorkPerSet.push({
+          setCode: s.tcg_set_code,
+          language: s.tcg_language,
+          apiCards: cards.map(c => ({
+            id: c.id,
+            printing_keys: c.printings?.length
+              ? [...new Set(c.printings.map(p => p.key || 'normal'))]
+              : ['normal'],
+          })),
+        });
       }
       cardsUpserted += cards.length;
       setsProcessed += 1;
@@ -497,6 +531,54 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   }
 
+  // 6.5 Printing-reclassification detection — zero additional API calls.
+  //
+  // For each (set, language) whose listCardsInSet pagination terminated
+  // naturally (listed.complete=true), compare the API's returned
+  // (card_id, printing_key) pairs to the currently-active stored rows.
+  // Rows whose (card_id) IS in the API response but whose printing_key
+  // is NOT — strong evidence of a provider reclassification. Mark those
+  // rows provider_status='superseded'. No deletion. No touch to
+  // prices_market, prices_graded, or prices_history. Rows for card_ids
+  // ABSENT from the API response are LEFT ACTIVE — could be a
+  // transiently absent card OR a genuine removal, operator decides.
+  //
+  // Safe-by-default: if listed.complete was false (page-20 cap hit),
+  // this set's entry is not in reclassWorkPerSet and nothing is
+  // marked for it this cycle.
+  let reclassMarked = 0;
+  if (reclassWorkPerSet.length > 0) {
+    for (const w of reclassWorkPerSet) {
+      // Build card_id → set of printing_keys from the complete API response.
+      const apiPrintings = new Map<string, Set<string>>();
+      for (const c of w.apiCards) apiPrintings.set(c.id, new Set(c.printing_keys));
+      // Pull stored active rows for this (set, lang).
+      const { data: storedActive } = await sb.from('pokemon_tcg_provider_cards')
+        .select('id, tcg_card_id, tcg_printing_key')
+        .eq('provider', 'tcggraph')
+        .eq('tcg_set_code', w.setCode)
+        .eq('tcg_language', w.language)
+        .eq('provider_status', 'active');
+      const orphans: Array<{ id: string; supersededByKey: string }> = [];
+      for (const sRow of (storedActive ?? [])) {
+        const apiKeys = apiPrintings.get(sRow.tcg_card_id);
+        if (!apiKeys) continue;                              // card_id absent → leave active
+        if (apiKeys.has(sRow.tcg_printing_key)) continue;    // printing still exists → active
+        // Same card_id, different printing_key → reclassified
+        orphans.push({ id: sRow.id, supersededByKey: [...apiKeys][0] ?? 'unknown' });
+      }
+      for (const o of orphans) {
+        await sb.from('pokemon_tcg_provider_cards').update({
+          provider_status: 'superseded',
+          superseded_at: new Date().toISOString(),
+          superseded_reason: `chunk cron: tcggraph reclassified printing_key for ${w.setCode}|${w.language}`,
+          superseded_by_printing_key: o.supersededByKey,
+        }).eq('id', o.id).eq('provider_status', 'active');   // optimistic — never double-mark
+        reclassMarked += 1;
+      }
+    }
+  }
+
   // 7. Peek current credits for monitoring
   try {
     const u = new URL('https://api.tcggraph.com/v1/games/pokemon');
@@ -526,6 +608,8 @@ export async function GET(req: Request) {
       cycle_complete: allDoneNow,
       sets_processed_this_run: setsProcessed,
       monthly_remaining: lastRemaining,
+      reclass_marked_superseded: reclassMarked,
+      reclass_sets_scanned: reclassWorkPerSet.length,
     },
   });
 
@@ -537,6 +621,8 @@ export async function GET(req: Request) {
     // Authoritative: delta of x-credits-remaining observed by this run.
     credits_spent: authoritativeSpend ?? tracker.credits_billed,
     // Diagnostic: all three locally-computed counters for transparency.
+    reclass_marked_superseded: reclassMarked,
+    reclass_sets_scanned: reclassWorkPerSet.length,
     credits_telemetry: {
       authoritative_observed_delta: authoritativeSpend,
       billed_from_cost_headers: tracker.credits_billed,
