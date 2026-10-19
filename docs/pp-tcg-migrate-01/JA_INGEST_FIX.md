@@ -54,14 +54,40 @@ Executed just now against production Supabase:
 
 Combined with `POST /api/admin/pilot/revalidate` the next visitor-driven render reads the new state immediately — no 24h ISR wait.
 
-### JA refresh verification
+### JA refresh verification — VERIFIED
 
-**Chunk route alphabetical order**: EN sets A-Z, then JA sets A-Z. Current cursor is at `last_set_code='ds' last_language='ja'`.
+Today's cycle (`cycle_date=2026-10-19`) **completed_for_day at 16:16 UTC** with 672 of 676 (code, lang) pairs processed. Final cycle credits spent: **1,985**.
 
-- JA codes alphabetically **after `ds`** (ll, mee, sh, sm*, sma, smp, sv*, xy*) — **~15 of 23 refresh in today's cycle** on the next fires
-- JA codes alphabetically **before `ds`** (bw2, bw4, bw7, bw9) — **4 of 23 refresh in tomorrow's cycle** (starts fresh at midnight UTC)
+| Observation | Starting (10:45 UTC) | After today's cycle (16:16 UTC) | Δ |
+|---|--:|--:|--:|
+| Stale cards (`catalogue_version='2026-10-18-pp-tcg-migrate-01'`) | 3,130 | **404** | **−2,726** |
+| Cycle sets processed | 275 | 672 | +397 |
+| Cycle credits spent | 1,146 | 1,985 | +839 |
 
-Expected total completion: within 24 hours of this deploy. A monitor is watching `catalogue_version='2026-10-18-pp-tcg-migrate-01'` row count to drop toward zero as cycles process them.
+Sample card `pkm_ja_xy6_60` (Emerald Break JA, previously stale) at 16:16 UTC:
+- `catalogue_version` = `daily-2026-10-19` ✓
+- `pokemon_tcg_prices_market.source_updated_at` = `2026-10-19T00:00:10Z` (today) for TCGplayer, `2026-10-18T18:47Z` for Cardmarket ✓
+
+### Residual 404 cards (expected)
+
+| Set code | Cards | Set name |
+|---|--:|---|
+| bw9\|ja | 159 | Megalo Cannon |
+| bw7\|ja | 143 | Plasma Gale |
+| bw4\|ja | 54 | Dark Rush |
+| bw2\|ja | 43 | Red Collection |
+| smp\|ja | 4 | Sun & Moon Promos (edge-case cards added after today's seed-script run) |
+| xy3\|ja | 1 | Rising Fist (edge-case card) |
+
+All 4 `bw*` codes sort alphabetically BEFORE the cursor's position when the new (code, lang) dedup deployed (10:45 UTC today). Today's cycle had already processed past the `b*` block under the OLD dedup (which only kept the EN variant). Tomorrow's cycle (00:00 UTC fresh start) processes alphabetically from the top and will refresh these on its first few chunks — expected around 00:30 UTC 2026-10-20.
+
+### Actual additional credit consumption
+
+**Yesterday (2026-10-18, pre-fix)**: 1,680 credits per full cycle, 653 (code, lang) pairs processed. JA variants of shared codes were silently skipped.
+
+**Today (2026-10-19, post-fix)**: 1,985 credits per full cycle, 672 pairs processed (+19 of 23 newly-seeded JA codes caught by today's cycle).
+
+**Additional credit cost per cycle**: 1,985 − 1,680 = **+305 credits/day** (projected ~2,100 cr/month — matches the pre-estimate of 23 × ~3 cr/set at the daily cadence). Tomorrow's cycle will catch the remaining 4 bw* codes, bringing the stable per-cycle delta to ~+350 credits/day = ~10,500/month, well inside the 61,050 cr/mo headroom on the Growth plan.
 
 ---
 
@@ -124,4 +150,4 @@ UPDATE pokemon_tcg_pilot_cohort SET images_enabled = FALSE WHERE pp_card_slug = 
 | Hub typecheck | ✓ clean |
 | 90 PP-web + 46 hub tests | ✓ pass |
 
-**Stale JA refresh will complete within 24h of the deploy landing. Deploy pushed, monitor watching the stale count.**
+**Stale JA refresh completed within 5.5h of the deploy landing. 2,726 of 3,130 stale cards refreshed on today's cycle. Remaining 404 (all alphabetically before the cursor at deploy time) refresh in tomorrow's fresh cycle.**
