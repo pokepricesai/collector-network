@@ -28,13 +28,6 @@ export function CurrencyToggle({ initial }: { initial: OpCurrency }) {
         setCurrent(initial);
         return;
       }
-      // CN-COST-03: fire the window event so ISR'd pages
-      // (TreatmentPrice on /card/[slug]) flip currency without a
-      // reload. router.refresh() stays for Dynamic routes whose
-      // server read the cookie via getCurrencyPreference().
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('onepiece:currency-changed'));
-      }
       router.refresh();
     });
   }

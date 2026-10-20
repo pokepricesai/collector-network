@@ -1,50 +1,11 @@
-'use client';
+import type { PrintingPricing } from '@collector-network/market-data';
+import { formatPrice } from '@/lib/onepiece/format-price';
+import { pickHeadlinePrice, HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
+import { CURRENCY_SOURCE_NAME, type OpCurrency } from '@/lib/onepiece/currency';
 
 // Price summary for a single priced printing. Reads the caller's
 // PrintingPricing (retail + attribution='printing' graded) and renders
 // only the buckets that have data. Never mixes currencies.
-//
-// CN-COST-03: converted to a client component mirroring the Lorcana
-// P1a pattern so pages served from the ISR edge cache can swap the
-// display currency without baking it into the HTML.
-//
-//   - First render matches the server HTML (DEFAULT_CURRENCY — no
-//     document.cookie access on the server; OPP's default is EUR).
-//   - On ISR routes the caller omits `currency`; the useEffect reads
-//     the real `op_currency` cookie on mount and re-renders.
-//   - On Dynamic routes the server already read the cookie via
-//     getCurrencyPreference(); the caller passes `currency` explicitly
-//     and the hook deliberately does NOT override it.
-//
-// Subscribes to `onepiece:currency-changed` (fired by CurrencyToggle)
-// so a toggle flips the panel without a reload.
-
-import { useEffect, useState } from 'react';
-import type { PrintingPricing } from '@collector-network/market-data';
-import { formatPrice } from '@/lib/onepiece/format-price';
-import { pickHeadlinePrice, HEADLINE_SIGNAL_LABEL } from '@/lib/onepiece/pick-headline';
-import {
-  CURRENCY_COOKIE,
-  CURRENCY_SOURCE_NAME,
-  DEFAULT_CURRENCY,
-  isOpCurrency,
-  type OpCurrency,
-} from '@/lib/onepiece/currency';
-
-function readCurrencyCookie(): OpCurrency {
-  if (typeof document === 'undefined') return DEFAULT_CURRENCY;
-  const prefix = `${CURRENCY_COOKIE}=`;
-  const parts = document.cookie ? document.cookie.split(';') : [];
-  for (const raw of parts) {
-    const trimmed = raw.trim();
-    if (trimmed.startsWith(prefix)) {
-      const value = decodeURIComponent(trimmed.slice(prefix.length));
-      if (isOpCurrency(value)) return value;
-      return DEFAULT_CURRENCY;
-    }
-  }
-  return DEFAULT_CURRENCY;
-}
 
 // Turn a `RetailQuote.source` string into the marketplace it belongs
 // to. Sources look like `tcggraph.tcgplayer` or
@@ -64,27 +25,13 @@ export default function TreatmentPrice({
   currency,
 }: {
   pricing: PrintingPricing;
-  /** Starting currency. Omit (or pass undefined) on ISR'd pages so
-   *  the component falls back to DEFAULT_CURRENCY on first render
-   *  and reads the cookie after mount. Pass a value on Dynamic
-   *  routes where the server already read the cookie. */
+  /** Currency preference from the request cookie. Defaults to USD to
+   *  preserve prior behaviour when a caller hasn't wired the header
+   *  yet. */
   currency?: OpCurrency;
 }) {
-  const serverCurrency = currency ?? DEFAULT_CURRENCY;
-  const [resolved, setResolved] = useState<OpCurrency>(serverCurrency);
-
-  useEffect(() => {
-    // Only override from the cookie when the caller did NOT already
-    // pass a currency (ISR mode). On Dynamic routes the server read
-    // the cookie itself and knows better than we do here.
-    if (currency !== undefined) return;
-    setResolved(readCurrencyCookie());
-    const onChange = () => setResolved(readCurrencyCookie());
-    window.addEventListener('onepiece:currency-changed', onChange);
-    return () => window.removeEventListener('onepiece:currency-changed', onChange);
-  }, [currency]);
-
-  const headline = pickHeadlinePrice(pricing.market, resolved);
+  const cur: OpCurrency = currency ?? 'USD';
+  const headline = pickHeadlinePrice(pricing.market, cur);
 
   const rawFloor = pickLowestNonNull(
     pricing.raw.map((r) => ({ price: r.price, currency: r.currency })),
