@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getCurrentUser } from '@collector-network/auth';
 import {
   getCardBundleByName,
   getCardFamilyByBaseCollector,
@@ -17,13 +16,11 @@ import {
 import { pickCardImage } from '@/lib/onepiece/image';
 import { renderEffectText } from '@/lib/onepiece/render-effect';
 import { OP_COLOUR_LABEL } from '@/lib/onepiece/colour';
-import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { TREATMENT_DISPLAY_ORDER } from '@/lib/onepiece/treatment';
 import CardStatGrid from '@/components/card/CardStatGrid';
 import TreatmentPanel from '@/components/card/TreatmentPanel';
-import LogicalAddToCollection, {
-  type PrintingPick,
-} from '@/components/card/LogicalAddToCollection';
+import { type PrintingPick } from '@/components/card/LogicalAddToCollection';
+import { LogicalCardActionsClient } from '@/components/card/LogicalCardActionsClient';
 import AskOnePiecePanel from '@/components/card/AskOnePiecePanel';
 import Faq from '@/components/Faq';
 import EbayAffiliateDisclosure from '@/components/EbayAffiliateDisclosure';
@@ -34,9 +31,28 @@ import type { OpCardView, OpPrintingView } from '@/server/read';
 // grouped by treatment. This is the URL that answers "how many
 // treatments exist for Monkey D. Luffy, and what does each cost?" —
 // the single most collector-relevant question in One Piece.
+//
+// CN-COST-03: on-demand ISR, mirroring the YGO P0-5 and Lorcana P1c
+// architecture:
+//   - revalidate = 86_400 (24h) matches the nightly tcggraph refresh.
+//   - dynamicParams = true + generateStaticParams(): [] opts the
+//     route into the Full Route Cache without build-time
+//     enumeration.
+//   - All cookie reads (session, currency) were lifted off the
+//     server tree. LogicalCardActionsClient resolves the signed-in
+//     state client-side via supabase.auth; TreatmentPrice reads the
+//     op_currency cookie after mount and listens to the
+//     `onepiece:currency-changed` event fired by CurrencyToggle.
 
-export const revalidate = 900;
-export const dynamic = 'force-dynamic';
+export const revalidate = 86_400;
+export const dynamicParams = true;
+
+export function generateStaticParams(): { slug: string }[] {
+  // Intentionally empty — on-demand ISR only. The ~2-3k logical-
+  // card URL universe fills the cache from real traffic rather
+  // than paying a mass Supabase scan at build time.
+  return [];
+}
 
 // Resolve a card family from the URL slug. The new (correct) shape is
 // `${baseCollectorSlug}-${nameSlug}` — for example
@@ -152,11 +168,10 @@ export default async function LogicalCardPage({
   const heroImage = pickCardImage(heroCard.card.images);
   const baseCollectorLabel = fam.baseCollector ?? heroCard.card.collector_number ?? '';
 
-  // Load current user server-side so LogicalAddToCollection can render
-  // its signed-in vs signed-out state without a client fetch.
-  const currentUser = await getCurrentUser();
+  // CN-COST-03: user session + currency are resolved client-side.
+  // LogicalCardActionsClient reads the supabase auth session on
+  // mount; TreatmentPrice reads the op_currency cookie on mount.
   const returnPath = `/card/${slug}`;
-  const currency = await getCurrencyPreference();
 
   // Materialise every real printing as a PrintingPick for the picker —
   // never a synthetic default row.
@@ -265,11 +280,12 @@ export default async function LogicalCardPage({
 
             {/* Primary Add-to-Collection surface — printing picker
                 inline so users pick the exact printing.id (never an
-                ambiguous row). Signed-out shows Sign up + Sign in. */}
+                ambiguous row). Signed-out shows Sign up + Sign in.
+                Client wrapper resolves signed-in state after mount
+                so the server HTML can be cached by ISR. */}
             <div style={{ marginTop: 4 }}>
-              <LogicalAddToCollection
+              <LogicalCardActionsClient
                 cardName={bundle.name}
-                isSignedIn={Boolean(currentUser)}
                 returnPath={returnPath}
                 printings={printingPicks}
               />
@@ -369,13 +385,16 @@ export default async function LogicalCardPage({
                 }}
               >
                 {group.entries.map(({ cardView, printingView }) => (
+                  // CN-COST-03: no `currency` prop on the ISR'd
+                  // card page. TreatmentPrice (inside TreatmentPanel)
+                  // reads the op_currency cookie on mount and listens
+                  // to the onepiece:currency-changed event.
                   <TreatmentPanel
                     key={printingView.printing.id}
                     cardView={cardView}
                     printingView={printingView}
                     linkToPrinting
                     imageUrl={pickCardImage(cardView.card.images)}
-                    currency={currency}
                   />
                 ))}
               </div>
