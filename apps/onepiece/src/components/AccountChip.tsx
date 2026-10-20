@@ -1,16 +1,98 @@
+'use client';
+
+// Right-side navbar auth slot. Client island so the root layout can
+// stay static and every public page can be classified as
+// prerender-able (CN-COST-03).
+//
+// Mirror of apps/lorcana/src/components/AccountChip.tsx — same
+// three-state shape (loading / anon / user) with OPP-specific
+// visual output (Dashboard link → /account, settings avatar →
+// /settings with the user's initial).
+//
+// Three render states:
+//   loading     — neutral width-stable shell while the session
+//                 query resolves. Never flashes "Sign in" to a
+//                 signed-in user.
+//   signed-out  — Sign in (outlined) + Sign up (gold filled)
+//   signed-in   — Dashboard (outlined, → /account) + round
+//                 /settings link with the user's initial
+//
+// Auth state is kept live via supabase.auth.onAuthStateChange so
+// signing in / out updates the chip without a full page reload.
+//
+// PRESENTATION ONLY. Server authorisation (protected pages,
+// server actions, API routes) still re-reads the session via
+// Supabase RLS. Flashing a wrong UI state would be a UX bug,
+// never an authorisation hole.
+
 import Link from 'next/link';
-import { getCurrentUser } from '@collector-network/auth';
+import { useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { createBrowserSupabase } from '@collector-network/auth';
 
-// Auth chip rendered inside the Navbar. Server component so we can
-// read the session cookie on every request. Signed-out state = a
-// simple "Sign in" link; signed-in state = a chip that links to
-// /account (avatar UI stays minimal until we build a mini-dropdown).
+type AuthState =
+  | { status: 'loading' }
+  | { status: 'anon' }
+  | { status: 'user'; user: User };
 
-export async function AccountChip() {
-  const user = await getCurrentUser();
-  if (!user) {
+export function AccountChip() {
+  const [auth, setAuth] = useState<AuthState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createBrowserSupabase();
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (cancelled) return;
+        setAuth(
+          session?.user
+            ? { status: 'user', user: session.user }
+            : { status: 'anon' },
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setAuth({ status: 'anon' });
+      });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuth(
+        session?.user
+          ? { status: 'user', user: session.user }
+          : { status: 'anon' },
+      );
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  if (auth.status === 'loading') {
+    // Width-stable placeholder sized to roughly match the signed-out
+    // Sign in + Sign up footprint so the navbar does not shift when
+    // auth resolves.
+    return (
+      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        <span
+          aria-hidden
+          style={{
+            display: 'inline-block',
+            width: 140,
+            height: 32,
+            borderRadius: 10,
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (auth.status === 'anon') {
     // Signed-out: show both Sign in + Sign up so the primary
-    // acquisition CTA is always visible in the header.
+    // acquisition CTA is always visible in the header. Visual output
+    // matches the previous server-rendered AccountChip exactly.
     return (
       <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
         <Link
@@ -47,8 +129,10 @@ export async function AccountChip() {
       </div>
     );
   }
+
+  const user = auth.user;
   const initial =
-    (user.email ?? user.user_metadata?.['full_name'] ?? 'U')
+    (user.email ?? (user.user_metadata?.['full_name'] as string | undefined) ?? 'U')
       .toString()
       .charAt(0)
       .toUpperCase() || 'U';
