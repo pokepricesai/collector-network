@@ -8,7 +8,6 @@ import Footer from '@/components/Footer';
 import SiteStructuredData from '@/components/SiteStructuredData';
 import { AccountChip } from '@/components/AccountChip';
 import { CurrencyToggle } from '@/components/CurrencyToggle';
-import { getCurrencyPreference } from '@/lib/onepiece/currency-server';
 import { SITE_LAUNCHED, SITE_URL } from '@/lib/site-url';
 
 const SITE_NAME = 'OnePiecePrices';
@@ -86,8 +85,11 @@ export const viewport: Viewport = {
   themeColor: '#FBF5E6',
 };
 
-export default async function RootLayout({ children }: { children: ReactNode }) {
-  const currency = await getCurrencyPreference();
+export default function RootLayout({ children }: { children: ReactNode }) {
+  // CN-COST-03 B: no cookie read here. CurrencyToggle resolves the
+  // op_currency cookie client-side on mount so the layout can be
+  // part of the Full Route Cache. AccountChip already lifted to a
+  // client island in CN-COST-03 A.
   return (
     <html lang="en">
       <head>
@@ -117,7 +119,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <SiteStructuredData />
         <Navbar
           accountSlot={<AccountChip />}
-          currencySlot={<CurrencyToggle initial={currency} />}
+          currencySlot={<CurrencyToggle />}
         />
         <main className="flex-1">{children}</main>
         <Footer />

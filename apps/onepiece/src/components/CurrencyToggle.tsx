@@ -1,17 +1,62 @@
 'use client';
 
 // Site-wide currency toggle. Two segmented buttons EUR | USD. Sets a
-// cookie via /api/currency then refreshes the current route so every
-// server component re-reads pricing in the selected currency.
+// cookie via /api/currency then (a) dispatches onepiece:currency-
+// changed so ISR'd pages flip the display without a reload, and
+// (b) calls router.refresh() so Dynamic routes whose server read
+// the cookie re-render.
+//
+// CN-COST-03 B: `initial` is now optional. When omitted (ISR / Full
+// Route Cache callers like the root layout), the component starts
+// at DEFAULT_CURRENCY and reads the real op_currency cookie after
+// mount — matching the server HTML's initial render exactly and
+// avoiding hydration mismatch.
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
-import { OP_CURRENCIES, type OpCurrency } from '@/lib/onepiece/currency';
+import { useEffect, useState, useTransition } from 'react';
+import {
+  CURRENCY_COOKIE,
+  DEFAULT_CURRENCY,
+  OP_CURRENCIES,
+  isOpCurrency,
+  type OpCurrency,
+} from '@/lib/onepiece/currency';
 
-export function CurrencyToggle({ initial }: { initial: OpCurrency }) {
+function readCurrencyCookie(): OpCurrency {
+  if (typeof document === 'undefined') return DEFAULT_CURRENCY;
+  const prefix = `${CURRENCY_COOKIE}=`;
+  const parts = document.cookie ? document.cookie.split(';') : [];
+  for (const raw of parts) {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith(prefix)) {
+      const value = decodeURIComponent(trimmed.slice(prefix.length));
+      if (isOpCurrency(value)) return value;
+      return DEFAULT_CURRENCY;
+    }
+  }
+  return DEFAULT_CURRENCY;
+}
+
+export function CurrencyToggle({ initial }: { initial?: OpCurrency }) {
   const router = useRouter();
-  const [current, setCurrent] = useState<OpCurrency>(initial);
+  // Start at `initial` when a Dynamic caller supplied one, else
+  // DEFAULT_CURRENCY so the first client render matches the server
+  // HTML (which cannot see document.cookie). The real cookie is
+  // read in the useEffect below, so an EUR-cookie visitor on an
+  // ISR'd page sees one frame of DEFAULT before the toggle snaps.
+  const [current, setCurrent] = useState<OpCurrency>(initial ?? DEFAULT_CURRENCY);
   const [pending, start] = useTransition();
+
+  useEffect(() => {
+    // Only override from the cookie when the caller did NOT already
+    // pass `initial`. Dynamic routes' servers resolved the cookie
+    // themselves and know better than we do here.
+    if (initial !== undefined) return;
+    setCurrent(readCurrencyCookie());
+    const onChange = () => setCurrent(readCurrencyCookie());
+    window.addEventListener('onepiece:currency-changed', onChange);
+    return () => window.removeEventListener('onepiece:currency-changed', onChange);
+  }, [initial]);
 
   function pick(c: OpCurrency) {
     if (c === current) return;
@@ -25,8 +70,15 @@ export function CurrencyToggle({ initial }: { initial: OpCurrency }) {
         });
       } catch {
         // Revert visually if the server rejected the change.
-        setCurrent(initial);
+        setCurrent(current);
         return;
+      }
+      // Fire the window event so ISR'd pages (TreatmentPrice and
+      // any other cookie-aware island) flip currency without a
+      // reload. router.refresh() stays for Dynamic routes whose
+      // server read the cookie via getCurrencyPreference().
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('onepiece:currency-changed'));
       }
       router.refresh();
     });
