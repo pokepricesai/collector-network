@@ -577,6 +577,57 @@ export async function GET(req: Request) {
         reclassMarked += 1;
       }
     }
+    // PP-TCG-MATCH-FINAL §7 — flag approved mappings that now reference
+    // a superseded (card_id, printing_key). Writes a warning into the
+    // existing pokemon_tcg_mapping_qa.warnings array so the admin
+    // workbench surfaces the affected mappings without a new dashboard.
+    // Only acts on approved mappings — pending ones already see this
+    // state in the normal risk_class flow.
+    try {
+      const supersededPairs = new Set<string>();
+      for (const w of reclassWorkPerSet) {
+        const apiPrintings = new Map<string, Set<string>>();
+        for (const c of w.apiCards) apiPrintings.set(c.id, new Set(c.printing_keys));
+        // Query the rows we just marked for this set
+        const { data: supInThisSet } = await sb.from('pokemon_tcg_provider_cards')
+          .select('tcg_card_id, tcg_printing_key')
+          .eq('provider', 'tcggraph')
+          .eq('tcg_set_code', w.setCode)
+          .eq('tcg_language', w.language)
+          .eq('provider_status', 'superseded');
+        for (const r of (supInThisSet ?? [])) supersededPairs.add(`${r.tcg_card_id}|${r.tcg_printing_key}`);
+      }
+      if (supersededPairs.size > 0) {
+        // Find approved mappings pointing at any of those pairs
+        const cardIds = [...new Set([...supersededPairs].map(k => k.split('|')[0]))];
+        const affectedMappings: Array<{ id: string; tcg_card_id: string; tcg_printing_key: string }> = [];
+        for (let i = 0; i < cardIds.length; i += 100) {
+          const { data: ms } = await sb.from('pokemon_tcg_mappings')
+            .select('id,tcg_card_id,tcg_printing_key')
+            .eq('provider', 'tcggraph')
+            .eq('review_status', 'approved')
+            .in('tcg_card_id', cardIds.slice(i, i + 100));
+          for (const m of (ms ?? [])) {
+            if (m.tcg_card_id && m.tcg_printing_key && supersededPairs.has(`${m.tcg_card_id}|${m.tcg_printing_key}`)) {
+              affectedMappings.push({ id: m.id, tcg_card_id: m.tcg_card_id, tcg_printing_key: m.tcg_printing_key });
+            }
+          }
+        }
+        for (const am of affectedMappings) {
+          const warning = `approved mapping now points at superseded (${am.tcg_card_id}, ${am.tcg_printing_key}) — public adapter fails closed; operator review required`;
+          // Fetch existing warnings to append (never overwrite).
+          const { data: existingQa } = await sb.from('pokemon_tcg_mapping_qa')
+            .select('warnings').eq('mapping_id', am.id).maybeSingle();
+          const existing: string[] = Array.isArray(existingQa?.warnings) ? existingQa.warnings : [];
+          if (existing.some(w => typeof w === 'string' && w.includes('superseded'))) continue;    // already flagged
+          const merged = [...existing, warning];
+          await sb.from('pokemon_tcg_mapping_qa').update({ warnings: merged }).eq('mapping_id', am.id);
+        }
+      }
+    } catch (e) {
+      // Non-fatal — operator can still see provider_status directly.
+      console.error('reclass-flag approved mappings:', e);
+    }
   }
 
   // 7. Peek current credits for monitoring
