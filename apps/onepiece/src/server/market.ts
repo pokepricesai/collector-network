@@ -1,17 +1,20 @@
 import 'server-only';
 import type { SupabaseClient, TcgCard, TcgPrinting, TcgSet } from '@collector-network/database';
-import { getOnepieceClient, getOnepieceGameId } from './client';
+import { getOnepieceClient } from './client';
 
 // Market-movers helper.
 //
-// Reads directly from tcg_market_price_daily to compute % change over
-// the last N days. Filters out low-signal noise (>= $2, >= 3 observed
-// days) mirroring the MTGPrices heuristic — this keeps the movers
-// board legible.
+// CN-COST-03 / CN-MARKET-FIX: aggregation moved into Postgres. See
+// supabase/migrations/20261021000000_op_market_movers_rpc.sql. The
+// RPC public.op_market_movers(p_window_days, p_currency) returns at
+// most 60 pre-filtered rows from a cache that is rebuilt daily by
+// the mtgprices-web tcggraph-refresh cron after each one-piece
+// ingest. This module only enriches those 60 rows with
+// printings / cards / sets metadata.
 //
-// Query strategy: pull the newest and Nth-most-recent snapshot per
-// printing in the window in one call, then join card / set metadata in
-// bulk. Never mixes currencies — a mover always has one currency.
+// The previous implementation streamed 190k-270k rows through
+// PostgREST per 30-day window and timed out at ~8 s, producing a
+// public-facing HTTP 500 on /market.
 
 export type MoverWindow = 7 | 30 | 90;
 
@@ -27,38 +30,11 @@ export interface MoverEntry {
   flags: MoverFlags;
 }
 
-interface DailyRow {
-  tcg_printing_id: string;
-  currency: string;
-  price: number | null;
-  observed_on: string;
-}
-
 interface PrintingRow extends TcgPrinting {}
 
-const MIN_LATEST_PRICE = 2;
-const MIN_OBSERVATIONS = 3;
-
-// Outlier guards. Do not silently delete legitimate high prices — the
-// production data contains genuine four- and five-figure chase cards
-// (see docs/onepiece/data-audit.md §8). Only reject rows whose shape
-// is structurally broken.
-//
-// Reject conditions:
-//   * `price` above MAX_SANE_PRICE — no OP card fetches this at retail
-//     even in the wildest listings. Verified against the outlier scan
-//     in probe-supplementary.mts §C: the highest legitimate row is
-//     €23,227 (op13-118_p4 SEC).
-//   * `changePct` beyond MAX_SANE_CHANGE — a single day going from
-//     $0.01 → $100 is either a data glitch or a stale zero-priced row
-//     flipping to fair value. Either way, it dominates the board with
-//     no informational value.
-//
-// Flag conditions (mover shown but marked as unreviewed):
-//   * `latestPrice > FLAG_HIGH_PRICE`
-//   * A `price_low > price * 2` divergence (indicates a stale listing).
-const MAX_SANE_PRICE = 50_000;
-const MAX_SANE_CHANGE = 20;
+// Flag threshold is still enforced client-side so changes don't need
+// a DB migration. The movers data itself already clamps to
+// MAX_SANE_PRICE = 50 000 inside the RPC.
 const FLAG_HIGH_PRICE = 5_000;
 
 export interface MoverFlags {
@@ -67,75 +43,86 @@ export interface MoverFlags {
   highPrice: boolean;
 }
 
+interface MoverRpcRow {
+  direction: 'riser' | 'faller';
+  tcg_printing_id: string;
+  currency: string;
+  first_price: number | string;
+  last_price:  number | string;
+  observation_count: number;
+  change_pct: number | string;
+  computed_at: string;
+}
+
+/**
+ * Fetches the top-N risers and fallers for a given window.
+ *
+ * `computedAt` is the timestamp of the cache snapshot the data was
+ * served from. The page uses it to render a "data as of" label so
+ * users understand the freshness. A thrown error (including the
+ * SQLSTATE 02000 "no snapshot yet" case from the RPC) propagates to
+ * the Next.js error boundary — the /market route is dynamic, so an
+ * error produces a per-request HTTP 500, never a cached empty 200.
+ */
 export async function getMovers(
   windowDays: MoverWindow,
-  limit = 30,
+  limit = 30,       // ignored on the server side — RPC always returns 30 per tier
   currencyFilter?: string,
-): Promise<{ risers: MoverEntry[]; fallers: MoverEntry[] }> {
-  const supabase = getOnepieceClient();
-  const gameId = await getOnepieceGameId(supabase);
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - windowDays);
-  const isoSince = since.toISOString().slice(0, 10);
+): Promise<{ risers: MoverEntry[]; fallers: MoverEntry[]; computedAt: Date | null }> {
+  // `limit` kept for signature compatibility with existing callers.
+  // The RPC's cache is sized for the top 30 per tier; a caller
+  // asking for more is capped at 30. A caller asking for fewer gets
+  // the top 30 and must slice downstream.
+  void limit;
 
-  const { data, error } = await supabase
-    .from('tcg_market_price_daily')
-    .select('tcg_printing_id, currency, price, observed_on')
-    .eq('game_id', gameId)
-    .gte('observed_on', isoSince)
-    .order('observed_on', { ascending: true });
+  const supabase = getOnepieceClient();
+
+  const { data, error } = await supabase.rpc('op_market_movers', {
+    p_window_days: windowDays,
+    p_currency:    currencyFilter ?? null,
+  });
   if (error) {
+    // Throw so Next.js propagates to 500. Never fabricate empty.
     throw new Error(`[apps/onepiece] getMovers window=${windowDays}: ${error.message}`);
   }
 
-  const rows = (data as DailyRow[] | null) ?? [];
-  const buckets = new Map<string, DailyRow[]>();
-  for (const r of rows) {
-    if (r.price == null) continue;
-    const key = `${r.tcg_printing_id}::${(r.currency ?? '').toUpperCase()}`;
-    const bucket = buckets.get(key);
-    if (bucket) bucket.push(r);
-    else buckets.set(key, [r]);
+  const rpcRows = (data as MoverRpcRow[] | null) ?? [];
+  if (rpcRows.length === 0) {
+    // Should be unreachable: the RPC raises when the cache is
+    // missing, so a successful call with zero rows would mean the
+    // cache was populated with an empty payload — which the refresh
+    // function explicitly prevents via `WHERE a.n > 0`. Treat as a
+    // genuine error.
+    throw new Error(`[apps/onepiece] getMovers window=${windowDays}: cache returned zero rows`);
   }
 
-  const raw: MoverEntry[] = [];
-  const printingIds = new Set<string>();
+  const num = (v: number | string): number => (typeof v === 'number' ? v : Number(v));
+  const computedAt = rpcRows[0]?.computed_at
+    ? new Date(rpcRows[0]!.computed_at)
+    : null;
 
-  for (const [key, series] of buckets) {
-    if (series.length < MIN_OBSERVATIONS) continue;
-    const first = series[0];
-    const last = series[series.length - 1];
-    if (!first || !last || first.price == null || last.price == null) continue;
-    if (last.price < MIN_LATEST_PRICE) continue;
-    if (last.price > MAX_SANE_PRICE) continue; // outlier guard
-    const changeAbs = last.price - first.price;
-    if (first.price === 0) continue;
-    const changePct = changeAbs / first.price;
-    if (Math.abs(changePct) > MAX_SANE_CHANGE) continue; // outlier guard
-    const [printingId, currency] = key.split('::');
-    if (!printingId) continue;
-    if (currencyFilter && currency !== currencyFilter) continue;
-    printingIds.add(printingId);
+  const printingIds = new Set<string>();
+  const raw: Array<MoverEntry & { direction: 'riser' | 'faller' }> = [];
+  for (const r of rpcRows) {
+    const first = num(r.first_price);
+    const last  = num(r.last_price);
+    const pct   = num(r.change_pct);
+    printingIds.add(r.tcg_printing_id);
     raw.push({
-      printing: { id: printingId } as TcgPrinting,
-      card: { id: '' } as TcgCard,
-      set: null,
-      currency: currency ?? 'USD',
-      latestPrice: last.price,
-      previousPrice: first.price,
-      changeAbs,
-      changePct,
-      flags: { highPrice: last.price >= FLAG_HIGH_PRICE },
+      direction:     r.direction,
+      printing:      { id: r.tcg_printing_id } as TcgPrinting,
+      card:          { id: '' } as TcgCard,
+      set:           null,
+      currency:      r.currency,
+      latestPrice:   last,
+      previousPrice: first,
+      changeAbs:     last - first,
+      changePct:     pct,
+      flags:         { highPrice: last >= FLAG_HIGH_PRICE },
     });
   }
 
-  if (raw.length === 0) return { risers: [], fallers: [] };
-
-  const [printings, cards] = await Promise.all([
-    fetchPrintingsByIds(supabase, [...printingIds]),
-    Promise.resolve(null as null | Map<string, TcgCard>),
-  ]);
-
+  const printings = await fetchPrintingsByIds(supabase, [...printingIds]);
   const printingById = new Map(printings.map((p) => [p.id, p]));
   const cardIds = new Set<string>();
   for (const p of printings) cardIds.add(p.tcg_card_id);
@@ -147,29 +134,30 @@ export async function getMovers(
     fetchSetsByIds(supabase, [...setIds]),
   ]);
 
-  const populated: MoverEntry[] = [];
+  // Preserve the RPC's ORDER BY by walking in input order and
+  // splitting on direction.
+  const risers:  MoverEntry[] = [];
+  const fallers: MoverEntry[] = [];
   for (const m of raw) {
     const printing = printingById.get(m.printing.id);
     if (!printing) continue;
     const card = cardMap.get(printing.tcg_card_id);
     if (!card) continue;
-    populated.push({
-      ...m,
+    const populated: MoverEntry = {
       printing,
       card,
-      set: setMap.get(printing.set_id) ?? null,
-    });
+      set:           setMap.get(printing.set_id) ?? null,
+      currency:      m.currency,
+      latestPrice:   m.latestPrice,
+      previousPrice: m.previousPrice,
+      changeAbs:     m.changeAbs,
+      changePct:     m.changePct,
+      flags:         m.flags,
+    };
+    if (m.direction === 'riser') risers.push(populated);
+    else fallers.push(populated);
   }
-
-  const risers = [...populated]
-    .filter((m) => m.changePct > 0)
-    .sort((a, b) => b.changePct - a.changePct)
-    .slice(0, limit);
-  const fallers = [...populated]
-    .filter((m) => m.changePct < 0)
-    .sort((a, b) => a.changePct - b.changePct)
-    .slice(0, limit);
-  return { risers, fallers };
+  return { risers, fallers, computedAt };
 }
 
 async function fetchPrintingsByIds(

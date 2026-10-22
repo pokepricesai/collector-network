@@ -33,7 +33,11 @@ export default async function MarketPage({
   const { window: rawWindow } = await searchParams;
   const window = parseWindow(rawWindow);
   const currency = await getCurrencyPreference();
-  const { risers, fallers } = await getMovers(window, 30, currency);
+  // CN-COST-03 / CN-MARKET-FIX: getMovers now reads a cache
+  // snapshot via public.op_market_movers RPC. computedAt is the
+  // timestamp of that snapshot — surfaced below the hero so users
+  // see how fresh the movers are.
+  const { risers, fallers, computedAt } = await getMovers(window, 30, currency);
 
   return (
     <div style={{ padding: '32px 24px' }}>
@@ -79,6 +83,30 @@ export default async function MarketPage({
                 </Link>
               ))}
             </div>
+
+            {computedAt && (
+              <div
+                className="label-mono"
+                style={{
+                  marginTop: 12,
+                  fontSize: 11,
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Data as of{' '}
+                <time dateTime={computedAt.toISOString()}>
+                  {computedAt.toLocaleString('en-GB', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: 'UTC',
+                    timeZoneName: 'short',
+                  })}
+                </time>
+              </div>
+            )}
           </div>
         </header>
 
