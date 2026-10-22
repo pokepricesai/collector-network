@@ -2,6 +2,7 @@
 // cohorts and the promo landscape, so the enhanced matcher knows
 // what buckets of cards are rescuable without manual review.
 
+import './_lib/load-env.mjs'
 import { createRequire } from 'node:module'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -9,7 +10,7 @@ const hubRequire = createRequire(resolve(process.cwd(), 'apps/hub/package.json')
 const { createClient } = hubRequire('@supabase/supabase-js')
 
 const sb = createClient('https://egidpsrkqvymvioidatc.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWRwc3JrcXZ5bXZpb2lkYXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTQxMDExNCwiZXhwIjoyMDg2OTg2MTE0fQ.NhTEq6glhmP2-lDNABRtD3U_aBE-ky_5VfP4z0OyWSc',
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } })
 
 mkdirSync('scripts/_pp-tcg-match-02', { recursive: true })

@@ -7,13 +7,14 @@
 // if missing. The chunk route's in-memory dedup makes duplicates
 // harmless anyway, but we don't want silent noise in sets_observed.
 
+import './_lib/load-env.mjs'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 const hubRequire = createRequire(resolve(process.cwd(), 'apps/hub/package.json'))
 const { createClient } = hubRequire('@supabase/supabase-js')
 
 const sb = createClient('https://egidpsrkqvymvioidatc.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWRwc3JrcXZ5bXZpb2lkYXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTQxMDExNCwiZXhwIjoyMDg2OTg2MTE0fQ.NhTEq6glhmP2-lDNABRtD3U_aBE-ky_5VfP4z0OyWSc',
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } })
 
 const SEED = [

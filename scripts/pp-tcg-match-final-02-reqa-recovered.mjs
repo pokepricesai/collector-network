@@ -2,6 +2,7 @@
 // Mirrors the classification logic from pp-tcg-match-qa-02-run.mjs but only writes
 // pokemon_tcg_mapping_qa rows for the specific mapping_ids in the latest run.
 
+import './_lib/load-env.mjs'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -9,7 +10,7 @@ const hubRequire = createRequire(resolve(process.cwd(), 'apps/hub/package.json')
 const { createClient } = hubRequire('@supabase/supabase-js')
 
 const sb = createClient('https://egidpsrkqvymvioidatc.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWRwc3JrcXZ5bXZpb2lkYXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTQxMDExNCwiZXhwIjoyMDg2OTg2MTE0fQ.NhTEq6glhmP2-lDNABRtD3U_aBE-ky_5VfP4z0OyWSc',
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } })
 
 const plan = JSON.parse(readFileSync('scripts/_pp-tcg-match-final/variant-recovery.json', 'utf-8'))

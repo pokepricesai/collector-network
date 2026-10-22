@@ -11,6 +11,7 @@
 //
 // Reads TCGGraph API ($$ credits). Dry-run default. Budget cap defaults 60.
 
+import './_lib/load-env.mjs'
 import { createRequire } from 'node:module'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -24,7 +25,7 @@ const BUDGET_IDX = process.argv.indexOf('--budget')
 const BUDGET = BUDGET_IDX > -1 ? Number(process.argv[BUDGET_IDX + 1]) : 60
 
 const sb = createClient('https://egidpsrkqvymvioidatc.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWRwc3JrcXZ5bXZpb2lkYXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTQxMDExNCwiZXhwIjoyMDg2OTg2MTE0fQ.NhTEq6glhmP2-lDNABRtD3U_aBE-ky_5VfP4z0OyWSc',
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } })
 
 const apiKey = process.env.TCGGRAPH_API_KEY
