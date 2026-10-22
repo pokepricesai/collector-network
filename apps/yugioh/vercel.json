@@ -11,7 +11,7 @@
   "crons": [
     {
       "path": "/api/prewarm",
-      "schedule": "5 * * * *"
+      "schedule": "5 */6 * * *"
     }
   ]
 }
