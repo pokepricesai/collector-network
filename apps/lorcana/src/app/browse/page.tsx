@@ -1,12 +1,21 @@
 import type { Metadata } from 'next';
-import { listCardIdsBySet, listSetsWithCounts } from '@/server/browse';
+import { listSetsWithCounts } from '@/server/browse';
 import { SITE_URL } from '@/lib/site-url';
-import { getCurrentUser } from '@collector-network/auth';
-import { getOwnedCardIdSetForCurrentUser } from '@/server/collection-state';
-import SetsGrid, { type SetTileData } from '@/components/browse/SetsGrid';
+import { BrowseGridClient } from '@/components/browse/BrowseGridClient';
+import { SignInToTrackPrompt } from '@/components/browse/SignInToTrackPrompt';
+import type { SetTileData } from '@/components/browse/SetsGrid';
 
+// CN-COST-06: ISR'd. Per-user ownership (ownedCount) is lifted out
+// of the server tree into BrowseGridClient, which resolves the
+// supabase session on mount and fetches /api/collection/counts-by-set
+// when signed in. The cached HTML carries only globally-cacheable
+// catalogue facts; ownership data never enters the ISR cache.
+//
+// Revalidate matches the inner listSetsWithCounts cache
+// (unstable_cache revalidate: 3600). Next clamps the page's ISR
+// cadence to the shortest cache in the tree, so declaring the same
+// value here keeps the exported config honest.
 export const revalidate = 3600;
-export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Disney Lorcana: every set catalogued',
@@ -16,30 +25,20 @@ export const metadata: Metadata = {
 };
 
 export default async function BrowsePage() {
-  const [sets, user] = await Promise.all([listSetsWithCounts(), getCurrentUser()]);
-  const [owned, cardIdsBySet] = user
-    ? await Promise.all([
-        getOwnedCardIdSetForCurrentUser(),
-        listCardIdsBySet(),
-      ])
-    : [new Set<string>(), {} as Record<string, string[]>];
+  const sets = await listSetsWithCounts();
 
-  const entries: SetTileData[] = sets.map((s) => {
-    let ownedCount = 0;
-    if (user && owned.size > 0) {
-      for (const id of cardIdsBySet[s.set.id] ?? []) {
-        if (owned.has(id)) ownedCount++;
-      }
-    }
-    return {
-      code: s.set.code,
-      name: s.set.name,
-      releasedAt: s.set.released_at,
-      uniqueCardCount: s.uniqueCardCount,
-      variantCount: s.variantCount,
-      ownedCount,
-    };
-  });
+  // Server-rendered entries have ownedCount = 0 for every set.
+  // BrowseGridClient merges the real per-user counts in client-side
+  // after the supabase session resolves. The cached ISR HTML never
+  // carries user-specific data.
+  const entries: SetTileData[] = sets.map((s) => ({
+    code: s.set.code,
+    name: s.set.name,
+    releasedAt: s.set.released_at,
+    uniqueCardCount: s.uniqueCardCount,
+    variantCount: s.variantCount,
+    ownedCount: 0,
+  }));
 
   return (
     <div style={{ padding: '32px 24px' }}>
@@ -64,18 +63,7 @@ export default async function BrowsePage() {
                   {sets.length} set{sets.length === 1 ? '' : 's'}. Card and treatment
                   counts include Enchanted, Iconic, Epic, Legendary and Promo
                   overprints across foil and nonfoil.
-                  {!user && (
-                    <>
-                      {' '}
-                      <a
-                        href="/sign-in?returnTo=/browse"
-                        style={{ color: 'var(--primary)' }}
-                      >
-                        Sign in to track completion
-                      </a>
-                      .
-                    </>
-                  )}
+                  <SignInToTrackPrompt />
                 </>
               ) : (
                 <>Sets are on their way, every main product, starter deck and promo pack.</>
@@ -87,7 +75,7 @@ export default async function BrowsePage() {
         {sets.length === 0 ? (
           <EmptyState />
         ) : (
-          <SetsGrid entries={entries} isSignedIn={Boolean(user)} />
+          <BrowseGridClient entries={entries} />
         )}
       </div>
     </div>
