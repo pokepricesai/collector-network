@@ -7,10 +7,12 @@ import { listSetsWithCounts } from '@/server/browse';
 // present, else the build ISO — matches the MTGPrices strategy.
 
 const BUILD_ISO = new Date().toISOString();
+// Pure Supabase → XML (no cookies / auth / user state).
+// `force-dynamic` was overriding `revalidate` and defeating ISR
+// despite the comment's stated intent that ISR take over. Removing
+// it lets ISR cache the response for the 1h revalidate window —
+// matching the author's original design.
 export const revalidate = 3600;
-// Needs live Supabase — never prerender at build time. ISR takes over
-// at runtime via the revalidate window above.
-export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const sets = await listSetsWithCounts();

@@ -8,8 +8,11 @@ import { listCharacters } from '@/server/characters';
 // the next revalidate.
 
 const BUILD_ISO = new Date().toISOString();
+// Pure Supabase → XML (no cookies / auth / user state).
+// `force-dynamic` was overriding `revalidate` and defeating ISR;
+// every Googlebot hit re-ran listCharacters(). Removing it lets ISR
+// cache the response for the 1h revalidate window.
 export const revalidate = 3600;
-export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const characters = await listCharacters();
