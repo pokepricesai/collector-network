@@ -16,8 +16,18 @@ import EbayAffiliateDisclosure from '@/components/EbayAffiliateDisclosure';
 import { setFaq } from '@/lib/faq-content';
 import type { TcgCard } from '@collector-network/database';
 
-export const revalidate = 900;
-export const dynamic = 'force-dynamic';
+// CN-COST-EMERGENCY: remove force-dynamic (was overriding revalidate
+// and forcing SSR on every request) + 900 → 86400. Page is currency-
+// neutral: set-market.ts aggregates USD-only, no cookie reads in the
+// server tree. Set catalogue + USD retail refresh daily.
+export const revalidate = 86400;
+// Next.js 16 ISR fallback registration — matches /card/[slug] (CN-COST-03).
+// Empty generateStaticParams + dynamicParams=true opts dynamic-segment
+// routes into the Full Route Cache without build-time enumeration.
+export const dynamicParams = true;
+export function generateStaticParams(): { slug: string }[] {
+  return [];
+}
 
 // Inferred set-type label from the code prefix. Bandai/OP set codes
 // follow a stable convention (OP = booster, EB = extra booster,

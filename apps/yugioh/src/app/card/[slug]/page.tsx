@@ -73,9 +73,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// Card pages are ISR'd on request. Popular families (BEWD, DM etc)
-// will bake at build eventually; for now revalidate every 30 min.
-export const revalidate = 1800;
+// Card pages are ISR'd on request. CN-COST-EMERGENCY: 1800 → 86400
+// aligns the cache window with the actual data-ingest cadence (daily
+// tcggraph-refresh via mtgprices-web cron). Was regenerating up to
+// 48× per URL per day; 1× is correct and cuts ISR Writes on the
+// network's highest-fan-out routes by ~24×.
+export const revalidate = 86400;
 // Next.js 16 ISR fallback registration: dynamicParams=true +
 // generateStaticParams=[] opts dynamic-segment routes into the Full
 // Route Cache without build-time enumeration. The three

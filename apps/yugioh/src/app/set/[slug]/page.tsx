@@ -21,7 +21,9 @@ import EbayAffiliateDisclosure from '../../../components/EbayAffiliateDisclosure
 import { setFaq } from '../../../lib/faq-content';
 import styles from '../../../components/browse/Browse.module.css';
 
-export const revalidate = 1800;
+// CN-COST-EMERGENCY: 1800 → 86400. Set catalogue updates on new-set
+// ingest only — daily cadence is correct.
+export const revalidate = 86400;
 // Next.js 16 — on dynamic-segment routes, `revalidate` alone no
 // longer opts into the Full Route Cache. Returning an empty array
 // from generateStaticParams + dynamicParams=true registers this

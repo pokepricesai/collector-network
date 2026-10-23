@@ -50,7 +50,11 @@ interface Props {
   params: Promise<Params>;
 }
 
-export const revalidate = 1800;
+// CN-COST-EMERGENCY: 1800 → 86400 aligns the cache window with the
+// actual data-ingest cadence (daily tcggraph-refresh). Printing fan-
+// out is massive (hundreds of thousands of unique URLs); regenerating
+// each one every 30 min was 48× more than daily ingest requires.
+export const revalidate = 86400;
 // Next.js 16 ISR fallback registration: see /card/[slug] for the
 // same pattern. Add-to-Collection / Watch / Add-to-Deck Mounts
 // are now cookie-free client islands (YGO P0-5).
