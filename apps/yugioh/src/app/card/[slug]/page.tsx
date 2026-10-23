@@ -19,7 +19,10 @@ import { VariantsTable } from '../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../components/signature/RarityRefractorLine';
 import { PriceHistoryChart } from '../../../components/chart/PriceHistoryChart';
 import { getYugiohLogicalCardBySlug, type LogicalCardData } from '../../../server/card';
-import { getYugiohCardScopedPriceHistory } from '../../../server/history';
+import {
+  aggregatePointsByDate,
+  getYugiohCardScopedPriceHistory,
+} from '../../../server/history';
 import { safe } from '../../../server/safe';
 import { normaliseFnl } from '../../../lib/fnl';
 import { normaliseRarity } from '../../../lib/rarity';
@@ -519,9 +522,17 @@ async function CardScopedGradedSection({ data }: { data: LogicalCardData }) {
   }
   const firstObs = firsts.length ? firsts.sort()[0]! : null;
   const lastObs = lasts.length ? lasts.sort().at(-1)! : null;
+  // Cross-card merge above concatenates per-card series by (grader,
+  // grade, currency) key WITHOUT deduplicating by date. For families
+  // with many tcg_cards rows (Blue-Eyes, Dark Magician — ~100+ reprints)
+  // the resulting series carried thousands of same-date observations
+  // that serialized to ~1 MB in the Flight payload. aggregatePointsByDate
+  // collapses to one median-priced point per calendar day per series.
   const chartSeries = Array.from(seriesByKey.values()).map((s) => ({
     ...s,
-    points: s.points.sort((a, b) => a.date.localeCompare(b.date)),
+    points: aggregatePointsByDate(
+      s.points.sort((a, b) => a.date.localeCompare(b.date)),
+    ),
   }));
 
   return (

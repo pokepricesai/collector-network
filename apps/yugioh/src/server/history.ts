@@ -88,6 +88,45 @@ function decimate<T>(rows: readonly T[], cap: number): T[] {
   return out;
 }
 
+// Collapse same-date observations into a single point using the median
+// price. Daily charts should show one dot per date; multiple overlapping
+// points at the same X-coordinate just render as a smear AND bloat the
+// RSC Flight payload serialized to the client chart.
+//
+// On the YGO logical card page the biggest card family (Blue-Eyes)
+// previously serialized ~1 MB of mostly-duplicate same-date points
+// across ~140 printings merged by (grader, grade, currency). This
+// helper is called inside groupRetail / groupGraded for within-source
+// dedup, and from the page composition for post-merge dedup.
+export function aggregatePointsByDate(points: readonly PricePoint[]): PricePoint[] {
+  if (points.length <= 1) return [...points];
+  // Assumes caller sorted by date ascending.
+  const out: PricePoint[] = [];
+  let currentDate = points[0]!.date;
+  let bucket: number[] = [points[0]!.price];
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i]!;
+    if (p.date === currentDate) {
+      bucket.push(p.price);
+    } else {
+      out.push({ date: currentDate, price: medianOf(bucket) });
+      currentDate = p.date;
+      bucket = [p.price];
+    }
+  }
+  out.push({ date: currentDate, price: medianOf(bucket) });
+  return out;
+}
+
+function medianOf(xs: readonly number[]): number {
+  if (xs.length === 1) return xs[0]!;
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1]! + sorted[mid]!) / 2
+    : sorted[mid]!;
+}
+
 function summariseCoverage(
   ...seriesSets: readonly { points: readonly PricePoint[] }[][]
 ): PriceHistorySummary {
@@ -130,15 +169,23 @@ function groupRetail(points: readonly DailyRetailPoint[]): RetailSeries[] {
   const out: RetailSeries[] = [];
   for (const [key, rows] of buckets) {
     rows.sort((a, b) => a.observedOn.localeCompare(b.observedOn));
-    const decimated = decimate(rows, SERIES_POINT_CAP);
     const source = rows[0]!.source;
     const currency = rows[0]!.currency;
+    const raw: PricePoint[] = rows.map((r) => ({
+      date: r.observedOn,
+      price: r.price!,
+    }));
+    // Dedup same-date observations (median) before decimation so the
+    // Flight payload sent to the client chart carries at most one
+    // point per calendar day per series.
+    const aggregated = aggregatePointsByDate(raw);
+    const decimated = decimate(aggregated, SERIES_POINT_CAP);
     out.push({
       key,
       label: `${retailSourceLabel(source)} (${currency})`,
       source,
       currency,
-      points: decimated.map((r) => ({ date: r.observedOn, price: r.price! })),
+      points: decimated,
     });
   }
   // Deterministic order: currency-alphabetical then source-alphabetical
@@ -159,8 +206,13 @@ function groupGraded(points: readonly DailyGradedPoint[]): GradedSeries[] {
   const out: GradedSeries[] = [];
   for (const [key, rows] of buckets) {
     rows.sort((a, b) => a.observedOn.localeCompare(b.observedOn));
-    const decimated = decimate(rows, SERIES_POINT_CAP);
     const first = rows[0]!;
+    const raw: PricePoint[] = rows.map((r) => ({
+      date: r.observedOn,
+      price: r.price!,
+    }));
+    const aggregated = aggregatePointsByDate(raw);
+    const decimated = decimate(aggregated, SERIES_POINT_CAP);
     out.push({
       key,
       label: gradedSeriesLabel(first.grader, first.grade, first.currency),
@@ -168,7 +220,7 @@ function groupGraded(points: readonly DailyGradedPoint[]): GradedSeries[] {
       grade: first.grade,
       currency: first.currency,
       isRaw: first.grader === 'raw',
-      points: decimated.map((r) => ({ date: r.observedOn, price: r.price! })),
+      points: decimated,
     });
   }
   // Stable, useful order: raw first (as the always-reference series),

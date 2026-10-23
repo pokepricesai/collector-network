@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TIME_RANGES,
+  aggregatePointsByDate,
   availableRanges,
   clipSeries,
   percentChange,
@@ -10,6 +11,68 @@ import {
 
 const pts = (arr: [string, number][]): PricePoint[] =>
   arr.map(([date, price]) => ({ date, price }));
+
+test('aggregatePointsByDate collapses same-date observations to median', () => {
+  // Four observations on one date — the biggest Flight payload offender
+  // on YGO popular cards. Must collapse to one median point.
+  const input = pts([
+    ['2026-09-21', 31.14],
+    ['2026-09-21', 0.82],
+    ['2026-09-21', 23.65],
+    ['2026-09-21', 6.05],
+    ['2026-09-22', 10],
+  ]);
+  const out = aggregatePointsByDate(input);
+  assert.equal(out.length, 2);
+  assert.equal(out[0]!.date, '2026-09-21');
+  // median of [0.82, 6.05, 23.65, 31.14] = (6.05 + 23.65) / 2 = 14.85
+  assert.equal(out[0]!.price, 14.85);
+  assert.deepEqual(out[1], { date: '2026-09-22', price: 10 });
+});
+
+test('aggregatePointsByDate preserves single-observation days unchanged', () => {
+  const input = pts([
+    ['2026-09-21', 10],
+    ['2026-09-22', 20],
+    ['2026-09-23', 30],
+  ]);
+  const out = aggregatePointsByDate(input);
+  assert.deepEqual(out, input);
+});
+
+test('aggregatePointsByDate handles odd and even bucket sizes', () => {
+  // Odd bucket of 3 → middle value
+  const odd = aggregatePointsByDate(pts([
+    ['2026-01-01', 1], ['2026-01-01', 2], ['2026-01-01', 100],
+  ]));
+  assert.deepEqual(odd, [{ date: '2026-01-01', price: 2 }]);
+  // Even bucket of 2 → mean of the two
+  const even = aggregatePointsByDate(pts([
+    ['2026-01-01', 10], ['2026-01-01', 20],
+  ]));
+  assert.deepEqual(even, [{ date: '2026-01-01', price: 15 }]);
+});
+
+test('aggregatePointsByDate on empty or single-element input', () => {
+  assert.deepEqual(aggregatePointsByDate([]), []);
+  const single = pts([['2026-01-01', 42]]);
+  assert.deepEqual(aggregatePointsByDate(single), single);
+});
+
+test('aggregatePointsByDate assumes sorted input (contract)', () => {
+  // If caller breaks the sort contract, we still produce stable output
+  // but don't claim correct aggregation across non-adjacent same-date
+  // runs. This test locks down the current behaviour so a future change
+  // doesn't silently alter it.
+  const unsorted = pts([
+    ['2026-09-21', 10],
+    ['2026-09-22', 20],
+    ['2026-09-21', 30],
+  ]);
+  const out = aggregatePointsByDate(unsorted);
+  assert.equal(out.length, 3);
+  assert.deepEqual(out.map((p) => p.date), ['2026-09-21', '2026-09-22', '2026-09-21']);
+});
 
 test('availableRanges hides ranges with insufficient depth', () => {
   const series = [{ points: pts([['2026-09-11', 1], ['2026-09-22', 2]]) }];
