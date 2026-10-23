@@ -4,8 +4,10 @@ import { canonicalFor } from '@/lib/seo';
 import { LORCANA_ARTICLES } from '@/lib/insights';
 import { listNetworkArticles } from '@/server/network-articles';
 
-export const revalidate = 900;
-export const dynamic = 'force-dynamic';
+// CN-COST-EMERGENCY: remove force-dynamic (was SSR every request)
+// + 900 → 86400. Insight articles publish infrequently; directory
+// listing refresh once a day is correct. No cookie reads here.
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title:

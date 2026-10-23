@@ -6,8 +6,10 @@ import { listNetworkArticles } from '@/server/network-articles';
 
 // Real /insights index. Enumerates the launch articles PLUS any
 // Collector Network OS articles published to onepiece_db.
-export const revalidate = 900;
-export const dynamic = 'force-dynamic';
+// CN-COST-EMERGENCY: remove force-dynamic (was SSR every request)
+// + 900 → 86400. Article publication is infrequent; directory
+// listing refresh once a day is correct. No cookie reads here.
+export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: 'One Piece market insights. Articles, guides and analysis',
