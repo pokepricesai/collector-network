@@ -50,6 +50,17 @@ async function withTcgplayerId(gameId) {
   return count ?? 0
 }
 
+async function withExactTcgplayerId(gameId) {
+  const { count, error } = await sb
+    .from('tcg_printings')
+    .select('tcg_printing_id:id', { count: 'exact', head: true })
+    .eq('game_id', gameId)
+    .eq('mapping_confidence', 'exact')
+    .not('tcgplayer_id', 'is', null)
+  if (error) throw error
+  return count ?? 0
+}
+
 async function main() {
   const games = await listGames()
   console.log('')
@@ -60,21 +71,24 @@ async function main() {
     'game'.padEnd(16) +
       'total'.padStart(10) +
       'with_id'.padStart(12) +
-      'pct'.padStart(10),
+      'exact'.padStart(10) +
+      'exact%'.padStart(10),
   )
-  console.log('-'.repeat(48))
+  console.log('-'.repeat(58))
 
   for (const g of games) {
     if (!g.active) continue
-    const [total, matched] = await Promise.all([
+    const [total, matched, exact] = await Promise.all([
       totalPrintings(g.id),
       withTcgplayerId(g.id),
+      withExactTcgplayerId(g.id),
     ])
-    const pct = total > 0 ? ((matched / total) * 100).toFixed(1) : '—'
+    const pct = total > 0 ? ((exact / total) * 100).toFixed(1) : '—'
     console.log(
       g.slug.padEnd(16) +
         String(total).padStart(10) +
         String(matched).padStart(12) +
+        String(exact).padStart(10) +
         (pct === '—' ? pct : `${pct}%`).padStart(10),
     )
   }
