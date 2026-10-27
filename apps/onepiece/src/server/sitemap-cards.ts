@@ -109,6 +109,30 @@ export async function buildShardResponse(shard: number): Promise<Response> {
     if (rows.length < PAGE_SIZE) break;
   }
 
+  // CN-05 Sprint 8 — defensive guard against caching an empty sitemap.
+  //
+  // Sprint 7 found shards 2 + 3 serving 110-byte empty <urlset>s on
+  // production even though the generator was logically correct and a
+  // cache-bust query (`?cb=…`) immediately returned the full 583KB /
+  // 599KB / 594KB payloads. Root cause: a prior build-time prerender
+  // ran with a stub Supabase client (SUPABASE_URL unavailable at
+  // build time), produced 0 cards, and Vercel baked the empty XML
+  // into the prerender cache for the no-query path. ISR did not
+  // self-heal because repeat empty regenerations would simply
+  // overwrite empty with empty.
+  //
+  // If the Supabase client returned 0 cards in total (variantSeen is
+  // populated for every card across all shards, not just this one),
+  // throw 500. Vercel never caches 5xx responses from an ISR route,
+  // so the next request retries. In the happy path this guard is a
+  // no-op.
+  if (variantSeen.size === 0) {
+    return new NextResponse(
+      'sitemap error: zero cards returned from Supabase (stub client? missing env?)',
+      { status: 500 },
+    );
+  }
+
   const urls = items
     .map(
       (p) =>
