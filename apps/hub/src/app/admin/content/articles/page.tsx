@@ -38,6 +38,11 @@ export default async function ArticlesPage({ searchParams }: Params) {
         eyebrow="Content · Articles"
         title="Articles"
         description="Every article in the pipeline. Click into an article to edit, generate draft (AI), run QC, approve, and publish."
+        actions={
+          <Link className="ui-btn ui-btn--primary ui-btn--sm" href="/admin/content/articles/import">
+            Import Claude Code draft
+          </Link>
+        }
       />
       <div className="admin-filter-bar">
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

@@ -396,6 +396,130 @@ function buildAdditionalFactsFromIdeaEvidence(
   return facts;
 }
 
+/**
+ * CN-05 OS Phase A.1 — create an article shell from a pasted draft.
+ *
+ * Mirrors createArticleFromBrief but has no network_content_briefs
+ * row to attach: Claude wrote the article offline from the writing
+ * brief, and we're persisting that output as a reviewable draft.
+ * Status enters 'review' (not 'draft') since the content is
+ * substantive — ready for operator sign-off, not placeholder.
+ *
+ * Site is resolved from the idea when present; otherwise the caller
+ * must supply site_id directly.
+ */
+export async function createArticleFromPaste(
+  sb: SupabaseClient,
+  args: {
+    siteId: string;
+    siteSlug: string;
+    ideaId: string | null;
+    contentType: string;
+    adminId: string | null;
+    draft: {
+      title: string;
+      slug: string | null;
+      meta_title: string | null;
+      meta_description: string | null;
+      summary: string | null;
+      standfirst: string | null;
+      body_markdown: string;
+      body_rich: { format: 'html_v1'; html: string; media_ids: string[] };
+      primary_query: string | null;
+      secondary_queries: string[];
+      internal_links: Array<{ anchor: string; target_url: string }>;
+      sources: Array<{ claim: string; source: string }>;
+      notes_for_editor: string | null;
+    };
+  },
+): Promise<{ articleId: string }> {
+  const pub = PUB_TARGET[args.siteSlug];
+  if (!pub) throw new Error(`[paste-import] unsupported site: ${args.siteSlug}`);
+  const slug = (args.draft.slug ?? slugify(args.draft.title)).slice(0, 120);
+
+  const { data: inserted, error: insErr } = await sb
+    .from('network_articles')
+    .insert({
+      site_id: args.siteId,
+      idea_id: args.ideaId,
+      // No brief_id — paste imports deliberately skip the brief step.
+      title: args.draft.title,
+      working_title: args.draft.title,
+      slug,
+      status: 'review',
+      content_type: args.contentType,
+      primary_query: args.draft.primary_query,
+      secondary_queries: args.draft.secondary_queries,
+      summary: args.draft.summary,
+      standfirst: args.draft.standfirst,
+      body: args.draft.body_markdown,
+      body_format: 'html',
+      body_rich: args.draft.body_rich as unknown as Record<string, unknown>,
+      meta_title: args.draft.meta_title,
+      meta_description: args.draft.meta_description,
+      author: 'Collector Network',
+      publication_target: pub,
+      created_by: args.adminId,
+    })
+    .select('id').single();
+  if (insErr) throw new Error(`[paste-import] insert article: ${insErr.message}`);
+  const articleId = (inserted as { id: string }).id;
+
+  if (args.ideaId) {
+    await sb.from('network_content_ideas').update({ status: 'drafting' }).eq('id', args.ideaId);
+  }
+
+  const linkRows = args.draft.internal_links.map((l) => ({
+    article_id: articleId,
+    target_url: l.target_url,
+    anchor_text: l.anchor,
+    reason: 'paste_import_claude_code',
+    state: 'suggested' as const,
+  }));
+  if (linkRows.length > 0) {
+    await sb.from('network_article_links').insert(linkRows);
+  }
+
+  if (args.draft.sources.length > 0) {
+    const sourceRows = args.draft.sources.map((s) => ({
+      article_id: articleId,
+      source_type: 'editorial' as const,
+      source_name: s.source,
+      claim_scope: s.claim,
+    }));
+    await sb.from('network_article_sources').insert(sourceRows);
+  }
+
+  await sb.rpc('network_snapshot_article', {
+    p_article_id: articleId,
+    p_actor_type: 'system',
+    p_actor_user_id: args.adminId,
+    p_change_note: 'article created from pasted Claude Code draft',
+  });
+
+  await sb.rpc('network_log_audit', {
+    p_action: 'article.created_from_paste',
+    p_entity_type: 'network_article',
+    p_entity_id: articleId,
+    p_site_id: args.siteId,
+    p_old_value: null,
+    p_new_value: {
+      idea_id: args.ideaId,
+      slug,
+      body_chars: args.draft.body_markdown.length,
+      link_count: args.draft.internal_links.length,
+      source_count: args.draft.sources.length,
+    } as unknown as Record<string, unknown>,
+    p_actor_type: 'human',
+    p_source: 'paste_claude_code',
+    p_metadata: {
+      notes_for_editor: args.draft.notes_for_editor ?? '',
+    } as unknown as Record<string, unknown>,
+  });
+
+  return { articleId };
+}
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
