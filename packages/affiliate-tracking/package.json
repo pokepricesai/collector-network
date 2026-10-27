@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./server": "./src/server.ts",
-    "./client": "./src/client.tsx"
+    "./client": "./src/client.tsx",
+    "./whatnot": "./src/whatnot.tsx"
   },
   "scripts": {
     "lint": "echo \"(affiliate-tracking) lint placeholder\" && exit 0",

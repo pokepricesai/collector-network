@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import { WhatnotLink } from '@collector-network/affiliate-tracking/whatnot';
 
 // Site footer. Groups live routes by product area and carries the
 // Ravensburger / Disney unofficial-use disclaimer.
@@ -144,6 +145,13 @@ export default function Footer() {
           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
             © {new Date().getFullYear()} LorcanaPrices
           </span>
+        </div>
+
+        {/* CN-05 Sprint 5 — subtle Whatnot CTA. Self-expires via
+            client-side cutoff + env override; see
+            @collector-network/affiliate-tracking/whatnot. */}
+        <div style={{ marginTop: 12, textAlign: 'center' }}>
+          <WhatnotLink site="lorcanaprices" placement="footer" />
         </div>
       </div>
     </footer>
