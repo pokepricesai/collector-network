@@ -98,10 +98,30 @@ export function repoHintForSite(slug: string | null): { repo: string; app: strin
   }
 }
 
+export interface BaselineForPrompt {
+  frozen_at: string;
+  window_start: string | null;
+  window_end: string | null;
+  target_url: string | null;
+  target_query: string | null;
+  gsc_clicks_28d: number | null;
+  gsc_impressions_28d: number | null;
+  gsc_avg_position_28d: number | null;
+  gsc_avg_ctr_28d: number | null;
+  ga4_active_users_28d: number | null;
+  ga4_sessions_28d: number | null;
+  notes?: string[];
+}
+
 export interface BuildPromptInput {
   task: TaskForPrompt;
   site: SiteForPrompt | null;
   intel: IntelligenceForPrompt | null;
+  /** CN-05 OS Phase C — frozen pre-change snapshot. When present we
+   *  surface it in a dedicated Baseline section so Claude can quote
+   *  exact pre-change numbers in the completion receipt. Null when
+   *  no baseline has been frozen yet. */
+  baseline?: BaselineForPrompt | null;
 }
 
 export interface BuiltPrompt {
@@ -114,7 +134,7 @@ export interface BuiltPrompt {
 
 /** Build the full prompt text + hash. No side effects. */
 export function buildClaudePrompt(input: BuildPromptInput): BuiltPrompt {
-  const { task, site, intel } = input;
+  const { task, site, intel, baseline } = input;
   const implType = classifyAction(task, intel);
   const repoHint = repoHintForSite(site?.slug ?? null);
 
@@ -237,6 +257,35 @@ export function buildClaudePrompt(input: BuildPromptInput): BuiltPrompt {
       break;
   }
 
+  // 6b. CN-05 OS Phase C — frozen baseline (pre-change snapshot).
+  //      Only surfaces when the operator has frozen one; null baselines
+  //      remain in the hash input as null so this section is stable.
+  if (baseline) {
+    sections.push('\n## Frozen baseline (pre-change snapshot)');
+    sections.push(`Frozen at ${baseline.frozen_at}. Window: ${baseline.window_start ?? '—'} → ${baseline.window_end ?? '—'}.`);
+    if (baseline.target_url) sections.push(`Target URL: \`${baseline.target_url}\``);
+    if (baseline.target_query) sections.push(`Target query: \`${baseline.target_query}\``);
+    sections.push('```json');
+    sections.push(JSON.stringify({
+      window: { start: baseline.window_start, end: baseline.window_end },
+      gsc_clicks_28d: baseline.gsc_clicks_28d,
+      gsc_impressions_28d: baseline.gsc_impressions_28d,
+      gsc_avg_ctr_28d: baseline.gsc_avg_ctr_28d,
+      gsc_avg_position_28d: baseline.gsc_avg_position_28d,
+      ga4_active_users_28d: baseline.ga4_active_users_28d,
+      ga4_sessions_28d: baseline.ga4_sessions_28d,
+    }, null, 2));
+    sections.push('```');
+    if (baseline.notes && baseline.notes.length > 0) {
+      sections.push('\n**Baseline notes:**');
+      for (const n of baseline.notes) sections.push(`- ${n}`);
+    }
+    sections.push(
+      '\nQuote these exact numbers in your completion receipt so the OS can line them up ' +
+      'against the post-change window. Do not re-compute the baseline — it is frozen.',
+    );
+  }
+
   // 7. Expected outcome + measurement
   sections.push('\n## Expected measurable outcome');
   const upsidePresent = intel?.expected_upside && Object.keys(intel.expected_upside).length > 0;
@@ -314,6 +363,7 @@ export function buildClaudePrompt(input: BuildPromptInput): BuiltPrompt {
     task_kind: task.task_kind,
     task_type: task.task_type,
     site_slug: site?.slug ?? null,
+    baseline_frozen_at: baseline?.frozen_at ?? null,
   });
   const prompt_hash = createHash('sha256').update(hashInput).digest('hex');
 

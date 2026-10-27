@@ -13,6 +13,11 @@ import {
   parseAndValidateReceipt,
   type ImplementationReceiptStored,
 } from '@/server/claude/completion-receipt';
+import {
+  buildBaselineSnapshot,
+  extractEvidenceTargets,
+  type BaselineSnapshot,
+} from '@/server/claude/baseline';
 
 // CN-05 OS Phase 2 — Server Action that assembles the Claude Code
 // implementation prompt for a given task, saves it to
@@ -62,10 +67,15 @@ export async function generateClaudePromptAction(formData: FormData): Promise<vo
     intel = intelRow ?? null;
   }
 
+  // CN-05 OS Phase C — thread the frozen baseline into the prompt so
+  // Claude can quote exact pre-change numbers in its summary.
+  const existingBaseline = ((task.metadata ?? {}) as { baseline?: BaselineSnapshot }).baseline ?? null;
+
   const built: BuiltPrompt = buildClaudePrompt({
     task: task as unknown as TaskForPrompt,
     site,
     intel,
+    baseline: existingBaseline,
   });
 
   // Append to metadata.generated_prompts if not already present. We
@@ -209,5 +219,71 @@ export async function confirmReceiptVerifiedAction(
     .from('network_tasks')
     .update({ metadata: nextMeta, status: 'in_progress' })
     .eq('id', taskId);
+  revalidatePath(`/admin/tasks/${taskId}`);
+}
+
+// CN-05 OS Phase C — baseline freeze.
+//
+// Reads the latest-complete GSC + GA4 window for the task's site and
+// writes a BaselineSnapshot into network_tasks.metadata.baseline.
+// Refuses to overwrite an existing baseline unless the operator
+// explicitly passes `force=1` (prevents accidental re-captures after
+// an intervention has already landed).
+export async function freezeBaselineAction(formData: FormData): Promise<void> {
+  const taskId = formData.get('task_id');
+  const force = formData.get('force') === '1';
+  if (typeof taskId !== 'string') return;
+  const { sb } = await requireAdmin('/admin/tasks');
+
+  const { data: task } = await sb
+    .from('network_tasks')
+    .select('id, site_id, evidence, metadata')
+    .eq('id', taskId)
+    .maybeSingle();
+  if (!task) return;
+
+  const prevMeta =
+    ((task.metadata ?? {}) as { baseline?: BaselineSnapshot }) ?? {};
+  if (prevMeta.baseline && !force) {
+    revalidatePath(`/admin/tasks/${taskId}`);
+    return;
+  }
+
+  let siteSlug: string | null = null;
+  if (task.site_id) {
+    const { data: siteRow } = await sb
+      .from('network_sites')
+      .select('slug')
+      .eq('id', task.site_id)
+      .maybeSingle();
+    siteSlug = siteRow?.slug ?? null;
+  }
+
+  let intelEvidence: Record<string, unknown> | null = null;
+  const intelId = (task.evidence as { intelligence_item_id?: unknown } | null)?.intelligence_item_id;
+  if (typeof intelId === 'string' && intelId.length > 0) {
+    const { data: intelRow } = await sb
+      .from('network_intelligence_items')
+      .select('evidence')
+      .eq('id', intelId)
+      .maybeSingle();
+    intelEvidence = (intelRow?.evidence as Record<string, unknown> | null) ?? null;
+  }
+
+  const { target_url, target_query } = extractEvidenceTargets(
+    task.evidence as Record<string, unknown> | null,
+    intelEvidence,
+  );
+
+  const baseline = await buildBaselineSnapshot(sb, {
+    taskId,
+    siteId: task.site_id,
+    siteSlug,
+    evidenceTargetUrl: target_url,
+    evidenceTargetQuery: target_query,
+  });
+
+  const nextMeta = { ...(prevMeta as Record<string, unknown>), baseline };
+  await sb.from('network_tasks').update({ metadata: nextMeta }).eq('id', taskId);
   revalidatePath(`/admin/tasks/${taskId}`);
 }

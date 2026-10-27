@@ -8,9 +8,11 @@ import {
   generateClaudePromptAction,
   recordClaudeImplementationAction,
   confirmReceiptVerifiedAction,
+  freezeBaselineAction,
 } from './actions';
 import { completeTaskAction, reopenTaskAction } from '../actions';
 import type { ImplementationReceiptStored } from '@/server/claude/completion-receipt';
+import type { BaselineSnapshot } from '@/server/claude/baseline';
 
 // CN-05 OS Phase 2 — task detail page.
 //
@@ -77,6 +79,7 @@ export default async function TaskDetailPage({ params }: Props) {
     generated_prompts?: GeneratedPrompt[];
     implementation_receipts?: ImplementationReceiptStored[];
     receipt_last_error?: { at: string; message: string; path?: string };
+    baseline?: BaselineSnapshot;
   };
   const prompts = meta.generated_prompts ?? [];
   const latestPrompt = prompts[0];
@@ -84,6 +87,7 @@ export default async function TaskDetailPage({ params }: Props) {
   const latestReceipt = receipts[0];
   const receiptError = meta.receipt_last_error;
   const operatorVerified = latestReceipt?.operator_confirmed_at != null;
+  const baseline = meta.baseline ?? null;
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/tasks">
@@ -133,6 +137,95 @@ export default async function TaskDetailPage({ params }: Props) {
           </div>
         </Panel>
       )}
+
+      {/* CN-05 OS Phase C — Frozen baseline.
+          Pre-change snapshot of GSC + GA4 for this task's site, used
+          as the stable reference point for future D7/D14/D28/D90
+          measurement. Immutable under normal editing; the Re-freeze
+          button is intentionally labelled "force" to discourage use
+          after implementation starts. */}
+      <Panel
+        title="Frozen baseline"
+        eyebrow="Pre-change snapshot · 28-day GSC + GA4 window · immutable"
+        actions={
+          !baseline ? (
+            <form action={freezeBaselineAction} style={{ display: 'inline-flex' }}>
+              <input type="hidden" name="task_id" value={task.id} />
+              <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">
+                Freeze baseline now
+              </button>
+            </form>
+          ) : (
+            <form action={freezeBaselineAction} style={{ display: 'inline-flex' }}>
+              <input type="hidden" name="task_id" value={task.id} />
+              <input type="hidden" name="force" value="1" />
+              <button
+                type="submit"
+                className="ui-btn ui-btn--secondary ui-btn--sm"
+                title="Overwrite the existing baseline. Only safe before Claude has implemented the change."
+              >
+                Re-freeze (force)
+              </button>
+            </form>
+          )
+        }
+      >
+        {!baseline ? (
+          <Notice tone="info">
+            No baseline captured yet. Click <strong>Freeze baseline now</strong> to snapshot the
+            latest-complete GSC + GA4 window for this {task.site_id ? 'site' : 'task'}. The
+            snapshot is immutable afterwards. Freeze <strong>before</strong> Claude implements so
+            future measurement at D7/D14/D28/D90 has a stable reference point. If no GSC/GA4 data
+            exists for the site, this is surfaced in the notes — we never invent numbers.
+          </Notice>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, color: 'var(--admin-text-muted)' }}>
+              <span>Frozen: {baseline.frozen_at}</span>
+              <span>·</span>
+              <span>Window: <code>{baseline.window_start ?? '—'} → {baseline.window_end ?? '—'}</code></span>
+              <span>·</span>
+              <span>GSC data to: <code>{baseline.data_source_freshness?.gsc ?? '—'}</code></span>
+              <span>·</span>
+              <span>GA4 data to: <code>{baseline.data_source_freshness?.ga4 ?? '—'}</code></span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, fontSize: 12 }}>
+              <BaselineKV label="GSC clicks (28d)" value={baseline.gsc_clicks_28d} />
+              <BaselineKV label="GSC impressions (28d)" value={baseline.gsc_impressions_28d} />
+              <BaselineKV label="GSC avg CTR" value={baseline.gsc_avg_ctr_28d != null ? `${(baseline.gsc_avg_ctr_28d * 100).toFixed(2)}%` : null} />
+              <BaselineKV label="GSC avg position" value={baseline.gsc_avg_position_28d != null ? baseline.gsc_avg_position_28d.toFixed(1) : null} />
+              <BaselineKV label="GA4 active users (28d)" value={baseline.ga4_active_users_28d} />
+              <BaselineKV label="GA4 sessions (28d)" value={baseline.ga4_sessions_28d} />
+            </div>
+
+            {(baseline.target_url || baseline.target_query) && (
+              <div style={{ fontSize: 12 }}>
+                {baseline.target_url && <div>Target URL: <code>{baseline.target_url}</code></div>}
+                {baseline.target_query && <div>Target query: <code>{baseline.target_query}</code></div>}
+              </div>
+            )}
+
+            {baseline.notes && baseline.notes.length > 0 && (
+              <Notice tone="warning">
+                <strong>Notes:</strong>
+                <ul style={{ margin: '4px 0 0 20px' }}>
+                  {baseline.notes.map((n, i) => <li key={i}>{n}</li>)}
+                </ul>
+              </Notice>
+            )}
+
+            {(baseline.no_gsc_data || baseline.no_ga4_data) && (
+              <Notice tone="info">
+                Honest data gap:{' '}
+                {baseline.no_gsc_data && <>no GSC rows for this site/window. </>}
+                {baseline.no_ga4_data && <>no GA4 rows for this site/window. </>}
+                Baseline is still frozen — measurement comparisons will carry the same gap.
+              </Notice>
+            )}
+          </div>
+        )}
+      </Panel>
 
       <Panel
         title="Claude Code prompt"
@@ -345,5 +438,19 @@ export default async function TaskDetailPage({ params }: Props) {
         </details>
       </Panel>
     </AdminShell>
+  );
+}
+
+function BaselineKV({ label, value }: { label: string; value: number | string | null }) {
+  const display = value == null
+    ? <span style={{ color: 'var(--admin-text-muted)' }}>—</span>
+    : typeof value === 'number'
+      ? value.toLocaleString()
+      : value;
+  return (
+    <div style={{ padding: '6px 8px', border: '1px solid var(--admin-border)', borderRadius: 6, background: 'var(--admin-bg)' }}>
+      <div style={{ fontSize: 10.5, color: 'var(--admin-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{display}</div>
+    </div>
   );
 }
