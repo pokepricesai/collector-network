@@ -323,6 +323,7 @@ export default async function PrintingPage({
                 collectorNumber={resolved.matched.collector_number ?? null}
                 rarityLabel={anchorCardView.rarity.label}
                 finish={anchorPrinting.printing.finish ?? null}
+                tcgplayerProductId={anchorPrinting.printing.tcgplayer_id ?? null}
               />
             )}
           </div>

@@ -21,6 +21,7 @@ import { createBrowserSupabase } from '@collector-network/auth';
 import { AddToCollection } from '../AddToCollection';
 import { WatchButton } from '../WatchButton';
 import EbayFindButton from '../EbayFindButton';
+import TcgplayerFindButton from '../TcgplayerFindButton';
 import { resolveLorcanaMarketplace } from '../../lib/lorcana/ebay';
 import { slugifyCardName } from '../../lib/lorcana/slug';
 import {
@@ -54,6 +55,9 @@ interface Props {
   collectorNumber: string | null;
   rarityLabel: string | null;
   finish: string | null;
+  /** CN-05 Sprint 4 — tcg_printings.tcgplayer_id for exact deep links.
+   *  Null falls back to a TCGplayer search URL. */
+  tcgplayerProductId?: number | null;
 }
 
 export function ExactActionsClient(props: Props) {
@@ -156,6 +160,16 @@ export function ExactActionsClient(props: Props) {
         rarity={narrowRarity}
         finish={props.finish}
         marketplace={marketplace}
+        source="lorcana-card-exact"
+        size="md"
+      />
+      {/* CN-05 Sprint 4 — TCGplayer buying CTA. Exact deep link
+          when tcg_printings.tcgplayer_id is numeric, search fallback
+          otherwise with an honest "Find on TCGplayer" label. */}
+      <TcgplayerFindButton
+        cardName={props.cardName}
+        collectorNumber={props.collectorNumber}
+        productId={props.tcgplayerProductId ?? null}
         source="lorcana-card-exact"
         size="md"
       />
