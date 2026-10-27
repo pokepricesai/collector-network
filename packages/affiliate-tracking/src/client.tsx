@@ -33,6 +33,32 @@ interface GtagWindow {
   gtag?: (command: 'event', eventName: string, params?: Record<string, unknown>) => void;
 }
 
+/** CN-05 Sprint 7 — classify an affiliate destination into a stable
+ *  merchant string for GA4 reporting. Prefers the explicit
+ *  `data-merchant` attribute on the anchor when present (callers can
+ *  override classification for edge cases); otherwise derives from
+ *  the destination hostname. Returns one of the canonical values
+ *  'ebay' | 'tcgplayer' | 'whatnot' | 'cardmarket' | 'other'.
+ *
+ *  Hostname classification is intentionally generous — any eBay
+ *  regional variant (co.uk/com/de/com.au/…) counts as ebay; the
+ *  Impact share-link host partner.tcgplayer.com AND the destination
+ *  www.tcgplayer.com both count as tcgplayer; etc. */
+export function classifyAffiliateMerchant(
+  explicit: string | null | undefined,
+  destinationHost: string | undefined,
+): 'ebay' | 'tcgplayer' | 'whatnot' | 'cardmarket' | 'other' {
+  const e = (explicit ?? '').trim().toLowerCase();
+  if (e === 'ebay' || e === 'tcgplayer' || e === 'whatnot' || e === 'cardmarket' || e === 'other') return e;
+  const h = (destinationHost ?? '').toLowerCase();
+  if (!h) return 'other';
+  if (h.includes('ebay.')) return 'ebay';
+  if (h === 'partner.tcgplayer.com' || h.endsWith('tcgplayer.com')) return 'tcgplayer';
+  if (h === 'whatnot.pxf.io' || h.endsWith('whatnot.com')) return 'whatnot';
+  if (h.endsWith('cardmarket.com')) return 'cardmarket';
+  return 'other';
+}
+
 export function AffiliateTracking({ endpoint = '/api/affiliate/event' }: AffiliateTrackingProps = {}) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -64,6 +90,15 @@ export function AffiliateTracking({ endpoint = '/api/affiliate/event' }: Affilia
           else if (u.host === 'www.ebay.ca') marketplace = 'CA';
         } catch { /* ignore */ }
 
+        // CN-05 Sprint 7 — explicit merchant classification. Prefer
+        // data-merchant on the anchor; fall back to hostname heuristic.
+        // Preserves destination_host for dashboards that already filter
+        // on it; adds `merchant` as a cleaner cross-merchant dimension.
+        const merchant = classifyAffiliateMerchant(
+          link.getAttribute('data-merchant'),
+          destinationHost,
+        );
+
         const payload = {
           event_type: 'click',
           placement,
@@ -73,17 +108,20 @@ export function AffiliateTracking({ endpoint = '/api/affiliate/event' }: Affilia
           set_slug: link.getAttribute('data-set-slug') ?? undefined,
           intent: link.getAttribute('data-intent') ?? undefined,
           marketplace,
+          merchant,
         };
 
         // GA4 event — always-on when gtag is defined. Standard snake_case
         // parameter names. The `site` dimension is also recorded at the
         // GA4 property level, so it's redundant here but useful for
         // cross-property reporting where the same tag container is
-        // shared.
+        // shared. `merchant` is new in Sprint 7 and is stable across
+        // merchants; `destination_host` is kept for backward-compat.
         const w = window as unknown as GtagWindow;
         if (typeof w.gtag === 'function') {
           w.gtag('event', 'affiliate_click', {
             site: window.location.hostname,
+            merchant,
             placement,
             page_type: payload.page_type,
             source_component: payload.source_component,

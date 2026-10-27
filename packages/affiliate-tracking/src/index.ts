@@ -10,7 +10,7 @@
 
 export { handleAffiliateEvent } from './server';
 export type { AffiliateIngestOptions } from './server';
-export { AffiliateTracking } from './client';
+export { AffiliateTracking, classifyAffiliateMerchant } from './client';
 export type { AffiliateTrackingProps } from './client';
 export { WhatnotLink, WHATNOT_CUTOFF_MS } from './whatnot';
 export type { WhatnotLinkProps } from './whatnot';

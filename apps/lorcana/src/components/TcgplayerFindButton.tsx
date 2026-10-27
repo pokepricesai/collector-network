@@ -52,6 +52,7 @@ export default function TcgplayerFindButton(props: TcgplayerFindButtonProps) {
       target="_blank"
       rel="sponsored nofollow noopener noreferrer"
       data-affiliate="1"
+      data-merchant="tcgplayer"
       data-placement={props.source}
       data-component="TcgplayerFindButton"
       data-page-type="card"

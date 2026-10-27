@@ -46,6 +46,7 @@ export function TcgplayerLinkButton(props: TcgplayerLinkButtonProps) {
       rel="sponsored nofollow noopener noreferrer"
       className={styles.tcgBtn}
       data-affiliate="1"
+      data-merchant="tcgplayer"
       data-placement={props.source}
       data-component="TcgplayerLinkButton"
       data-page-type="printing"

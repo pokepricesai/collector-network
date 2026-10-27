@@ -231,6 +231,7 @@ function MarketCard({
         rel={ctaIsAffiliate ? 'sponsored nofollow noopener noreferrer' : 'noopener noreferrer nofollow'}
         className="btn btn-sm"
         data-affiliate={ctaIsAffiliate ? '1' : '0'}
+        data-merchant={source === 'tcgplayer' ? 'tcgplayer' : 'cardmarket'}
         data-placement={`op-variant-${source}`}
         data-component="VariantMarketPanel"
         data-page-type="variant"
