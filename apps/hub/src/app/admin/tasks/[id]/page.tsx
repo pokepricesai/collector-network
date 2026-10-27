@@ -4,8 +4,13 @@ import { AdminShell } from '@/components/admin/AdminShell';
 import { Panel, SectionHeader, StatusBadge, Notice } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
-import { generateClaudePromptAction } from './actions';
+import {
+  generateClaudePromptAction,
+  recordClaudeImplementationAction,
+  confirmReceiptVerifiedAction,
+} from './actions';
 import { completeTaskAction, reopenTaskAction } from '../actions';
+import type { ImplementationReceiptStored } from '@/server/claude/completion-receipt';
 
 // CN-05 OS Phase 2 — task detail page.
 //
@@ -68,8 +73,17 @@ export default async function TaskDetailPage({ params }: Props) {
   }
 
   const isCompleted = task.status === 'completed';
-  const prompts = (((task.metadata ?? {}) as { generated_prompts?: GeneratedPrompt[] }).generated_prompts) ?? [];
+  const meta = (task.metadata ?? {}) as {
+    generated_prompts?: GeneratedPrompt[];
+    implementation_receipts?: ImplementationReceiptStored[];
+    receipt_last_error?: { at: string; message: string; path?: string };
+  };
+  const prompts = meta.generated_prompts ?? [];
   const latestPrompt = prompts[0];
+  const receipts = meta.implementation_receipts ?? [];
+  const latestReceipt = receipts[0];
+  const receiptError = meta.receipt_last_error;
+  const operatorVerified = latestReceipt?.operator_confirmed_at != null;
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/tasks">
@@ -176,6 +190,148 @@ export default async function TaskDetailPage({ params }: Props) {
               task <strong>complete</strong> is the lightweight receipt channel until the
               dedicated completion-import workflow is wired (see Sprint 10 proposal).
             </Notice>
+          </div>
+        )}
+      </Panel>
+
+      {/* CN-05 OS Phase B — Record Claude Implementation.
+          Operator pastes the structured JSON Claude returned after
+          finishing the action; we validate strictly and append to
+          implementation_receipts. Operator must then confirm the
+          production deployment is actually verified — Claude's JSON
+          is never a self-certifying receipt. */}
+      <Panel
+        title="Claude implementation receipt"
+        eyebrow="Paste JSON · operator must confirm verification"
+      >
+        {receiptError && (
+          <div style={{ marginBottom: 10 }}>
+            <Notice tone="danger">
+              <strong>Receipt rejected:</strong> {receiptError.message}
+              {receiptError.path && <> <code>({receiptError.path})</code></>}
+              <br />
+              <span style={{ fontSize: 11, opacity: 0.8 }}>at {receiptError.at}</span>
+            </Notice>
+          </div>
+        )}
+
+        {!latestReceipt ? (
+          <form action={recordClaudeImplementationAction} style={{ display: 'grid', gap: 8 }}>
+            <input type="hidden" name="task_id" value={task.id} />
+            <label style={{ fontSize: 12, color: 'var(--admin-text-muted)' }}>
+              Paste the completion JSON Claude returned (per the prompt format above).
+              Prose before or after the JSON is fine — we extract the first balanced object.
+            </label>
+            <textarea
+              name="receipt"
+              required
+              placeholder={`{\n  "action_id": "${task.id}",\n  "completed_at": "<ISO timestamp>",\n  "repository": "...",\n  "commit_sha": "...",\n  "production_deployment_sha": "...",\n  "summary_of_what_changed": "...",\n  "live_verification": "..."\n}`}
+              style={{
+                width: '100%',
+                minHeight: 220,
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                fontSize: 12,
+                lineHeight: 1.5,
+                padding: 10,
+                border: '1px solid var(--admin-border)',
+                borderRadius: 6,
+                background: 'var(--admin-bg)',
+                color: 'var(--admin-text)',
+                resize: 'vertical',
+              }}
+            />
+            <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm" style={{ width: 'fit-content' }}>
+              Record Claude implementation
+            </button>
+          </form>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 12 }}>
+              <StatusBadge
+                state={operatorVerified ? 'success' : 'warning'}
+                label={operatorVerified ? 'Operator verified' : 'Awaiting operator verification'}
+              />
+              <span style={{ color: 'var(--admin-text-muted)' }}>
+                Received {latestReceipt.received_at}
+              </span>
+              {operatorVerified && (
+                <span style={{ color: 'var(--admin-text-muted)' }}>
+                  · Confirmed {latestReceipt.operator_confirmed_at}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+              <div>
+                <strong>Summary:</strong> {latestReceipt.summary_of_what_changed}
+              </div>
+              {latestReceipt.commit_sha && (
+                <div><strong>Commit:</strong> <code>{latestReceipt.commit_sha}</code></div>
+              )}
+              {latestReceipt.production_deployment_sha && (
+                <div><strong>Prod SHA:</strong> <code>{latestReceipt.production_deployment_sha}</code></div>
+              )}
+              {latestReceipt.live_verification && (
+                <div><strong>Live verification:</strong> {latestReceipt.live_verification}</div>
+              )}
+              {latestReceipt.rollback_route && (
+                <div><strong>Rollback:</strong> <code>{latestReceipt.rollback_route}</code></div>
+              )}
+              {latestReceipt.outstanding_issues && (
+                <div><strong>Outstanding:</strong> {latestReceipt.outstanding_issues}</div>
+              )}
+            </div>
+
+            {!operatorVerified && (
+              <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <form action={confirmReceiptVerifiedAction}>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">
+                    I verified production — confirm receipt
+                  </button>
+                </form>
+                <span style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+                  Claude&apos;s JSON claim is never a self-certifying receipt. Verify the Vercel
+                  prod SHA + the live site before clicking.
+                </span>
+              </div>
+            )}
+
+            <details style={{ marginTop: 4 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+                Raw receipt + history ({receipts.length})
+              </summary>
+              <pre style={{ fontSize: 11, lineHeight: 1.5, overflowX: 'auto', background: 'var(--admin-bg)', padding: 10, borderRadius: 6, border: '1px solid var(--admin-border)' }}>
+{JSON.stringify(receipts, null, 2)}
+              </pre>
+            </details>
+
+            <form action={recordClaudeImplementationAction} style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+              <input type="hidden" name="task_id" value={task.id} />
+              <label style={{ fontSize: 12, color: 'var(--admin-text-muted)' }}>
+                Paste a new receipt to supersede (Claude re-did the work, or an initial receipt had wrong SHA):
+              </label>
+              <textarea
+                name="receipt"
+                placeholder="Paste a replacement JSON receipt here"
+                style={{
+                  width: '100%',
+                  minHeight: 140,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  padding: 10,
+                  border: '1px solid var(--admin-border)',
+                  borderRadius: 6,
+                  background: 'var(--admin-bg)',
+                  color: 'var(--admin-text)',
+                  resize: 'vertical',
+                }}
+              />
+              <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ width: 'fit-content' }}>
+                Append new receipt
+              </button>
+            </form>
           </div>
         )}
       </Panel>

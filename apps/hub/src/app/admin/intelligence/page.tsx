@@ -278,9 +278,14 @@ function IntelCard({ row }: { row: IntelligenceRowRead }) {
           </div>
         )}
         {row.status === 'task_created' && row.task_id && (
-          <div style={{ fontSize: 12, marginTop: 8 }}>
-            Task created · <Link href={`/admin/tasks?open=${row.task_id}`}>view task</Link>
-            {' · '}
+          <div style={{ fontSize: 12, marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* CN-05 OS Phase B — route to the task detail page where
+                the Claude Code prompt generator + implementation
+                receipt controls live, not the search-param flash on
+                the list. */}
+            <Link href={`/admin/tasks/${row.task_id}`} className="ui-btn ui-btn--primary ui-btn--sm" style={{ fontSize: 11 }}>
+              Open action
+            </Link>
             <form action={resolveItemAction} style={{ display: 'inline' }}>
               <input type="hidden" name="item_id" value={row.id} />
               <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Mark resolved</button>

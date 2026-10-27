@@ -9,6 +9,10 @@ import {
   type TaskForPrompt,
   type BuiltPrompt,
 } from '@/server/claude/action-prompt';
+import {
+  parseAndValidateReceipt,
+  type ImplementationReceiptStored,
+} from '@/server/claude/completion-receipt';
 
 // CN-05 OS Phase 2 — Server Action that assembles the Claude Code
 // implementation prompt for a given task, saves it to
@@ -85,5 +89,125 @@ export async function generateClaudePromptAction(formData: FormData): Promise<vo
     await sb.from('network_tasks').update({ metadata: nextMeta }).eq('id', taskId);
   }
 
+  revalidatePath(`/admin/tasks/${taskId}`);
+}
+
+// CN-05 OS Phase B — Record Claude Implementation.
+//
+// Accepts a pasted JSON receipt, validates it strictly, appends to
+// network_tasks.metadata.implementation_receipts (newest first,
+// max 10 for audit). Does NOT automatically mark the task
+// production-verified — that is an explicit operator step so Claude
+// cannot self-certify a deploy.
+//
+// Returns search-param-driven feedback to the detail page because
+// Next's Server Action primitives don't carry a response object.
+
+export async function recordClaudeImplementationAction(
+  formData: FormData,
+): Promise<void> {
+  const taskId = formData.get('task_id');
+  const rawPaste = formData.get('receipt');
+  if (typeof taskId !== 'string' || typeof rawPaste !== 'string') return;
+
+  const { sb } = await requireAdmin('/admin/tasks');
+
+  const { data: task, error: tErr } = await sb
+    .from('network_tasks')
+    .select('id, metadata')
+    .eq('id', taskId)
+    .maybeSingle();
+  if (tErr || !task) {
+    revalidatePath(`/admin/tasks/${taskId}`);
+    return;
+  }
+
+  const validation = parseAndValidateReceipt(rawPaste, taskId);
+  const prevMeta =
+    ((task.metadata ?? {}) as {
+      implementation_receipts?: ImplementationReceiptStored[];
+      receipt_last_error?: { at: string; message: string; path?: string };
+    }) ?? {};
+
+  if (!validation.ok) {
+    const nextMeta = {
+      ...(prevMeta as Record<string, unknown>),
+      receipt_last_error: {
+        at: new Date().toISOString(),
+        message: validation.error,
+        path: validation.path,
+      },
+    };
+    await sb.from('network_tasks').update({ metadata: nextMeta }).eq('id', taskId);
+    revalidatePath(`/admin/tasks/${taskId}`);
+    return;
+  }
+
+  const stored: ImplementationReceiptStored = {
+    ...validation.value,
+    received_at: new Date().toISOString(),
+    received_version: 'cn05-receipt-v1',
+    operator_confirmed_at: null,
+    operator_confirmed_by: null,
+  };
+  const existing = Array.isArray(prevMeta.implementation_receipts)
+    ? prevMeta.implementation_receipts
+    : [];
+  const next = [stored, ...existing].slice(0, 10);
+  const nextMeta = {
+    ...(prevMeta as Record<string, unknown>),
+    implementation_receipts: next,
+    // Clear any previous error on a successful import.
+    receipt_last_error: undefined,
+  };
+  await sb.from('network_tasks').update({ metadata: nextMeta }).eq('id', taskId);
+  revalidatePath(`/admin/tasks/${taskId}`);
+}
+
+// Operator confirmation — explicit human step so Claude can't
+// self-certify a deployment. Flips operator_confirmed_at/by on the
+// latest receipt and marks the task status='in_progress' (so it
+// stays open while measurement runs after D7/D14/D28/D90 ships).
+export async function confirmReceiptVerifiedAction(
+  formData: FormData,
+): Promise<void> {
+  const taskId = formData.get('task_id');
+  if (typeof taskId !== 'string') return;
+  const { sb, admin } = await requireAdmin('/admin/tasks');
+
+  const { data: task } = await sb
+    .from('network_tasks')
+    .select('id, metadata')
+    .eq('id', taskId)
+    .maybeSingle();
+  if (!task) return;
+
+  const prevMeta =
+    ((task.metadata ?? {}) as {
+      implementation_receipts?: ImplementationReceiptStored[];
+    }) ?? {};
+  const receipts = Array.isArray(prevMeta.implementation_receipts)
+    ? prevMeta.implementation_receipts
+    : [];
+  if (receipts.length === 0) return;
+
+  const now = new Date().toISOString();
+  const nextReceipts = receipts.map((r, i) =>
+    i === 0
+      ? {
+          ...r,
+          operator_confirmed_at: now,
+          operator_confirmed_by: admin.adminRowId,
+        }
+      : r,
+  );
+  const nextMeta = {
+    ...(prevMeta as Record<string, unknown>),
+    implementation_receipts: nextReceipts,
+  };
+  await sb
+    .from('network_tasks')
+    .update({ metadata: nextMeta, status: 'in_progress' })
+    .eq('id', taskId);
   revalidatePath(`/admin/tasks/${taskId}`);
 }
