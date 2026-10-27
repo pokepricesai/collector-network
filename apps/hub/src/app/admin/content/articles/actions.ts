@@ -7,7 +7,7 @@ import { publishArticle, scheduleArticle, cancelSchedule } from '@/server/conten
 import { sanitiseEditorHtml } from '@/server/content/sanitise';
 import { submitArticleToIndexNow, loadSiteIndexNow } from '@/server/content/indexing';
 
-export async function updateArticleAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+export async function updateArticleAction(fd: FormData): Promise<{ ok: boolean; error?: string; approvalInvalidated?: boolean; scheduleCancelled?: boolean }> {
   const { admin, sb } = await requireAdmin('/admin/content/articles');
   const id = fd.get('id') as string;
   const changeNote = (fd.get('changeNote') as string) || null;
@@ -33,6 +33,62 @@ export async function updateArticleAction(fd: FormData): Promise<{ ok: boolean; 
     update['body_format'] = 'html';
   }
 
+  // CN-05 OS Phase A.3 — approval invalidation on material edit.
+  //
+  // Read the current row's status + the current values of material
+  // fields BEFORE overwriting. A material change on an article that
+  // is already `approved` or `scheduled` means the human sign-off is
+  // no longer valid for what's now in the row — flip it back to
+  // `review` and cancel any pending schedule so the cron doesn't
+  // publish an un-approved revision.
+  //
+  // Diff is value-based, not form-presence-based, so idempotent
+  // re-saves of the same text don't drop sign-off. body_rich is
+  // compared post-sanitisation so round-trip whitespace quirks
+  // don't trigger false invalidations.
+  const { data: pre } = await sb
+    .from('network_articles')
+    .select('id, status, scheduled_for, title, slug, meta_title, meta_description, summary, standfirst, body_rich, site_id')
+    .eq('id', id)
+    .maybeSingle();
+
+  let approvalInvalidated = false;
+  let scheduleCancelled = false;
+
+  if (pre) {
+    const previous = pre as {
+      status: string | null; scheduled_for: string | null; site_id: string | null;
+      title: string | null; slug: string | null;
+      meta_title: string | null; meta_description: string | null;
+      summary: string | null; standfirst: string | null;
+      body_rich: Record<string, unknown> | null;
+    };
+    const needsReapproval =
+      previous.status === 'approved' || previous.status === 'scheduled';
+    if (needsReapproval) {
+      const changed =
+        update.title !== previous.title
+        || update.slug !== previous.slug
+        || update.meta_title !== previous.meta_title
+        || update.meta_description !== previous.meta_description
+        || update.summary !== previous.summary
+        || update.standfirst !== previous.standfirst
+        || (
+          typeof bodyHtmlRaw === 'string'
+          && JSON.stringify(update.body_rich ?? null) !== JSON.stringify(previous.body_rich ?? null)
+        );
+      if (changed) {
+        update['status'] = 'review';
+        if (previous.status === 'scheduled') {
+          update['scheduled_for'] = null;
+          update['scheduled_by'] = null;
+          scheduleCancelled = true;
+        }
+        approvalInvalidated = true;
+      }
+    }
+  }
+
   // Snapshot BEFORE overwrite — version history never silently
   // destroys prior content.
   await sb.rpc('network_snapshot_article', {
@@ -45,8 +101,30 @@ export async function updateArticleAction(fd: FormData): Promise<{ ok: boolean; 
   const { error } = await sb.from('network_articles').update(update).eq('id', id);
   if (error) return { ok: false, error: error.message };
 
+  // Audit the demotion so the article's history explains why the
+  // sign-off was invalidated. We do this after the UPDATE succeeds
+  // so a failed write doesn't leave orphaned audit entries.
+  if (approvalInvalidated && pre) {
+    const previous = pre as { status: string | null; site_id: string | null };
+    await sb.rpc('network_log_audit', {
+      p_action: 'article.approval_invalidated',
+      p_entity_type: 'network_article',
+      p_entity_id: id,
+      p_site_id: previous.site_id ?? null,
+      p_old_value: { status: previous.status } as unknown as Record<string, unknown>,
+      p_new_value: {
+        status: 'review',
+        reason: 'material edit after approval',
+        schedule_cancelled: scheduleCancelled,
+      } as unknown as Record<string, unknown>,
+      p_actor_type: 'human', p_source: 'manual',
+      p_metadata: { actor: admin.email, change_note: changeNote } as unknown as Record<string, unknown>,
+    });
+  }
+
   revalidatePath(`/admin/content/articles/${id}`);
-  return { ok: true };
+  if (approvalInvalidated) revalidatePath('/admin/content/articles');
+  return { ok: true, approvalInvalidated, scheduleCancelled };
 }
 
 export async function generateDraftAction(articleId: string): Promise<{ ok: boolean; error?: string; cost?: number }> {

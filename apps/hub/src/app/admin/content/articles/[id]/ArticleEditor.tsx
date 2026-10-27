@@ -147,6 +147,19 @@ export function ArticleEditor(props: {
       pristine.current = { title, slug, metaTitle, metaDescription, summary, standfirst, bodyHtml };
       setChangeNote('');
       setSaveState('saved');
+      // CN-05 OS Phase A.3 — surface approval invalidation so the
+      // operator sees why the article dropped back to review (and
+      // whether a schedule was cancelled). The page revalidates on
+      // save, so the status chip + schedule row will refresh on
+      // next render; this toast exists solely to make the demotion
+      // obvious at the moment it happens.
+      if (r.approvalInvalidated) {
+        setMsg(
+          r.scheduleCancelled
+            ? 'Approval invalidated — material edit after approval. Schedule cancelled; re-approve before scheduling.'
+            : 'Approval invalidated — material edit after approval. Article moved back to review.',
+        );
+      }
       setTimeout(() => setSaveState((s) => (s === 'saved' ? 'clean' : s)), 1800);
     } catch (e) {
       setSaveState('error');

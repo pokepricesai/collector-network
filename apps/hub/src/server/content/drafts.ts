@@ -146,12 +146,18 @@ export async function generateArticleDraft(
 ): Promise<{ draft: Record<string, unknown>; usage: { input_tokens: number; output_tokens: number; est_cost_usd: number; model: string } }> {
   const { data: art, error } = await sb
     .from('network_articles')
-    .select('id, site_id, idea_id, brief_id, title, slug, body, publication_target, network_sites(slug)')
+    .select('id, status, scheduled_for, site_id, idea_id, brief_id, title, slug, body, publication_target, network_sites(slug)')
     .eq('id', articleId).maybeSingle();
   if (error) throw new Error(`[drafts] load article: ${error.message}`);
   if (!art) throw new Error('article not found');
-  const a = art as unknown as { id: string; site_id: string; idea_id: string | null; brief_id: string; title: string; slug: string; body: string; publication_target: string; network_sites: { slug: string } };
+  const a = art as unknown as { id: string; status: string | null; scheduled_for: string | null; site_id: string; idea_id: string | null; brief_id: string; title: string; slug: string; body: string; publication_target: string; network_sites: { slug: string } };
   if (!a.brief_id) throw new Error('article has no attached brief');
+  // CN-05 OS Phase A.3 — AI regeneration on a published article is
+  // never allowed. For approved / scheduled, we allow but will demote
+  // + cancel the schedule after a successful rewrite (see below).
+  if (a.status === 'published') {
+    throw new Error('[drafts] cannot regenerate a published article; archive or branch it first');
+  }
 
   // Snapshot current state before overwrite
   if (a.body && a.body.length > 0) {
@@ -240,7 +246,12 @@ export async function generateArticleDraft(
   }
   await consumeArticleAiBudget(sb, { reservationId, actualUsd: usage.est_cost_usd, articleId: a.id });
 
-  await sb.from('network_articles').update({
+  // CN-05 OS Phase A.3 — an AI regeneration is a material edit by
+  // definition, so if the article was approved/scheduled we demote
+  // it back to review and cancel any pending schedule. The audit
+  // row below explains why.
+  const regenInvalidates = a.status === 'approved' || a.status === 'scheduled';
+  const regenUpdate: Record<string, unknown> = {
     title: draft.title,
     slug: draft.slug.length > 0 ? draft.slug : a.slug,
     body: draft.body_markdown,
@@ -248,7 +259,15 @@ export async function generateArticleDraft(
     meta_title: draft.meta_title,
     meta_description: draft.meta_description,
     summary: draft.summary,
-  }).eq('id', a.id);
+  };
+  if (regenInvalidates) {
+    regenUpdate.status = 'review';
+    if (a.status === 'scheduled') {
+      regenUpdate.scheduled_for = null;
+      regenUpdate.scheduled_by = null;
+    }
+  }
+  await sb.from('network_articles').update(regenUpdate).eq('id', a.id);
 
   // Append sources from the AI output
   if ((draft.sources ?? []).length > 0) {
@@ -285,6 +304,23 @@ export async function generateArticleDraft(
     p_source: 'ai_claude',
     p_metadata: { raw_chars: rawText.length, research_gaps: draft.research_gaps } as unknown as Record<string, unknown>,
   });
+  if (regenInvalidates) {
+    await sb.rpc('network_log_audit', {
+      p_action: 'article.approval_invalidated',
+      p_entity_type: 'network_article',
+      p_entity_id: a.id,
+      p_site_id: a.site_id,
+      p_old_value: { status: a.status } as unknown as Record<string, unknown>,
+      p_new_value: {
+        status: 'review',
+        reason: 'ai_regeneration',
+        schedule_cancelled: a.status === 'scheduled',
+      } as unknown as Record<string, unknown>,
+      p_actor_type: 'ai',
+      p_source: 'ai_claude',
+      p_metadata: { model: usage.model } as unknown as Record<string, unknown>,
+    });
+  }
 
   return { draft: draft as unknown as Record<string, unknown>, usage };
 }
