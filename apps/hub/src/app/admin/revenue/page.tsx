@@ -38,7 +38,12 @@ import { siteDisplayName } from '@/lib/display-names';
 // Information architecture:
 //   1. Headline — Confirmed / Pending / Attributed / Gross /
 //      Reversed / Settled per currency. Never summed.
-//   2. Window totals — today / 7d / 28d / MTD per currency.
+//   2. Window totals — yesterday / 7d / 28d / MTD per currency.
+//      "Yesterday" is a single-day window (occurred_on = yesterday)
+//      because the affiliate feed (Impact Media Partner API) does
+//      not deliver complete figures for the same day — day T's
+//      Actions typically land during day T+1. See `yesterday`
+//      computation below.
 //   3. Revenue over time + status mix (12 months, charts).
 //   4. By affiliate source + by site breakdowns (recent window).
 //   5. RPKU efficiency with explicit maturity caveat.
@@ -94,13 +99,18 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   const sp = (await searchParams) ?? {};
   const showDiagnostics = sp.diag === '1';
 
-  const today = daysAgoIso(0);
+  // Date boundaries use UTC (ISO date slice). Impact Media Partner
+  // API reports in account-local timezone which for this account is
+  // UTC — occurred_on in network_revenue_events is already stored as
+  // a UTC date. The hub UI displays UK local time elsewhere; we do
+  // NOT re-offset here to avoid double-shift during BST/UTC crossover.
+  const yesterday = daysAgoIso(1);
   const since7 = daysAgoIso(7);
   const since28 = daysAgoIso(28);
   const mtd = monthStartIso();
 
   const [
-    todayTotals, w7, w28, mtdTotals,
+    yesterdayTotals, w7, w28, mtdTotals,
     gross28,
     channels28, bySite28,
     clicks28, convs28,
@@ -109,7 +119,9 @@ export default async function RevenuePage({ searchParams }: PageProps) {
     monthly12m, chartBySite12m, chartBySource12m, rpkuPoints, observations, audit,
     invoiceSummary,
   ] = await Promise.all([
-    windowBookedTotals(sb, today),
+    // Yesterday: single-day window (both bounds set) so we never
+    // leak in partial same-day events if the provider's clock drifts.
+    windowBookedTotals(sb, yesterday, yesterday),
     windowBookedTotals(sb, since7),
     windowBookedTotals(sb, since28),
     windowBookedTotals(sb, mtd),
@@ -132,7 +144,7 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   ]);
 
   const currencies = Array.from(new Set<string>([
-    ...todayTotals.map((r) => r.currency),
+    ...yesterdayTotals.map((r) => r.currency),
     ...w7.map((r) => r.currency),
     ...w28.map((r) => r.currency),
     ...mtdTotals.map((r) => r.currency),
@@ -152,13 +164,19 @@ export default async function RevenuePage({ searchParams }: PageProps) {
   // one shared compact notice instead of a wide empty table.
   const anyAttributedSite = bySite28.some((s) => !!s.site_name);
 
-  const todayTxt = formatDateOnly(new Date());
+  // Yesterday-event-presence check: zero events across every
+  // currency means the provider delivery for the previous day hasn't
+  // landed yet (or there was genuinely no activity — the two are
+  // indistinguishable from the ledger, but a pending-indicator is
+  // the honest default and matches the brief's "do not display a
+  // misleading zero" rule).
+  const yesterdayHasEvents = yesterdayTotals.some((r) => r.event_count > 0);
 
   const windows = [
-    { id: 'today', label: 'Today',          totals: todayTotals, from: todayTxt },
-    { id: '7d',    label: 'Last 7 days',    totals: w7,          from: since7 },
-    { id: '28d',   label: 'Last 28 days',   totals: w28,         from: since28 },
-    { id: 'mtd',   label: 'Month to date',  totals: mtdTotals,   from: mtd },
+    { id: 'yesterday', label: 'Yesterday',      totals: yesterdayTotals, from: yesterday },
+    { id: '7d',        label: 'Last 7 days',    totals: w7,              from: since7 },
+    { id: '28d',       label: 'Last 28 days',   totals: w28,             from: since28 },
+    { id: 'mtd',       label: 'Month to date',  totals: mtdTotals,       from: mtd },
   ];
 
   return (
@@ -255,7 +273,16 @@ export default async function RevenuePage({ searchParams }: PageProps) {
       </Panel>
 
       {/* ── Window totals ───────────────────────────────────── */}
-      <Panel title="Window totals" eyebrow="Today · 7d · 28d · MTD · per currency">
+      <Panel title="Window totals" eyebrow="Yesterday · 7d · 28d · MTD · per currency">
+        {!yesterdayHasEvents && (
+          <div style={{ marginBottom: 10 }}>
+            <Notice tone="info">
+              Awaiting provider delivery for <strong>{yesterday}</strong>. The affiliate feed
+              reports day T during day T+1, so this figure updates once Impact posts yesterday&apos;s
+              Actions. Showing a zero here is a pending state, not a confirmed empty day.
+            </Notice>
+          </div>
+        )}
         <Table
           rows={windows.flatMap((w) => currencies.map((ccy) => {
             const t = pick(w.totals, ccy);

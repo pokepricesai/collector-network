@@ -304,14 +304,21 @@ export interface WindowTotals {
 export async function windowBookedTotals(
   sb: SupabaseClient,
   sinceDate: string,
+  /** CN-05 Revenue Yesterday — optional upper bound. When supplied,
+   *  the window becomes `occurred_on BETWEEN sinceDate AND untilDate`
+   *  (inclusive). Omit for the existing unbounded-above behaviour
+   *  (7d / 28d / MTD rolling windows). */
+  untilDate?: string,
 ): Promise<WindowTotals[]> {
   // Status source-of-truth is the `ledger_status` column (added by
   // the Phase 6 reconciliation migration). We fall back to the legacy
   // `source_detail.status` jsonb only when ledger_status is NULL, so
   // CSV-era rows still classify correctly during cross-over.
-  const { data, error } = await sb.from('network_revenue_events')
+  let q = sb.from('network_revenue_events')
     .select('amount_minor, currency, event_kind, ledger_status, source_detail')
     .gte('occurred_on', sinceDate);
+  if (untilDate) q = q.lte('occurred_on', untilDate);
+  const { data, error } = await q;
   if (error) throw new Error(`[revenue] windowBookedTotals: ${error.message}`);
   const rows = (data ?? []) as Array<{ amount_minor: number; currency: string; event_kind: string; ledger_status: string | null; source_detail: Record<string, unknown> | null }>;
   const b = new Map<string, WindowTotals>();
