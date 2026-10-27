@@ -1,0 +1,40 @@
+/* Outlined complement to .ebayBtn — visually balanced, clearly a
+   second merchant option rather than a primary CTA. Same dimensions
+   so the two buttons line up without reflow or layout shift. */
+
+.tcgBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text, #1a1a1a);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.3));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
+  white-space: nowrap;
+}
+
+.tcgBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  background: var(--surface-raised, #fafafa);
+}
+
+.tcgBtn:active {
+  transform: translateY(0);
+}
+
+.tcgText {
+  line-height: 1;
+}
+
+.tcgArrow {
+  font-size: 11px;
+  opacity: 0.7;
+}

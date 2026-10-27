@@ -16,6 +16,7 @@ import { AddToCollectionMount } from '../../../../../../components/collection/Ad
 import { WatchButtonMount } from '../../../../../../components/watchlist/WatchButtonMount';
 import { AddToDeckMount } from '../../../../../../components/decks/AddToDeckMount';
 import { EbayLinkButton } from '../../../../../../components/card/EbayLinkButton';
+import { TcgplayerLinkButton } from '../../../../../../components/card/TcgplayerLinkButton';
 import { GradedStrip } from '../../../../../../components/card/GradedStrip';
 import { VariantsTable } from '../../../../../../components/card/VariantsTable';
 import { RarityRefractorLine } from '../../../../../../components/signature/RarityRefractorLine';
@@ -411,8 +412,18 @@ export default async function PrintingPage({ params }: Props) {
               rarity={data.card.rarity ?? null}
               source="ygo-printing"
             />
+            {/* CN-05 Sprint 4 — second buying option alongside eBay.
+                Uses tcg_printings.tcgplayer_id for exact deep links
+                when present; search fallback otherwise with an
+                honest "Find on TCGplayer" label. */}
+            <TcgplayerLinkButton
+              cardName={data.card.name}
+              collectorNumber={data.printing.collector_number ?? null}
+              productId={data.printing.tcgplayer_id ?? null}
+              source="ygo-printing"
+            />
             <span style={{ fontSize: 11, opacity: 0.6 }}>
-              Affiliate. We may earn a commission from qualifying eBay purchases.
+              Affiliate. We may earn a commission from qualifying eBay and TCGplayer purchases.
             </span>
           </div>
         </section>
