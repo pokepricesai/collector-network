@@ -196,6 +196,9 @@ importers:
       '@collector-network/affiliate':
         specifier: workspace:*
         version: link:../../packages/affiliate
+      '@collector-network/affiliate-tracking':
+        specifier: workspace:*
+        version: link:../../packages/affiliate-tracking
       '@collector-network/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics

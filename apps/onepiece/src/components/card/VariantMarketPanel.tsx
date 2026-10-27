@@ -5,8 +5,7 @@ import { formatPrice } from '@/lib/onepiece/format-price';
 import {
   cardmarketProductUrl,
   cardmarketSearchUrl,
-  tcgplayerProductUrl,
-  tcgplayerSearchUrl,
+  tcgplayerAffiliateUrl,
 } from '@/lib/onepiece/marketplace';
 import { buildEbaySearchUrl } from '@/lib/onepiece/ebay';
 import { baseCollectorNumber } from '@/lib/onepiece/slug';
@@ -142,14 +141,31 @@ function MarketCard({
   const currency: 'EUR' | 'USD' = group?.currency ?? fallbackCurrency;
   const headline = group ? pickSourceHeadline(group) : null;
   const secondary = group ? extractSecondary(group) : { priceLow: null, trend: null };
-  const productHref = source === 'cardmarket'
-    ? cardmarketProductUrl(group?.productId)
-    : tcgplayerProductUrl(group?.productId);
-  const searchHref = source === 'cardmarket'
-    ? cardmarketSearchUrl(cardName, baseCollector)
-    : tcgplayerSearchUrl(cardName, baseCollector);
-  const cta = productHref ?? searchHref;
-  const ctaLabel = productHref ? `View on ${sourceLabel}` : `Search ${sourceLabel}`;
+  // Cardmarket: plain product/search URL (no affiliate programme).
+  // TCGplayer: wrap through the Impact share link so clicks are
+  // attributable (CN-05 Sprint 5). The affiliate wrapper preserves
+  // exact-vs-search semantics via `isExact`.
+  let cta: string;
+  let ctaLabel: string;
+  let ctaIsAffiliate = false;
+  let ctaIsExact = false;
+  if (source === 'cardmarket') {
+    const productHref = cardmarketProductUrl(group?.productId);
+    cta = productHref ?? cardmarketSearchUrl(cardName, baseCollector);
+    ctaLabel = productHref ? 'View on Cardmarket' : 'Search Cardmarket';
+    ctaIsExact = productHref != null;
+  } else {
+    const aff = tcgplayerAffiliateUrl({
+      cardName,
+      baseCollector,
+      productId: group?.productId,
+      subid: `op:variant:${(baseCollector ?? '').toString().slice(0, 40)}`,
+    });
+    cta = aff.href;
+    ctaLabel = aff.label;
+    ctaIsAffiliate = true;
+    ctaIsExact = aff.isExact;
+  }
   const updated = group ? daysAgo(newestUpdate(group)) : null;
   // Only show finish text when the source genuinely splits this
   // variant into multiple purchasable products by finish. In the
@@ -212,8 +228,14 @@ function MarketCard({
       <a
         href={cta}
         target="_blank"
-        rel="noopener noreferrer nofollow"
+        rel={ctaIsAffiliate ? 'sponsored nofollow noopener noreferrer' : 'noopener noreferrer nofollow'}
         className="btn btn-sm"
+        data-affiliate={ctaIsAffiliate ? '1' : '0'}
+        data-placement={`op-variant-${source}`}
+        data-component="VariantMarketPanel"
+        data-page-type="variant"
+        data-intent={ctaIsExact ? 'exact' : 'search'}
+        data-set-slug={baseCollector ?? undefined}
         style={{
           justifySelf: 'start',
           textDecoration: 'none',

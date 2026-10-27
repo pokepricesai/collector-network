@@ -6,9 +6,9 @@
 // exact single a collector wants to buy. Search-URL fallback is used
 // only when the id is missing.
 //
-// No affiliate tracking is attached today. If Cardmarket or TCGPlayer
-// affiliate programs are enrolled later, gate the query-param tail on
-// process.env and keep the product URL shape identical.
+// CN-05 Sprint 5: TCGplayer links now flow through the Impact share-
+// link `tcgplayerAffiliateUrl` wrapper when the caller wants affiliate
+// tracking. Cardmarket is not enrolled, so its helpers stay plain.
 
 const OP_CARDMARKET_CATEGORY = 'OnePiece';
 
@@ -45,4 +45,46 @@ export function tcgplayerSearchUrl(cardName: string, baseCollector: string | nul
     .filter(Boolean)
     .join(' ');
   return `https://www.tcgplayer.com/search/one-piece-card-game/product?productLineName=one-piece-card-game&q=${encodeURIComponent(q)}`;
+}
+
+// ── Impact affiliate wrapping ─────────────────────────────────────
+//
+// CN-05 Sprint 5. Wraps a verified TCGplayer destination in the
+// Impact share-link `?u=<encoded>&sharedid=<subid>` pattern (verified
+// end-to-end in Sprint 4). No TCGplayer API access required.
+
+const TCG_PARTNER_BASE = 'https://partner.tcgplayer.com/k4EaNV';
+
+export interface TcgplayerAffiliateInput {
+  cardName: string;
+  baseCollector: string | null | undefined;
+  productId: number | null | undefined;
+  /** Impact SubID (sharedid). Capped at 70 chars by Impact. */
+  subid?: string;
+}
+
+export interface TcgplayerAffiliateLink {
+  href: string;
+  isExact: boolean;
+  /** CTA copy that reflects the destination honestly. */
+  label: string;
+}
+
+/** Produce an Impact-wrapped TCGplayer URL. Returns `{isExact:true}`
+ *  when the printing has a numeric `tcgplayer_id`; otherwise falls
+ *  back to the per-game search URL with the same affiliate wrap. */
+export function tcgplayerAffiliateUrl(input: TcgplayerAffiliateInput): TcgplayerAffiliateLink {
+  const productHref = tcgplayerProductUrl(input.productId);
+  const destination = productHref ?? tcgplayerSearchUrl(input.cardName, input.baseCollector);
+  const u = new URL(TCG_PARTNER_BASE);
+  u.searchParams.set('u', destination);
+  if (input.subid) {
+    const trimmed = input.subid.length > 70 ? input.subid.slice(0, 70) : input.subid;
+    u.searchParams.set('sharedid', trimmed);
+  }
+  return {
+    href: u.toString(),
+    isExact: productHref != null,
+    label: productHref != null ? 'View on TCGplayer' : 'Search TCGplayer',
+  };
 }

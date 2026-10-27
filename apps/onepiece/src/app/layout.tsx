@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/next';
 import { GoogleAnalytics } from '@collector-network/analytics';
+import { AffiliateTracking } from '@collector-network/affiliate-tracking/client';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -130,6 +131,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* GA4 via shared @collector-network/analytics. Safe no-op
             when NEXT_PUBLIC_GA_ID is unset. */}
         <GoogleAnalytics />
+        {/* CN-05 Sprint 5 — capture-phase affiliate_click beacon.
+            endpoint={null} = GA4-only, no server beacon / Supabase
+            write (per CN-05 Sprint 3 brief on protecting shared DB
+            capacity). */}
+        <AffiliateTracking endpoint={null} />
       </body>
     </html>
   );
