@@ -212,6 +212,10 @@ export default async function TasksPage({ searchParams }: PageProps) {
                         Intelligence
                       </Link>
                     )}
+                    {/* CN-05 OS Phase 2 — detail page with Claude Code prompt generator. */}
+                    <Link href={`/admin/tasks/${t.id}`} className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>
+                      Detail
+                    </Link>
                   </div>
                 </li>
               );
