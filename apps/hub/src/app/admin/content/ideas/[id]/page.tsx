@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { Panel, SectionHeader, StatusBadge } from '@/components/admin/admin-ui';
+import { Panel, SectionHeader, StatusBadge, Notice } from '@/components/admin/admin-ui';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
 import { updateIdeaAction } from '../actions';
+import { buildWritingBrief } from '@/server/claude/writing-brief';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -91,6 +92,63 @@ export default async function EditIdeaPage({ params }: Params) {
           {JSON.stringify(idea.evidence, null, 2)}
         </pre>
       </Panel>
+
+      {idea.status === 'approved' && (
+        <WritingBriefPanel ideaId={id} sb={sb} />
+      )}
     </AdminShell>
+  );
+}
+
+async function WritingBriefPanel({ ideaId, sb }: { ideaId: string; sb: Awaited<ReturnType<typeof requireAdmin>>['sb'] }) {
+  // CN-05 OS Phase A.2 — deterministic writing brief for Claude Code.
+  // Pure Supabase reads + string construction. No AI calls. The $1/7d
+  // article-AI ceiling is explicitly NOT touched by this path.
+  const built = await buildWritingBrief(sb, ideaId);
+  if ('error' in built) {
+    return (
+      <Panel title="Claude Code writing brief" eyebrow="Prepare prompt · zero AI API spend">
+        <Notice tone="warning">Could not build brief: {built.error}</Notice>
+      </Panel>
+    );
+  }
+  return (
+    <Panel
+      title="Claude Code writing brief"
+      eyebrow="Deterministic · copy into Claude Code · zero AI API spend"
+    >
+      <div style={{ display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, color: 'var(--admin-text-muted)' }}>
+          <span>Version: <code>{built.prompt_version}</code></span>
+          <span>·</span>
+          <span>Hash: <code title={built.prompt_hash}>{built.prompt_hash.slice(0, 12)}…</code></span>
+          <span>·</span>
+          <span>Generated: {built.generated_at}</span>
+        </div>
+        <Notice tone="info">
+          Copy this prompt into Claude Code. Claude writes the article offline, then returns the
+          structured JSON output format at the bottom. Paste that JSON into the <strong>Paste
+          draft import</strong> workflow (hub Articles → Import draft) to create a review-ready
+          draft. Nothing publishes automatically.
+        </Notice>
+        <textarea
+          readOnly
+          value={built.prompt_text}
+          style={{
+            width: '100%',
+            minHeight: 400,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: 12,
+            lineHeight: 1.5,
+            padding: 12,
+            border: '1px solid var(--admin-border)',
+            borderRadius: 6,
+            background: 'var(--admin-bg)',
+            color: 'var(--admin-text)',
+            resize: 'vertical',
+          }}
+        />
+      </div>
+    </Panel>
   );
 }
