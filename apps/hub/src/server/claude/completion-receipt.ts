@@ -18,20 +18,38 @@ import 'server-only';
 //   * Strings are size-capped so a huge paste can't blow up metadata.
 //   * On failure, returns the first error with a precise JSON path.
 
+/** Decision carried on the receipt. v1 receipts (which don't set
+ *  this field) are treated as IMPLEMENT for backward compatibility
+ *  and MUST still include a summary_of_what_changed. */
+export type ReceiptDecision = 'IMPLEMENT' | 'INVESTIGATE_FURTHER' | 'NO_CHANGE';
+
 export interface ImplementationReceiptInput {
   action_id: string;
+  /** v2 receipts carry an explicit decision. v1 receipts without
+   *  this field are treated as IMPLEMENT at validation time. */
+  decision?: ReceiptDecision;
   implementation_type?: string;
+  opportunity_type?: string;
   completed_at: string;              // ISO timestamp
   repository?: string;
   commit_sha?: string | null;
   production_deployment_sha?: string | null;
   affected_pages_or_features?: string[];
-  summary_of_what_changed: string;
+  /** For IMPLEMENT: required prose summary of code/content changes.
+   *  For INVESTIGATE_FURTHER / NO_CHANGE: optional; summary_of_findings
+   *  below is the authoritative narrative. */
+  summary_of_what_changed?: string | null;
+  /** v2: narrative for investigation-only / no-change outcomes. */
+  summary_of_findings?: string | null;
+  validity_assessment?: string | null;
+  issue_found?: string | null;
+  evidence_considered?: string[];
   tests_performed?: string[];
-  live_verification?: string;
-  rollback_route?: string;
+  live_verification?: string | null;
+  rollback_route?: string | null;
   primary_success_metric?: string;
   guardrail_metrics?: string[];
+  measurement_recommendation?: string | null;
   outstanding_issues?: string | null;
 }
 
@@ -87,6 +105,8 @@ function isIsoTimestamp(v: unknown): v is string {
 /** Validate a parsed JSON object against the receipt schema.
  *  Receipts that reference a different task's action_id are rejected
  *  at the caller. */
+const VALID_DECISIONS: ReceiptDecision[] = ['IMPLEMENT', 'INVESTIGATE_FURTHER', 'NO_CHANGE'];
+
 export function validateImplementationReceipt(
   raw: unknown,
   expectedActionId: string,
@@ -109,29 +129,64 @@ export function validateImplementationReceipt(
   if (!isIsoTimestamp(obj.completed_at)) {
     return { ok: false, error: 'completed_at must be an ISO-8601 timestamp string.', path: 'completed_at' };
   }
-  if (!isNonEmptyString(obj.summary_of_what_changed)) {
+
+  // Decision: v2 field. v1 receipts without it are treated as
+  // IMPLEMENT, which preserves the old summary_of_what_changed
+  // requirement unchanged.
+  let decision: ReceiptDecision = 'IMPLEMENT';
+  if (obj.decision !== undefined && obj.decision !== null) {
+    if (typeof obj.decision !== 'string' || !VALID_DECISIONS.includes(obj.decision as ReceiptDecision)) {
+      return {
+        ok: false,
+        error: `decision must be one of ${VALID_DECISIONS.join(' | ')} (or omitted for IMPLEMENT).`,
+        path: 'decision',
+      };
+    }
+    decision = obj.decision as ReceiptDecision;
+  }
+
+  // Narrative requirement depends on decision:
+  //   IMPLEMENT          → summary_of_what_changed required
+  //   INVESTIGATE_FURTHER / NO_CHANGE → summary_of_findings OR
+  //                       summary_of_what_changed required
+  const hasChangedSummary = isNonEmptyString(obj.summary_of_what_changed);
+  const hasFindingsSummary = isNonEmptyString(obj.summary_of_findings);
+  if (decision === 'IMPLEMENT' && !hasChangedSummary) {
     return {
       ok: false,
-      error: 'summary_of_what_changed is required and must be a non-empty string.',
+      error: 'summary_of_what_changed is required for decision=IMPLEMENT and must be a non-empty string.',
       path: 'summary_of_what_changed',
+    };
+  }
+  if (decision !== 'IMPLEMENT' && !hasChangedSummary && !hasFindingsSummary) {
+    return {
+      ok: false,
+      error: `summary_of_findings (or summary_of_what_changed) is required for decision=${decision}.`,
+      path: 'summary_of_findings',
     };
   }
 
   // Optional fields — strict type-check if present.
   const optionalStrings: Array<keyof ImplementationReceiptInput> = [
     'implementation_type',
+    'opportunity_type',
     'repository',
     'commit_sha',
     'production_deployment_sha',
+    'summary_of_what_changed',
+    'summary_of_findings',
+    'validity_assessment',
+    'issue_found',
     'live_verification',
     'rollback_route',
     'primary_success_metric',
+    'measurement_recommendation',
     'outstanding_issues',
   ];
   const output: Record<string, unknown> = {
     action_id: obj.action_id,
+    decision,
     completed_at: new Date(obj.completed_at as string).toISOString(),
-    summary_of_what_changed: cappedString(obj.summary_of_what_changed, 'summary_of_what_changed'),
   };
   for (const key of optionalStrings) {
     if (obj[key] === undefined) continue;
@@ -148,6 +203,7 @@ export function validateImplementationReceipt(
 
   const optionalArrays: Array<keyof ImplementationReceiptInput> = [
     'affected_pages_or_features',
+    'evidence_considered',
     'tests_performed',
     'guardrail_metrics',
   ];
@@ -158,6 +214,19 @@ export function validateImplementationReceipt(
       return { ok: false, error: `${key} must be an array of strings or omitted.`, path: key };
     }
     if (arr && arr.length > 0) output[key] = arr;
+  }
+
+  // Correctness guardrail: a NO_CHANGE receipt must NOT carry a
+  // production deployment SHA. Reject the claim.
+  if (decision === 'NO_CHANGE') {
+    const prodSha = output['production_deployment_sha'];
+    if (isNonEmptyString(prodSha)) {
+      return {
+        ok: false,
+        error: 'decision=NO_CHANGE cannot carry a production_deployment_sha. If a deployment landed, decision is IMPLEMENT.',
+        path: 'production_deployment_sha',
+      };
+    }
   }
 
   return { ok: true, value: output as unknown as ImplementationReceiptInput };

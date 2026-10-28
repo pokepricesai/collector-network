@@ -8,7 +8,12 @@ import {
   type IntelligenceForPrompt,
   type TaskForPrompt,
   type BuiltPrompt,
+  type TargetEvidenceForPrompt,
 } from '@/server/claude/action-prompt';
+import {
+  loadTargetEvidence,
+  extractTopQueries,
+} from '@/server/claude/target-evidence';
 import {
   parseAndValidateReceipt,
   type ImplementationReceiptStored,
@@ -85,11 +90,47 @@ export async function generateClaudePromptAction(formData: FormData): Promise<vo
   // Claude can quote exact pre-change numbers in its summary.
   const existingBaseline = ((task.metadata ?? {}) as { baseline?: BaselineSnapshot }).baseline ?? null;
 
+  // CN-05 OS v2 — load target-level evidence (URL + query metrics)
+  // from the already-ingested daily tables. Zero extra API cost.
+  // The baseline carries target_url/target_query; task + intel
+  // evidence may also carry them (striking-distance rule stores
+  // top_queries per page).
+  let targetEvidence: TargetEvidenceForPrompt | null = null;
+  if (task.site_id && site) {
+    const taskEv = (task.evidence ?? {}) as Record<string, unknown>;
+    const intelEv = (intel?.evidence ?? null) as Record<string, unknown> | null;
+    const baselineTargetUrl = existingBaseline?.target_url ?? null;
+    const baselineTargetQuery = existingBaseline?.target_query ?? null;
+    // Prefer the baseline target, fall back to detection evidence.
+    const targetUrl = baselineTargetUrl
+      ?? (typeof taskEv['target_url'] === 'string' ? taskEv['target_url'] as string : null)
+      ?? (typeof taskEv['page'] === 'string' ? taskEv['page'] as string : null)
+      ?? (intelEv && typeof intelEv['page'] === 'string' ? intelEv['page'] as string : null);
+    const targetQuery = baselineTargetQuery
+      ?? (intelEv && typeof intelEv['top_query'] === 'string' ? intelEv['top_query'] as string : null);
+    if (targetUrl || targetQuery) {
+      targetEvidence = await loadTargetEvidence(sb, {
+        siteId: task.site_id,
+        siteDomain: site.domain,
+        targetUrl,
+        targetQuery,
+      });
+      // Pull top_queries from detection evidence directly — the GSC
+      // query_daily table is cross-site so we never synthesise this
+      // from a different source.
+      const topQueries = extractTopQueries(intelEv) ?? extractTopQueries(taskEv);
+      if (targetEvidence && topQueries && topQueries.length > 0) {
+        targetEvidence.top_queries_for_url = topQueries;
+      }
+    }
+  }
+
   const built: BuiltPrompt = buildClaudePrompt({
     task: task as unknown as TaskForPrompt,
     site,
     intel,
     baseline: existingBaseline,
+    target_evidence: targetEvidence,
   });
 
   // Append to metadata.generated_prompts if not already present. We
