@@ -5,7 +5,7 @@ import 'server-only';
 // `categoriesScanned`.
 
 import type { IntelligenceRule } from '../types';
-import { strikingDistanceRule, lowCtrRule, decliningRule, gainingRule } from './seo';
+import { strikingDistanceRule, lowCtrRule, zeroClickRule, decliningRule, gainingRule } from './seo';
 import { stalejobRule } from './data_health';
 import { revenueMovementRule, trafficWithoutRevenueRule, revenueEfficiencyRule } from './revenue';
 import { highValueOpportunityRule, contentPerformanceRule } from './content';
@@ -15,6 +15,7 @@ import { indexingCoverageRule } from './indexing';
 export const INTELLIGENCE_RULES: readonly IntelligenceRule[] = Object.freeze([
   strikingDistanceRule,
   lowCtrRule,
+  zeroClickRule,
   decliningRule,
   gainingRule,
   indexingCoverageRule,

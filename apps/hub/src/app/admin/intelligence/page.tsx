@@ -240,10 +240,20 @@ function IntelCard({ row, measurementState }: { row: IntelligenceRowRead; measur
   const upsideLabel = typeof upside?.label === 'string' ? upside.label : null;
 
   // Contextual action target.
+  //
+  // Intelligence Simplification — the generic "Inspect opportunity"
+  // link to /admin/seo/opportunities has been REMOVED. It sent the
+  // operator out of the Intelligence workflow into a parallel SEO
+  // opportunity surface that duplicated the same data and didn't
+  // carry the task/baseline/prompt/receipt controls. The primary
+  // Intelligence actions (Review & act, Continue action, Open task)
+  // keep the operator on the Intelligence → task-detail workflow;
+  // the specialist SEO opportunities list is still reachable from
+  // the admin sidebar for diagnostics but is no longer the next
+  // click from an Intelligence card.
   const actionLink =
     row.category === 'indexing' ? { href: '/admin/seo/sitemaps', label: 'Open sitemaps' }
     : (row.type === 'failed_job' || row.type === 'stale_job' || row.type === 'stale_job_network') ? { href: '/admin/jobs', label: 'Open jobs' }
-    : (row.category === 'seo' || row.category === 'content') ? { href: '/admin/seo/opportunities', label: 'Inspect opportunity' }
     : null;
 
   return (
@@ -309,8 +319,8 @@ function IntelCard({ row, measurementState }: { row: IntelligenceRowRead; measur
                 the Claude Code prompt generator + implementation
                 receipt controls live, not the search-param flash on
                 the list. */}
-            <Link href={`/admin/tasks/${row.task_id}`} className="ui-btn ui-btn--primary ui-btn--sm" style={{ fontSize: 11 }}>
-              Open action
+            <Link href={`/admin/tasks/${row.task_id}?from=intelligence`} className="ui-btn ui-btn--primary ui-btn--sm" style={{ fontSize: 11 }}>
+              Continue action
             </Link>
             <form action={resolveItemAction} style={{ display: 'inline' }}>
               <input type="hidden" name="item_id" value={row.id} />

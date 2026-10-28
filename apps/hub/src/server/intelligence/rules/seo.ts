@@ -39,7 +39,12 @@ import type {
   IntelligenceRule, RuleContext, RuleOutput, RuleRunResult, RuleScopeDiagnostic, SiteSlug,
 } from '../types';
 
-const SEO_KINDS = ['striking_distance', 'low_ctr', 'declining', 'gaining'] as const;
+// Intelligence Simplification — add 'zero_click' to the kinds this
+// rule wraps. The upstream opportunity engine has emitted this kind
+// since the SEO engine's inception (≥500 impressions, zero clicks
+// over 28d) but the intelligence SEO wrapper previously excluded
+// it, so Impressions-No-Clicks never surfaced in the inbox.
+const SEO_KINDS = ['striking_distance', 'low_ctr', 'zero_click', 'declining', 'gaining'] as const;
 type SeoKind = typeof SEO_KINDS[number];
 
 type OppRow = {
@@ -468,6 +473,128 @@ export const lowCtrRule: IntelligenceRule = {
         ctx, gscCoverage, site, state, pagesEmitted,
         'low_ctr',
         `position + impressions ≥${MIN_IMPRESSIONS_LOW_CTR} + CTR < half of band expected with ≥1.5pp gap`,
+      ));
+    }
+    return { outputs, diagnostics: diags };
+  },
+};
+
+// ─── B2. Impressions, no clicks (page-aggregated) ─────────────
+// Upstream emits one row per (page, query) with ≥500 impressions
+// and zero clicks over 28d. Multiple queries on the same page
+// aggregate into one intel item. This is distinct from Low CTR
+// because the signal is total invisibility (0 clicks) rather than
+// a CTR gap vs position band — the appropriate investigation is
+// usually about search intent / snippet relevance, not just a
+// metadata rewrite.
+export const zeroClickRule: IntelligenceRule = {
+  id: 'seo.zero_click',
+  description: 'Pages receiving ≥500 impressions over 28d with zero clicks. Aggregated per page.',
+  categoriesScanned: ['seo'],
+  async run(ctx: RuleContext): Promise<RuleRunResult> {
+    const outputs: RuleOutput[] = [];
+    const allOpps = await fetchOpenOpps(ctx);
+    const gscCoverage = await fetchSiteGscCoverage(ctx);
+    const perSite = new Map<string, SiteState>();
+
+    for (const o of allOpps.filter((x) => x.kind === 'zero_click')) {
+      const state = perSite.get(o.site_id) ?? emptySiteState();
+      state.examined_queries += 1;
+      const impressions = readNum(o.metrics['impressions_28d'] ?? o.metrics['impressions'], 0) ?? 0;
+      const clicks      = readNum(o.metrics['clicks_28d']      ?? o.metrics['clicks'],      0) ?? 0;
+      const position    = readPosition(o.metrics);
+      if (position == null) { state.skipped_invalid += 1; perSite.set(o.site_id, state); continue; }
+      if (clicks !== 0)     { state.skipped_invalid += 1; perSite.set(o.site_id, state); continue; }
+      // Upstream already enforces ≥500 but belt-and-braces here.
+      if (impressions < 500) { state.skipped_invalid += 1; perSite.set(o.site_id, state); continue; }
+      const contrib: QueryContribution = {
+        query: o.query,
+        impressions, clicks, ctr: 0, position,
+        opportunity_id: o.id,
+      };
+      const bucket = state.pages.get(o.page) ?? [];
+      bucket.push(contrib);
+      state.pages.set(o.page, bucket);
+      perSite.set(o.site_id, state);
+    }
+
+    for (const site of ctx.sites) {
+      const state = perSite.get(site.id);
+      if (!state) continue;
+      for (const [page, contribs] of state.pages) {
+        const agg = aggregateByPage(contribs, site.id, page);
+        const impressions = agg.total_impressions;
+        const position    = agg.weighted_position;
+
+        // Impact: logarithmic in impressions, same shape as other
+        // SEO rules so dashboards don't become distorted.
+        const impact     = clamp(15 + 24 * Math.log10(Math.max(1, impressions / 100)));
+        // Confidence: lower than low_ctr because we don't know *why*
+        // the clicks are zero — could be intent mismatch, snippet,
+        // SERP feature cannibalisation, device/geo cohort, or a
+        // technical issue. Investigation-first signal.
+        const confidence = clamp(45 + 10 * Math.log10(Math.max(1, impressions / 500)));
+        // Urgency: higher when the page is on page 1 but still gets
+        // zero clicks (that's a clearer snippet/intent problem than
+        // a page-2 result that nobody sees anyway).
+        const urgency    = clamp(55 + (position < 10 ? 15 : 0));
+        const effort     = 25;
+
+        const summary = agg.query_count === 1
+          ? `${fmtImp(impressions)} impressions on this page over 28d, zero clicks. Weighted position ${position.toFixed(1)}. Top query: "${trim(agg.primary.query, 60)}".`
+          : `${agg.query_count} queries on this page, ${fmtImp(impressions)} combined impressions over 28d, zero clicks. Weighted position ${position.toFixed(1)}.`;
+
+        outputs.push({
+          source_type: 'seo',
+          source_id: agg.primary.opportunity_id,
+          source_key: `seo:zero_click:${site.slug}:${page}`,
+          site_id: site.id,
+          site_slug: site.slug,
+          category: 'seo',
+          type: 'zero_click',
+          signal_kind: 'opportunity',
+          title: `Impressions, no clicks · ${site.slug} · ${fmtImp(impressions)} imps${agg.query_count > 1 ? ` · ${agg.query_count} queries` : ''}`,
+          summary,
+          recommended_action: 'Investigate why this page attracts impressions but no clicks. Likely causes: query intent mismatch (page content answers a different question than what the user searched for), SERP feature competition (featured snippet / direct answer satisfying the user above our result), snippet relevance, or technical issue (e.g. mobile/desktop display anomaly). DO NOT default to a metadata rewrite — confirm intent first by inspecting the live page against the top ranking queries.',
+          evidence: {
+            page,
+            query_count: agg.query_count,
+            total_impressions_28d: impressions,
+            total_clicks_28d: 0,
+            weighted_position: position,
+            top_queries: agg.top_queries.map((q) => ({
+              query: q.query,
+              impressions: q.impressions,
+              clicks: q.clicks,
+              position: Number(q.position.toFixed(2)),
+            })),
+            opportunity_ids: agg.opportunity_ids,
+          },
+          impact,
+          confidence,
+          urgency,
+          effort,
+          // Zero-click upside is harder to defend than Low CTR's.
+          // Record a qualitative hint rather than a precise number.
+          expected_upside: {
+            label: 'Qualitative — depends on investigation outcome',
+            metric: 'clicks_per_month',
+            low: 0,
+            high: Math.round(impressions * 0.02),
+            rationale: `If investigation reveals the issue is addressable and CTR reaches 1–2%, the ceiling is roughly ${Math.round(impressions * 0.01)}–${Math.round(impressions * 0.02)} clicks/month. If the issue is intent mismatch or SERP cannibalisation, the realistic upside is zero without a separate content investment.`,
+          },
+        });
+      }
+    }
+
+    const diags: RuleScopeDiagnostic[] = [];
+    for (const site of ctx.sites) {
+      const state = perSite.get(site.id);
+      const pagesEmitted = state ? state.pages.size : 0;
+      diags.push(resolveSiteDiag(
+        ctx, gscCoverage, site, state, pagesEmitted,
+        'zero_click',
+        'impressions ≥500 over 28d + zero clicks + resolvable position',
       ));
     }
     return { outputs, diagnostics: diags };

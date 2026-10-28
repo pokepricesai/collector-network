@@ -37,7 +37,10 @@ import {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-interface Props { params: Promise<{ id: string }> }
+interface Props {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ from?: string }>;
+}
 
 type GeneratedPrompt = {
   prompt_version?: string;
@@ -47,8 +50,10 @@ type GeneratedPrompt = {
   prompt_text?: string;
 };
 
-export default async function TaskDetailPage({ params }: Props) {
+export default async function TaskDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const q = (await searchParams) ?? {};
+  const fromIntelligence = q.from === 'intelligence';
   const { admin, sb } = await requireAdmin(`/admin/tasks/${id}`);
   const sites = await listNetworkSites(sb);
 
@@ -116,7 +121,16 @@ export default async function TaskDetailPage({ params }: Props) {
         }
         actions={
           <span style={{ display: 'inline-flex', gap: 8 }}>
-            <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/tasks">Back to list</Link>
+            {/* Intelligence Simplification — context-aware back link.
+                When the operator arrived here from the Intelligence
+                inbox (?from=intelligence), send them back there so
+                they stay inside one coherent workflow. Otherwise
+                default to the Operations Tasks list. */}
+            {fromIntelligence ? (
+              <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/intelligence">← Intelligence</Link>
+            ) : (
+              <Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/tasks">Back to list</Link>
+            )}
             <form action={isCompleted ? reopenTaskAction : completeTaskAction} style={{ display: 'inline-flex' }}>
               <input type="hidden" name="task_id" value={task.id} />
               <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">

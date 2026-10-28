@@ -40,10 +40,14 @@ export function CreateTaskButton({ itemId }: { itemId: string }) {
         return;
       }
       // Server Action succeeded. Navigate the browser to the task
-      // detail page via the App Router. router.push() does a soft
-      // client-side navigation; router.refresh() ensures any cached
-      // segments reflect the DB mutations the Server Action made.
-      router.push(`/admin/tasks/${result.task_id}`);
+      // detail page via the App Router. The ?from=intelligence
+      // query param gives the task-detail page a context-aware
+      // back-link so the operator stays inside one coherent
+      // Intelligence → act → back-to-Intelligence loop.
+      // router.push() does a soft client-side navigation;
+      // router.refresh() ensures any cached segments reflect the
+      // DB mutations the Server Action made.
+      router.push(`/admin/tasks/${result.task_id}?from=intelligence`);
       router.refresh();
     });
   }
@@ -57,7 +61,7 @@ export function CreateTaskButton({ itemId }: { itemId: string }) {
         className="ui-btn ui-btn--primary ui-btn--sm"
         aria-busy={pending ? 'true' : 'false'}
       >
-        {pending ? 'Creating…' : 'Create task'}
+        {pending ? 'Opening…' : 'Review & act'}
       </button>
       {error && (
         <div
