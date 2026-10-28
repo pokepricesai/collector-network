@@ -45,12 +45,22 @@ export async function generateClaudePromptAction(formData: FormData): Promise<vo
   // Resolve the site record if the task is site-scoped.
   let site: SiteForPrompt | null = null;
   if (task.site_id) {
+    // network_sites holds the public host under `canonical_url`
+    // (e.g. "https://pokeprices.io"), not `domain`. The earlier
+    // select had a bare `domain` which doesn't exist as a column —
+    // PostgREST would return null and `site` would silently stay
+    // null, dropping the Site + repo-hint context from the prompt.
     const { data: siteRow } = await sb
       .from('network_sites')
-      .select('slug, name, domain')
+      .select('slug, name, canonical_url')
       .eq('id', task.site_id)
       .maybeSingle();
-    site = siteRow ?? null;
+    if (siteRow) {
+      const row = siteRow as { slug: string | null; name: string | null; canonical_url: string | null };
+      const url = row.canonical_url ?? '';
+      const domain = url.replace(/^https?:\/\//, '').replace(/\/$/, '') || null;
+      site = { slug: row.slug, name: row.name, domain };
+    }
   }
 
   // Pull the linked Intelligence item when the task was sourced from it.

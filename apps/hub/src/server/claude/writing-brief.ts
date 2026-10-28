@@ -43,16 +43,19 @@ interface IdeaRow {
   notes: string | null;
   origin_type: string;
   evidence: Record<string, unknown>;
-  network_sites: { slug: string; name: string; domain: string | null };
+  network_sites: { slug: string; name: string; canonical_url: string | null };
 }
 
 export async function buildWritingBrief(
   sb: SupabaseClient,
   ideaId: string,
 ): Promise<BuiltWritingBrief | { error: string }> {
+  // network_sites' public host lives in `canonical_url`, not `domain`.
+  // The earlier `domain` select returned null silently, dropping the
+  // Site header from the brief.
   const { data: ideaRow, error: ideaErr } = await sb
     .from('network_content_ideas')
-    .select('id, site_id, status, working_title, content_type, primary_query, secondary_queries, summary, notes, origin_type, evidence, network_sites(slug, name, domain)')
+    .select('id, site_id, status, working_title, content_type, primary_query, secondary_queries, summary, notes, origin_type, evidence, network_sites(slug, name, canonical_url)')
     .eq('id', ideaId)
     .maybeSingle();
   if (ideaErr) return { error: `load idea: ${ideaErr.message}` };
@@ -121,7 +124,9 @@ export async function buildWritingBrief(
   // 1. Header
   sections.push(`# CN-05 Writing Brief: ${idea.working_title}`);
   sections.push(`**Idea ID:** \`${idea.id}\``);
-  sections.push(`**Site:** ${idea.network_sites.name} (${idea.network_sites.slug})${idea.network_sites.domain ? ` — https://${idea.network_sites.domain}` : ''}`);
+  const siteUrl = idea.network_sites.canonical_url ?? '';
+  const siteHost = siteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  sections.push(`**Site:** ${idea.network_sites.name} (${idea.network_sites.slug})${siteHost ? ` — ${siteUrl}` : ''}`);
   sections.push(`**Content type:** ${idea.content_type.replace(/_/g, ' ')} · **Origin:** ${idea.origin_type}`);
 
   // 2. Topic
