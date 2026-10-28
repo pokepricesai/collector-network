@@ -97,10 +97,10 @@ export function ImportDraftForm({ sites, ideas }: Props) {
           className="ui-btn ui-btn--primary ui-btn--sm"
           style={{ opacity: pending ? 0.6 : 1 }}
         >
-          {pending ? 'Importing…' : 'Import as review draft'}
+          {pending ? 'Importing…' : 'Import as draft'}
         </button>
         <span style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
-          Creates the article in <strong>review</strong> status. Nothing publishes until you approve + schedule.
+          Creates the article in <strong>draft</strong> status. Nothing publishes until you advance to review, approve and schedule.
         </span>
       </div>
     </form>

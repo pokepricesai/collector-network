@@ -41,7 +41,7 @@ export default async function ImportDraftPage() {
       <SectionHeader
         eyebrow="Collector Network OS · Content"
         title="Import pasted Claude Code draft"
-        description="Paste the structured JSON Claude returned from a writing brief. We parse it, convert the Markdown body to TipTap-compatible HTML, create a review-ready draft via the canonical pathway, and open the editor."
+        description="Paste the structured JSON Claude returned from a writing brief. We parse it, convert the Markdown body to TipTap-compatible HTML, create a draft via the canonical pathway, and open the editor."
         actions={<Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/content/articles">← Articles</Link>}
       />
 
@@ -51,7 +51,7 @@ export default async function ImportDraftPage() {
             <li>Open an approved idea, copy its <strong>Claude Code writing brief</strong>.</li>
             <li>Paste the brief into Claude Code. Claude writes the article offline (no AI API spend on our side).</li>
             <li>Claude returns a JSON block matching the brief&apos;s output schema. Paste that JSON here.</li>
-            <li>We create a draft in <strong>review</strong> status (not published, not scheduled) and open the editor so you can inspect, tweak, approve.</li>
+            <li>We create a draft in <strong>draft</strong> status (not published, not scheduled) and open the editor so you can inspect, tweak, advance to review, then approve.</li>
           </ol>
         </Notice>
       </Panel>

@@ -402,8 +402,11 @@ function buildAdditionalFactsFromIdeaEvidence(
  * Mirrors createArticleFromBrief but has no network_content_briefs
  * row to attach: Claude wrote the article offline from the writing
  * brief, and we're persisting that output as a reviewable draft.
- * Status enters 'review' (not 'draft') since the content is
- * substantive — ready for operator sign-off, not placeholder.
+ *
+ * Status enters 'draft'. The editor passes it to review when the
+ * operator is ready — same lifecycle as a brief-driven article.
+ * Phase A.3's approval-invalidation gate only kicks in after review
+ * sign-off, so promoting draft → review is still a single click.
  *
  * Site is resolved from the idea when present; otherwise the caller
  * must supply site_id directly.
@@ -446,7 +449,7 @@ export async function createArticleFromPaste(
       title: args.draft.title,
       working_title: args.draft.title,
       slug,
-      status: 'review',
+      status: 'draft',
       content_type: args.contentType,
       primary_query: args.draft.primary_query,
       secondary_queries: args.draft.secondary_queries,

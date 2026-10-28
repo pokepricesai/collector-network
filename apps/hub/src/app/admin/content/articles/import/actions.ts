@@ -11,7 +11,7 @@ import { createArticleFromPaste } from '@/server/content/drafts';
 //
 // Accepts the structured JSON Claude Code returns from a writing-brief
 // prompt, validates it, converts the Markdown body to TipTap-compatible
-// HTML (through the server sanitiser), and creates a review-ready
+// HTML (through the server sanitiser), and creates a draft
 // article draft via the canonical creation pathway. Redirects into
 // the existing editor on success.
 
