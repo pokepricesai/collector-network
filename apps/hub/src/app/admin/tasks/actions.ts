@@ -71,11 +71,46 @@ export async function completeTaskAction(formData: FormData): Promise<void> {
   const id = formData.get('task_id');
   if (typeof id !== 'string') return;
   const { sb } = await requireAdmin('/admin/tasks');
+
+  // Intelligence Quality Pass — when a task completes, flip the
+  // linked intel item to `resolved` so it stops appearing in the
+  // active inbox. We look up the task's evidence first to find the
+  // intelligence_item_id back-reference (set by
+  // createTaskFromItemAction when the task was created from intel).
+  //
+  // The next intelligence refresh will NOT reopen this item: the
+  // engine only reopens items whose resolved_reason is
+  // 'invalid_source_data' or whose dismiss priority delta is
+  // crossed. A 'task_completed' resolution stays resolved unless
+  // the operator explicitly reopens the task (which, below, also
+  // reopens the intel item).
+  const now = new Date().toISOString();
+  const { data: task } = await sb.from('network_tasks')
+    .select('evidence')
+    .eq('id', id).maybeSingle();
+  const intelId = (task?.evidence as { intelligence_item_id?: unknown } | null)?.intelligence_item_id;
+
   await sb.from('network_tasks').update({
     status: 'completed',
-    completed_at: new Date().toISOString(),
+    completed_at: now,
   }).eq('id', id);
+
+  if (typeof intelId === 'string' && intelId.length > 0) {
+    // Only flip to resolved if currently task_created or open;
+    // never clobber a dismissed/snoozed/already-resolved record.
+    const { data: intel } = await sb.from('network_intelligence_items')
+      .select('status').eq('id', intelId).maybeSingle();
+    if (intel && (intel.status === 'task_created' || intel.status === 'open')) {
+      await sb.from('network_intelligence_items').update({
+        status: 'resolved',
+        resolved_at: now,
+        resolved_reason: 'task_completed',
+      }).eq('id', intelId);
+    }
+  }
+
   revalidatePath('/admin/tasks');
+  revalidatePath('/admin/intelligence');
   revalidatePath('/admin');
 }
 
@@ -83,10 +118,35 @@ export async function reopenTaskAction(formData: FormData): Promise<void> {
   const id = formData.get('task_id');
   if (typeof id !== 'string') return;
   const { sb } = await requireAdmin('/admin/tasks');
+
+  // Mirror of completeTaskAction: when the operator reopens a task,
+  // reopen the linked intel item too so it reappears in the inbox
+  // under the correct status.
+  const { data: task } = await sb.from('network_tasks')
+    .select('evidence')
+    .eq('id', id).maybeSingle();
+  const intelId = (task?.evidence as { intelligence_item_id?: unknown } | null)?.intelligence_item_id;
+
   await sb.from('network_tasks').update({
     status: 'open',
     completed_at: null,
   }).eq('id', id);
+
+  if (typeof intelId === 'string' && intelId.length > 0) {
+    // Only restore to task_created when currently resolved by task
+    // completion. Resolved-for-other-reasons stays untouched.
+    const { data: intel } = await sb.from('network_intelligence_items')
+      .select('status, resolved_reason').eq('id', intelId).maybeSingle();
+    if (intel && intel.status === 'resolved' && intel.resolved_reason === 'task_completed') {
+      await sb.from('network_intelligence_items').update({
+        status: 'task_created',
+        resolved_at: null,
+        resolved_reason: null,
+      }).eq('id', intelId);
+    }
+  }
+
   revalidatePath('/admin/tasks');
+  revalidatePath('/admin/intelligence');
   revalidatePath('/admin');
 }
