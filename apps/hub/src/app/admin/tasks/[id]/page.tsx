@@ -459,6 +459,12 @@ export default async function TaskDetailPage({ params }: Props) {
               Primary success metric: <code>{schedule.primary_success_metric ?? '— (defaults to GSC clicks)'}</code>
               {schedule.anchor_receipt_deployment_sha && <> · prod SHA: <code>{schedule.anchor_receipt_deployment_sha.slice(0, 12)}</code></>}
             </div>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
+              Anchor (verified live by operator): <code>{schedule.anchor_at}</code>
+              {schedule.anchor_receipt_completed_at && schedule.anchor_receipt_completed_at !== schedule.anchor_at && (
+                <> · Claude claimed completion at <code>{schedule.anchor_receipt_completed_at}</code> (not used as anchor)</>
+              )}
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
               {CHECKPOINTS.map((d) => {
@@ -520,12 +526,18 @@ export default async function TaskDetailPage({ params }: Props) {
 function CheckpointCard({ dCount, targetDate, captured }: { dCount: 7 | 14 | 28 | 90; targetDate: string; captured: Checkpoint | null }) {
   const today = new Date().toISOString().slice(0, 10);
   const dueDate = addDays(targetDate, SETTLE_LAG_DAYS);
+  const isTargeted = captured ? captured.action_scope !== 'site_wide' : false;
   const stateLabel = (() => {
     if (!captured) return today >= dueDate ? 'awaiting cron' : 'pending';
     return captured.outcome.replace(/_/g, ' ');
   })();
+  // Tone: green/red only for genuine site-wide verdicts. Targeted
+  // actions (awaiting_targeted_measurement) stay neutral by design —
+  // we must not visually suggest a site-wide number is a verdict on
+  // a page- or query-specific intervention.
   const tone: 'default' | 'green' | 'amber' | 'red' = (() => {
     if (!captured || captured.status === 'pending') return 'default';
+    if (captured.outcome === 'awaiting_targeted_measurement') return 'default';
     if (captured.outcome === 'observed_improvement') return 'green';
     if (captured.outcome === 'observed_decline') return 'red';
     return 'amber';
@@ -539,6 +551,15 @@ function CheckpointCard({ dCount, targetDate, captured }: { dCount: 7 | 14 | 28 
         <span style={{ fontSize: 10.5, color: 'var(--admin-text-muted)' }}>target {targetDate}</span>
       </div>
       <div style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: 0.3 }}>{stateLabel}</div>
+      {isTargeted && captured && (
+        <div style={{ fontSize: 11, padding: '4px 6px', border: '1px dashed var(--admin-border)', borderRadius: 4 }}>
+          Targeted <strong>{captured.action_scope === 'url_targeted' ? 'URL' : 'query'}</strong>:{' '}
+          <code>{captured.action_scope === 'url_targeted' ? captured.target.url : captured.target.query}</code>
+          <div style={{ fontSize: 10.5, color: 'var(--admin-text-muted)', marginTop: 2 }}>
+            Site metrics below are <strong>context only</strong> — never a verdict on this targeted action. Per-URL/query measurement is a future improvement.
+          </div>
+        </div>
+      )}
       {captured && captured.primary && (
         <div style={{ fontSize: 12 }}>
           <code>{captured.primary.metric}</code>:{' '}
@@ -563,7 +584,9 @@ function CheckpointCard({ dCount, targetDate, captured }: { dCount: 7 | 14 | 28 
       )}
       {captured && captured.gsc_site && (
         <details>
-          <summary style={{ cursor: 'pointer', fontSize: 10.5, color: 'var(--admin-text-muted)' }}>GSC + GA4 detail</summary>
+          <summary style={{ cursor: 'pointer', fontSize: 10.5, color: 'var(--admin-text-muted)' }}>
+            {isTargeted ? 'Site-level context (not a verdict)' : 'GSC + GA4 detail'}
+          </summary>
           <div style={{ fontSize: 11, marginTop: 4 }}>
             <MeasureRow label="GSC clicks" pair={captured.gsc_site.clicks} />
             <MeasureRow label="GSC impressions" pair={captured.gsc_site.impressions} />

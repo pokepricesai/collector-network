@@ -149,6 +149,7 @@ export async function measureOne(sb: ReturnType<typeof createServiceRoleSupabase
     measurement_schedule?: MeasurementSchedule;
     measurement_checkpoints?: Checkpoint[];
     implementation_receipts?: Array<{ operator_confirmed_at?: string | null; primary_success_metric?: string | null }>;
+    baseline?: { target_url?: string | null; target_query?: string | null };
   };
   const schedule = meta.measurement_schedule;
   if (!schedule) return false;
@@ -159,6 +160,10 @@ export async function measureOne(sb: ReturnType<typeof createServiceRoleSupabase
   const receipts = meta.implementation_receipts ?? [];
   const verifiedReceipt = receipts.find((r) => r?.operator_confirmed_at);
   if (!verifiedReceipt) return false;
+
+  // Pull the frozen baseline so captureCheckpoint can decide
+  // action_scope (site_wide vs url_targeted vs query_targeted).
+  const baseline = meta.baseline ?? null;
 
   const existing = Array.isArray(meta.measurement_checkpoints) ? meta.measurement_checkpoints.slice() : [];
   const byD = new Map<number, Checkpoint>(existing.map((c) => [c.checkpoint, c]));
@@ -175,6 +180,7 @@ export async function measureOne(sb: ReturnType<typeof createServiceRoleSupabase
       taskId: task.id, siteId: task.site_id, schedule,
       checkpoint: dCount, today,
       primarySuccessMetric: schedule.primary_success_metric ?? verifiedReceipt.primary_success_metric ?? null,
+      baseline,
     });
     if (captured.status === 'measured' || captured.status === 'inconclusive' || captured.status === 'insufficient_data') {
       measured++;

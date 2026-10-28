@@ -229,17 +229,21 @@ export async function confirmReceiptVerifiedAction(
   );
 
   // CN-05 OS — lay down a measurement schedule anchored on the
-  // verified receipt's completed_at. Only when no schedule already
+  // operator's verification click (`now`), NOT the receipt's
+  // completed_at. completed_at is Claude's self-reported timestamp;
+  // the operator-click `now` is the only timestamp we trust as a
+  // "live by this moment" marker. Only when no schedule already
   // exists; the anchor is fixed on first verification so re-confirms
-  // don't move the goalposts. (A revised receipt that supersedes an
+  // don't move the goalposts. A revised receipt that supersedes an
   // earlier one still measures against the ORIGINAL anchor — the
   // operator can delete metadata.measurement_schedule to force a
-  // reset, but we never do that automatically.)
+  // reset, but we never do that automatically.
   let schedulePatch: Record<string, unknown> = {};
-  if (!prevMeta.measurement_schedule && latestReceipt?.completed_at) {
+  if (!prevMeta.measurement_schedule && latestReceipt) {
     const schedule = buildSchedule({
       taskId,
-      anchorIsoTimestamp: latestReceipt.completed_at,
+      operatorVerifiedAt: now,
+      receiptCompletedAt: latestReceipt.completed_at ?? null,
       primarySuccessMetric: latestReceipt.primary_success_metric ?? null,
       commitSha: latestReceipt.commit_sha ?? null,
       deploymentSha: latestReceipt.production_deployment_sha ?? null,

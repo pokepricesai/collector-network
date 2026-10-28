@@ -87,11 +87,18 @@ async function clipToSettledEnd(siteId, ideal, today) {
   return data?.date ?? cap
 }
 
-async function captureCheckpoint({ taskId, siteId, schedule, checkpoint, today, primarySuccessMetric }) {
+function classifyActionScope(baseline) {
+  if (baseline?.target_url) return 'url_targeted'
+  if (baseline?.target_query) return 'query_targeted'
+  return 'site_wide'
+}
+
+async function captureCheckpoint({ taskId, siteId, schedule, checkpoint, today, primarySuccessMetric, baseline }) {
   const notes = []
   const anchorDate = schedule.anchor_at.slice(0, 10)
   const idealEnd = addDays(anchorDate, checkpoint)
-  const base = { checkpoint, target_date: idealEnd, measured_at: null, status: 'pending', anchor_at: schedule.anchor_at, pre_window: null, post_window: null, gsc_site: null, ga4_site: null, site_trend: null, primary: null, outcome: 'measurement_pending', notes, measurement_version: 'cn05-measure-v1' }
+  const scope = classifyActionScope(baseline)
+  const base = { checkpoint, target_date: idealEnd, measured_at: null, status: 'pending', anchor_at: schedule.anchor_at, action_scope: scope, target: { url: baseline?.target_url ?? null, query: baseline?.target_query ?? null }, pre_window: null, post_window: null, gsc_site: null, ga4_site: null, site_trend: null, primary: null, outcome: 'measurement_pending', notes, measurement_version: 'cn05-measure-v1' }
   if (!siteId) { base.status = 'insufficient_data'; base.outcome = 'insufficient_data'; notes.push('network-scoped'); base.measured_at = new Date().toISOString(); return base }
   if (!isCheckpointDue(idealEnd, today)) { notes.push(`not due; target ${idealEnd}`); return base }
   const settledPostEnd = await clipToSettledEnd(siteId, idealEnd, today)
@@ -118,6 +125,16 @@ async function captureCheckpoint({ taskId, siteId, schedule, checkpoint, today, 
   const ga4_site = (ga4Pre && ga4Post) ? { active_users: pair(ga4Pre.active_users, ga4Post.active_users), sessions: pair(ga4Pre.sessions, ga4Post.sessions) } : null
   base.gsc_site = gsc_site; base.ga4_site = ga4_site
   base.site_trend = (gsc_site && ga4_site) ? { clicks: gsc_site.clicks, active_users: ga4_site.active_users } : null
+  if (scope !== 'site_wide') {
+    base.primary = null
+    base.status = 'insufficient_data'
+    base.outcome = 'awaiting_targeted_measurement'
+    const label = scope === 'url_targeted' ? 'URL' : 'query'
+    const tv = scope === 'url_targeted' ? (baseline?.target_url ?? '') : (baseline?.target_query ?? '')
+    notes.push(`Action targets a specific ${label}: \`${tv}\`. Site-level GSC/GA4 shown as context only — not a success verdict.`)
+    base.measured_at = new Date().toISOString()
+    return base
+  }
   const pm = (primarySuccessMetric ?? '').toLowerCase()
   let primary = null
   if (gsc_site) {
@@ -151,12 +168,16 @@ async function captureCheckpoint({ taskId, siteId, schedule, checkpoint, today, 
 }
 
 function buildSchedule(args) {
-  const anchorDate = args.anchorIsoTimestamp.slice(0, 10)
+  // Anchor is the operator-verified timestamp. receiptCompletedAt is
+  // Claude's claim, kept for audit only.
+  const anchor = args.operatorVerifiedAt ?? args.anchorIsoTimestamp
+  const anchorDate = anchor.slice(0, 10)
   const target_dates = Object.fromEntries(CHECKPOINTS.map((d) => [`D${d}`, addDays(anchorDate, d)]))
   return {
-    anchor_at: args.anchorIsoTimestamp,
+    anchor_at: anchor,
     anchor_source: 'operator_confirmed_receipt',
     anchor_task_id: args.taskId,
+    anchor_receipt_completed_at: args.receiptCompletedAt ?? args.anchorIsoTimestamp ?? null,
     anchor_receipt_commit_sha: null,
     anchor_receipt_deployment_sha: null,
     primary_success_metric: args.primarySuccessMetric,
@@ -225,7 +246,7 @@ async function runSweep(today, { onlyTaskIds = null } = {}) {
       const prev = byD.get(d)
       if (prev && prev.status !== 'pending') continue
       if (!isCheckpointDue(target, today)) continue
-      const cap = await captureCheckpoint({ taskId: t.id, siteId: t.site_id, schedule, checkpoint: d, today, primarySuccessMetric: primary })
+      const cap = await captureCheckpoint({ taskId: t.id, siteId: t.site_id, schedule, checkpoint: d, today, primarySuccessMetric: primary, baseline: meta.baseline ?? null })
       byD.set(d, cap)
       if (cap.status === 'measured' || cap.status === 'inconclusive' || cap.status === 'insufficient_data') measured++
       else pending++
@@ -377,6 +398,103 @@ async function main() {
     const { data: compatRow } = await sb.from('network_tasks').select('metadata').eq('id', compatTask.id).single()
     if (compatRow.metadata.generated_prompts?.length === 1) pass('generated_prompts still writable + readable')
     else fail('prompt compatibility', new Error('broken'))
+
+    section('13. URL-targeted action — site-wide metrics are context only')
+    const urlTargeted = await createDisposableTask(siteId, `${anchorThreeMonthsAgo}T12:00:00Z`, {
+      withVerifiedReceipt: true, primaryMetric: 'GSC clicks',
+      baseline: {
+        frozen_at: new Date().toISOString(), frozen_version: 'cn05-baseline-v1',
+        window_start: addDays(anchorThreeMonthsAgo, -27), window_end: anchorThreeMonthsAgo,
+        gsc_clicks_28d: 999, gsc_impressions_28d: 99999,
+        target_url: '/insights/pikachu-vmax-market-snapshot',  // ← targeted
+        target_query: null,
+        data_source_freshness: { gsc: anchorThreeMonthsAgo, ga4: anchorThreeMonthsAgo },
+      },
+    })
+    createdTaskIds.push(urlTargeted.id)
+    const scheduleU = buildSchedule({ taskId: urlTargeted.id, operatorVerifiedAt: `${anchorThreeMonthsAgo}T12:00:00Z`, receiptCompletedAt: `${anchorThreeMonthsAgo}T12:00:00Z`, primarySuccessMetric: 'GSC clicks' })
+    await sb.from('network_tasks').update({ metadata: { ...urlTargeted.metadata, measurement_schedule: scheduleU } }).eq('id', urlTargeted.id)
+    await runSweep(today, { onlyTaskIds: [urlTargeted.id] })
+    const { data: afterU } = await sb.from('network_tasks').select('metadata').eq('id', urlTargeted.id).single()
+    const cpsU = afterU.metadata.measurement_checkpoints ?? []
+    if (cpsU.length === 4) pass('url_targeted — 4 checkpoints captured')
+    else fail('url_targeted checkpoint count', new Error(`got ${cpsU.length}`))
+    if (cpsU.every((c) => c.action_scope === 'url_targeted')) pass('every checkpoint stamped action_scope=url_targeted')
+    else fail('url_targeted scope stamp', new Error(JSON.stringify(cpsU.map((c) => c.action_scope))))
+    if (cpsU.every((c) => c.outcome === 'awaiting_targeted_measurement')) pass('every outcome=awaiting_targeted_measurement (not observed_improvement)')
+    else fail('url_targeted outcome', new Error(JSON.stringify(cpsU.map((c) => c.outcome))))
+    if (cpsU.every((c) => c.primary === null)) pass('primary is NULL for targeted — no site-level verdict synthesised')
+    else fail('primary null for targeted', new Error(JSON.stringify(cpsU.map((c) => c.primary))))
+    if (cpsU.every((c) => c.site_trend && c.site_trend.clicks)) pass('site_trend preserved as context on each checkpoint')
+    else fail('site_trend context', new Error('missing'))
+    if (cpsU.every((c) => c.target.url === '/insights/pikachu-vmax-market-snapshot')) pass('target.url carried into every checkpoint')
+    else fail('target.url carry', new Error(JSON.stringify(cpsU.map((c) => c.target))))
+
+    section('14. Query-targeted action — same guardrail as URL-targeted')
+    const queryTargeted = await createDisposableTask(siteId, `${anchorThreeMonthsAgo}T12:00:00Z`, {
+      withVerifiedReceipt: true, primaryMetric: 'GSC clicks',
+      baseline: {
+        frozen_at: new Date().toISOString(), frozen_version: 'cn05-baseline-v1',
+        window_start: addDays(anchorThreeMonthsAgo, -27), window_end: anchorThreeMonthsAgo,
+        gsc_clicks_28d: 999, gsc_impressions_28d: 99999,
+        target_url: null, target_query: 'pikachu vmax price',  // ← query targeted
+        data_source_freshness: { gsc: anchorThreeMonthsAgo, ga4: anchorThreeMonthsAgo },
+      },
+    })
+    createdTaskIds.push(queryTargeted.id)
+    const scheduleQ = buildSchedule({ taskId: queryTargeted.id, operatorVerifiedAt: `${anchorThreeMonthsAgo}T12:00:00Z`, receiptCompletedAt: `${anchorThreeMonthsAgo}T12:00:00Z`, primarySuccessMetric: 'GSC clicks' })
+    await sb.from('network_tasks').update({ metadata: { ...queryTargeted.metadata, measurement_schedule: scheduleQ } }).eq('id', queryTargeted.id)
+    await runSweep(today, { onlyTaskIds: [queryTargeted.id] })
+    const { data: afterQ } = await sb.from('network_tasks').select('metadata').eq('id', queryTargeted.id).single()
+    const cpsQ = afterQ.metadata.measurement_checkpoints ?? []
+    if (cpsQ.every((c) => c.action_scope === 'query_targeted')) pass('every checkpoint stamped action_scope=query_targeted')
+    else fail('query_targeted scope', new Error(JSON.stringify(cpsQ.map((c) => c.action_scope))))
+    if (cpsQ.every((c) => c.outcome === 'awaiting_targeted_measurement')) pass('query_targeted outcome correct')
+    else fail('query_targeted outcome', new Error(JSON.stringify(cpsQ.map((c) => c.outcome))))
+    if (cpsQ.every((c) => c.target.query === 'pikachu vmax price')) pass('target.query carried into every checkpoint')
+    else fail('target.query carry', new Error(JSON.stringify(cpsQ.map((c) => c.target))))
+
+    section('15. Site-wide action (no target_url/query) still gets a verdict')
+    const sw = checkpoints2.find((c) => c.checkpoint === 7)
+    if (sw.action_scope === 'site_wide') pass('site_wide fixture retained site_wide scope')
+    else fail('site_wide scope', new Error(sw.action_scope))
+    if (sw.outcome === 'observed_improvement' || sw.outcome === 'observed_decline' || sw.outcome === 'inconclusive' || sw.outcome === 'insufficient_data') pass(`site_wide retained real verdict (${sw.outcome})`)
+    else fail('site_wide verdict kept', new Error(sw.outcome))
+    if (sw.primary != null) pass('site_wide retained a primary metric pair')
+    else fail('site_wide primary present', new Error('null'))
+
+    section("16. Measurement anchor = operator_confirmed_at, not Claude's completed_at")
+    // Scenario: Claude claimed completion 5 days before operator verified.
+    const claudeClaim = `${addDays(anchorThirtyFiveDaysAgo, -5)}T12:00:00Z`
+    const operatorVerify = `${anchorThirtyFiveDaysAgo}T12:00:00Z`
+    const anchorTest = await createDisposableTask(siteId, claudeClaim, {
+      withVerifiedReceipt: true, primaryMetric: 'GSC clicks',
+      baseline: {
+        frozen_at: new Date().toISOString(), frozen_version: 'cn05-baseline-v1',
+        window_start: addDays(claudeClaim.slice(0,10), -27), window_end: claudeClaim.slice(0,10),
+        gsc_clicks_28d: 999, gsc_impressions_28d: 99999,
+        data_source_freshness: { gsc: claudeClaim.slice(0,10), ga4: claudeClaim.slice(0,10) },
+      },
+    })
+    createdTaskIds.push(anchorTest.id)
+    const scheduleA = buildSchedule({
+      taskId: anchorTest.id,
+      operatorVerifiedAt: operatorVerify,
+      receiptCompletedAt: claudeClaim,
+      primarySuccessMetric: 'GSC clicks',
+    })
+    await sb.from('network_tasks').update({ metadata: { ...anchorTest.metadata, measurement_schedule: scheduleA } }).eq('id', anchorTest.id)
+    if (scheduleA.anchor_at === operatorVerify) pass('schedule.anchor_at = operator-verified timestamp')
+    else fail('anchor is operator-verified', new Error(scheduleA.anchor_at))
+    if (scheduleA.anchor_receipt_completed_at === claudeClaim) pass("schedule records Claude's claimed completion for audit")
+    else fail('anchor_receipt_completed_at recorded', new Error(scheduleA.anchor_receipt_completed_at))
+    await runSweep(today, { onlyTaskIds: [anchorTest.id] })
+    const { data: afterAnchor } = await sb.from('network_tasks').select('metadata').eq('id', anchorTest.id).single()
+    const cpAnchor = afterAnchor.metadata.measurement_checkpoints?.[0]
+    if (cpAnchor && cpAnchor.anchor_at === operatorVerify) pass('captured checkpoint carries operator-verified anchor_at')
+    else fail('checkpoint anchor_at', new Error(cpAnchor?.anchor_at))
+    if (cpAnchor && cpAnchor.pre_window && cpAnchor.pre_window.end === addDays(operatorVerify.slice(0,10), -1)) pass("pre window pivots on operator-verified anchor, not Claude's claim")
+    else fail('pre window pivot', new Error(JSON.stringify(cpAnchor?.pre_window)))
 
   } finally {
     section('12. Cleanup')

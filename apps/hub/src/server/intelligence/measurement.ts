@@ -48,6 +48,25 @@ export interface MetricPair<T extends number | null = number | null> {
   direction: 'up' | 'down' | 'flat' | 'unknown';
 }
 
+/** How to interpret the site-level metrics on a checkpoint. If a
+ *  baseline carries target_url or target_query, the action was aimed
+ *  at a specific page or search query — site-wide metrics then
+ *  become context only, NEVER a success verdict. */
+export type ActionScope = 'site_wide' | 'url_targeted' | 'query_targeted';
+
+/** Minimal shape measurement needs from a baseline — just the target
+ *  fields. Keeps measurement decoupled from baseline storage. */
+export interface BaselineForMeasurement {
+  target_url?: string | null;
+  target_query?: string | null;
+}
+
+export function classifyActionScope(baseline: BaselineForMeasurement | null | undefined): ActionScope {
+  if (baseline?.target_url) return 'url_targeted';
+  if (baseline?.target_query) return 'query_targeted';
+  return 'site_wide';
+}
+
 export interface Checkpoint {
   /** 7 | 14 | 28 | 90 — the "D" number. */
   checkpoint: CheckpointDays;
@@ -58,6 +77,12 @@ export interface Checkpoint {
   measured_at: string | null;
   status: 'pending' | 'measured' | 'insufficient_data' | 'inconclusive';
   anchor_at: string;
+  /** Action scope at measurement time. For non-site-wide actions,
+   *  site-level metrics are stored as context only (site_trend) and
+   *  the outcome is `awaiting_targeted_measurement` — we don't credit
+   *  nor penalise a page-level change based on site-wide movement. */
+  action_scope: ActionScope;
+  target: { url: string | null; query: string | null };
   pre_window: Window | null;
   post_window: Window | null;
   gsc_site: {
@@ -70,24 +95,41 @@ export interface Checkpoint {
     active_users: MetricPair;
     sessions: MetricPair;
   } | null;
-  /** Site-level trend over the same windows, used to contextualise
-   *  the action's result (did the whole site also move the same way?). */
+  /** Site-level trend over the same windows. For site_wide actions
+   *  this duplicates gsc_site + ga4_site (same signal). For targeted
+   *  actions this is the ONLY site-level view and is context only. */
   site_trend: {
     clicks: MetricPair;
     active_users: MetricPair;
   } | null;
   /** The receipt's primary_success_metric mapped to one of the pairs
-   *  above (when the OS can resolve it). Falls back to GSC clicks. */
+   *  above (when the OS can resolve it). Falls back to GSC clicks.
+   *  Null when action_scope is targeted — we don't synthesise a
+   *  primary from site data for a targeted action. */
   primary: { metric: string; pair: MetricPair } | null;
-  outcome: 'observed_improvement' | 'observed_decline' | 'inconclusive' | 'insufficient_data' | 'measurement_pending';
+  outcome:
+    | 'observed_improvement'
+    | 'observed_decline'
+    | 'inconclusive'
+    | 'insufficient_data'
+    | 'measurement_pending'
+    | 'awaiting_targeted_measurement';
   notes: string[];
   measurement_version: typeof MEASUREMENT_VERSION;
 }
 
 export interface MeasurementSchedule {
-  anchor_at: string;           // receipt.completed_at
+  /** The server-timestamped moment the operator confirmed the
+   *  deployment was live. This is the only trustworthy "live by"
+   *  timestamp we have — the receipt's completed_at is Claude's
+   *  claim and is NOT used as the anchor. */
+  anchor_at: string;
   anchor_source: 'operator_confirmed_receipt';
   anchor_task_id: string;
+  /** Claude's self-reported completion ISO, kept for audit. We do
+   *  NOT use this as the measurement anchor — the operator's
+   *  verification click is the source of truth for "live by now". */
+  anchor_receipt_completed_at: string | null;
   anchor_receipt_commit_sha: string | null;
   anchor_receipt_deployment_sha: string | null;
   primary_success_metric: string | null;
@@ -103,24 +145,33 @@ export function addDays(iso10: string, delta: number): string {
   return iso(d);
 }
 
-/** Build a schedule from the receipt that just got operator-verified.
+/** Build a schedule rooted at the operator's verification click.
+ *
+ *  The anchor is `operatorVerifiedAt` — a server timestamp set by
+ *  confirmReceiptVerifiedAction when the operator clicks "I verified
+ *  production — confirm receipt". We deliberately do NOT use
+ *  receipt.completed_at (Claude's claim) as the anchor; that value
+ *  is kept in anchor_receipt_completed_at for audit only.
+ *
  *  Idempotent: callers should check if a schedule already exists and
  *  reuse the anchor_at to avoid moving the goalposts. */
 export function buildSchedule(args: {
   taskId: string;
-  anchorIsoTimestamp: string;        // receipt.completed_at (full ISO)
+  operatorVerifiedAt: string;            // server-stamped verification click (full ISO)
+  receiptCompletedAt: string | null;     // Claude's claim, audit only
   primarySuccessMetric: string | null;
   commitSha: string | null;
   deploymentSha: string | null;
 }): MeasurementSchedule {
-  const anchorDate = args.anchorIsoTimestamp.slice(0, 10);
+  const anchorDate = args.operatorVerifiedAt.slice(0, 10);
   const target_dates = Object.fromEntries(
     CHECKPOINTS.map((d) => [`D${d}` as const, addDays(anchorDate, d)]),
   ) as Record<`D${CheckpointDays}`, string>;
   return {
-    anchor_at: args.anchorIsoTimestamp,
+    anchor_at: args.operatorVerifiedAt,
     anchor_source: 'operator_confirmed_receipt',
     anchor_task_id: args.taskId,
+    anchor_receipt_completed_at: args.receiptCompletedAt,
     anchor_receipt_commit_sha: args.commitSha,
     anchor_receipt_deployment_sha: args.deploymentSha,
     primary_success_metric: args.primarySuccessMetric,
@@ -208,6 +259,10 @@ export interface CaptureInput {
   checkpoint: CheckpointDays;
   today: string;                    // injectable for tests
   primarySuccessMetric: string | null;
+  /** The task's frozen baseline. Used to classify action_scope:
+   *  target_url present → url_targeted; target_query present →
+   *  query_targeted; neither → site_wide. Pass null for site-wide. */
+  baseline: BaselineForMeasurement | null;
 }
 
 /** Capture a single checkpoint's measurement. Pure data flow: reads
@@ -222,6 +277,8 @@ export async function captureCheckpoint(
   const dCount = input.checkpoint;
   const idealEnd = addDays(anchorDate, dCount);
 
+  const scope = classifyActionScope(input.baseline);
+
   // Shell result in case of early exit.
   const base: Checkpoint = {
     checkpoint: dCount,
@@ -229,6 +286,11 @@ export async function captureCheckpoint(
     measured_at: null,
     status: 'pending',
     anchor_at: input.schedule.anchor_at,
+    action_scope: scope,
+    target: {
+      url: input.baseline?.target_url ?? null,
+      query: input.baseline?.target_query ?? null,
+    },
     pre_window: null, post_window: null,
     gsc_site: null, ga4_site: null, site_trend: null, primary: null,
     outcome: 'measurement_pending',
@@ -297,13 +359,37 @@ export async function captureCheckpoint(
   base.gsc_site = gsc_site;
   base.ga4_site = ga4_site;
 
-  // Site-level trend context (same windows, same site). For v1 this
-  // IS gsc_site + ga4_site because the task is scoped to one site;
-  // when per-page targets land, site_trend becomes a separate read.
+  // Site-level trend context (same windows, same site). For
+  // site_wide actions this duplicates gsc_site + ga4_site (same
+  // signal). For targeted actions this is the ONLY site view and is
+  // explicitly context, never a verdict.
   base.site_trend = (gsc_site && ga4_site) ? {
     clicks: gsc_site.clicks,
     active_users: ga4_site.active_users,
   } : null;
+
+  // CN-05 OS correctness fix — targeted actions must not be scored
+  // against site-wide metrics. We've captured the site data for
+  // context (site_trend), but refuse to synthesise a primary verdict.
+  // Per-URL / per-query measurement is a future improvement.
+  if (scope !== 'site_wide') {
+    base.primary = null;
+    base.status = 'insufficient_data';
+    base.outcome = 'awaiting_targeted_measurement';
+    const label = scope === 'url_targeted' ? 'URL' : 'query';
+    const targetValue = scope === 'url_targeted'
+      ? (input.baseline?.target_url ?? '')
+      : (input.baseline?.target_query ?? '');
+    notes.push(
+      `Action targets a specific ${label}: \`${targetValue}\`. ` +
+      'Site-level GSC/GA4 shown as site_trend context ONLY — not a ' +
+      'success verdict. Per-URL/per-query measurement is a future ' +
+      'improvement; no outcome is scored for targeted actions in v1.',
+    );
+    base.measured_at = new Date().toISOString();
+    notes.push('Observed change only. Correlation ≠ causation; the baseline window is a reference, not a controlled counterfactual.');
+    return base;
+  }
 
   // Primary metric selection from the receipt's primary_success_metric
   // string. We match by substring to be lenient — operators type
