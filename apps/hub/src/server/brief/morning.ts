@@ -365,7 +365,20 @@ export async function buildMorningBrief(
     const [winA, winB, gscA, revBySiteA] = await Promise.all([
       getReportingTrafficWindow(sb, { site_id: s.id, from: sinceA, to: untilA }),
       getReportingTrafficWindow(sb, { site_id: s.id, from: sinceB, to: endB.toISOString().slice(0, 10) }),
-      sb.from('network_gsc_url_daily').select('clicks, impressions').eq('site_id', s.id).gte('date', sinceA).lte('date', untilA),
+      // Intelligence Quality Pass — correctness fix.
+      // The previous read was `.from('network_gsc_url_daily')
+      // .select('clicks, impressions').eq(site, s.id).gte/lte(date)`
+      // with no .range() or .limit(). PostgREST silently caps row
+      // responses at 1000, and pokemon has ~112k daily url-level
+      // rows in a 28d window. The morning brief was aggregating
+      // only 2.1% of impressions and 4.6% of clicks for pokemon.
+      //
+      // Fix: read from network_gsc_site_daily, which is a
+      // pre-aggregated 1-row-per-day-per-site table and therefore
+      // never exceeds the row cap (~28 rows per 28d window). The
+      // ingest job already populates both tables; using the
+      // site-level aggregate here is both correct and faster.
+      sb.from('network_gsc_site_daily').select('clicks, impressions').eq('site_id', s.id).gte('date', sinceA).lte('date', untilA),
       sb.from('network_revenue_events').select('amount_minor, currency').eq('site_id', s.id).gte('occurred_on', sinceA),
     ]);
     let clicks = 0, impressions = 0;

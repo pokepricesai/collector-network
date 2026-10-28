@@ -288,13 +288,31 @@ export async function generateOpportunities(
   start21.setUTCDate(start21.getUTCDate() - 1);
   const prior21Start = new Date(start21);
   prior21Start.setUTCDate(prior21Start.getUTCDate() - 20);
-  const recentRaw = await (async () => {
-    const { data, error } = await sb
-      .from('network_gsc_url_query_daily')
-      .select('site_id,page,query,clicks,impressions,position_avg')
-      .gte('date', iso(start7)).lte('date', iso(seven));
-    if (error) throw new Error(`[opp] fetch recent 7d: ${error.message}`);
-    return (data ?? []) as unknown as UrlQueryAgg[];
+  // Intelligence Quality Pass — correctness fix.
+  // The previous read was unpaginated. PostgREST silently caps
+  // row responses at 1000; pokemon's 7-day window on
+  // network_gsc_url_query_daily is ~28,000 rows, so the
+  // new_query detector was examining ~3.5% of actual recent
+  // activity. Paginate with .range() in 1000-row pages, same
+  // pattern as fetchAggregates.fetchAll().
+  const recentRaw: UrlQueryAgg[] = await (async () => {
+    const pageSize = 1000;
+    const out: UrlQueryAgg[] = [];
+    let start = 0;
+    for (;;) {
+      const { data, error } = await sb
+        .from('network_gsc_url_query_daily')
+        .select('site_id,page,query,clicks,impressions,position_avg')
+        .gte('date', iso(start7)).lte('date', iso(seven))
+        .range(start, start + pageSize - 1);
+      if (error) throw new Error(`[opp] fetch recent 7d: ${error.message}`);
+      const rows = (data ?? []) as unknown as UrlQueryAgg[];
+      out.push(...rows);
+      if (rows.length < pageSize) break;
+      start += pageSize;
+      if (start > 2_000_000) break; // sanity cap, same as fetchAll
+    }
+    return out;
   })();
   const priorKeys = new Set(priorUrlQuery.map((r) => `${r.site_id}|${r.page}|${r.query}`));
   const current28Keys = new Set(urlQuery.filter((r) => r.impressions >= 1).map((r) => `${r.site_id}|${r.page}|${r.query}`));
