@@ -13,6 +13,15 @@ import {
 import { completeTaskAction, reopenTaskAction } from '../actions';
 import type { ImplementationReceiptStored } from '@/server/claude/completion-receipt';
 import type { BaselineSnapshot } from '@/server/claude/baseline';
+import {
+  type Checkpoint,
+  type MeasurementSchedule,
+  deriveMeasurementState,
+  summariseOutcome,
+  CHECKPOINTS,
+  addDays,
+  SETTLE_LAG_DAYS,
+} from '@/server/intelligence/measurement';
 
 // CN-05 OS Phase 2 — task detail page.
 //
@@ -80,6 +89,8 @@ export default async function TaskDetailPage({ params }: Props) {
     implementation_receipts?: ImplementationReceiptStored[];
     receipt_last_error?: { at: string; message: string; path?: string };
     baseline?: BaselineSnapshot;
+    measurement_schedule?: MeasurementSchedule;
+    measurement_checkpoints?: Checkpoint[];
   };
   const prompts = meta.generated_prompts ?? [];
   const latestPrompt = prompts[0];
@@ -88,6 +99,9 @@ export default async function TaskDetailPage({ params }: Props) {
   const receiptError = meta.receipt_last_error;
   const operatorVerified = latestReceipt?.operator_confirmed_at != null;
   const baseline = meta.baseline ?? null;
+  const schedule = meta.measurement_schedule ?? null;
+  const checkpoints = meta.measurement_checkpoints ?? [];
+  const measurementState = deriveMeasurementState(meta);
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/tasks">
@@ -429,6 +443,68 @@ export default async function TaskDetailPage({ params }: Props) {
         )}
       </Panel>
 
+      {/* CN-05 OS — Measurement panel.
+          Visible only once a measurement schedule exists (set when
+          the operator verifies an implementation receipt). The
+          baseline above is the reference; checkpoints here are the
+          observed post-change windows. Nothing displayed here is a
+          causal claim — the Notice at the bottom spells that out. */}
+      {schedule && (
+        <Panel
+          title="Measurement"
+          eyebrow={`Anchored ${schedule.anchor_at.slice(0, 10)} · ${measurementState.replace(/_/g, ' ')}`}
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
+              Primary success metric: <code>{schedule.primary_success_metric ?? '— (defaults to GSC clicks)'}</code>
+              {schedule.anchor_receipt_deployment_sha && <> · prod SHA: <code>{schedule.anchor_receipt_deployment_sha.slice(0, 12)}</code></>}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+              {CHECKPOINTS.map((d) => {
+                const key = `D${d}` as const;
+                const target = schedule.target_dates[key];
+                const captured = checkpoints.find((c) => c.checkpoint === d) ?? null;
+                return <CheckpointCard key={d} dCount={d} targetDate={target} captured={captured} />;
+              })}
+            </div>
+
+            {checkpoints.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--admin-text-muted)' }}>
+                Summary: <code>{summariseOutcome(checkpoints)}</code>
+              </div>
+            )}
+
+            <Notice tone="info">
+              Observed change only. The baseline is a 28-day reference window; checkpoint windows
+              are matched pre/post lengths (7/14/28/90 days). Correlation is not causation —
+              unrelated deploys, algorithm updates, or seasonality can move numbers in either
+              direction. Record interpretation on the task; the OS will not infer causation.
+            </Notice>
+
+            <details>
+              <summary style={{ cursor: 'pointer', fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+                Raw measurement data ({checkpoints.length} checkpoint entries)
+              </summary>
+              <pre style={{ fontSize: 11, lineHeight: 1.5, overflowX: 'auto', background: 'var(--admin-bg)', padding: 10, borderRadius: 6, border: '1px solid var(--admin-border)' }}>
+{JSON.stringify(checkpoints, null, 2)}
+              </pre>
+            </details>
+          </div>
+        </Panel>
+      )}
+
+      {!schedule && operatorVerified && (
+        <Panel title="Measurement" eyebrow="Scheduling…">
+          <Notice tone="info">
+            A measurement schedule will land on the next cron tick. If you expected it to be
+            visible now, confirm the implementation receipt was pasted BEFORE operator
+            verification — the schedule is written on verify, anchored to the receipt&apos;s
+            completed_at timestamp.
+          </Notice>
+        </Panel>
+      )}
+
       <Panel title="Metadata" eyebrow="Audit · raw task + evidence">
         <details>
           <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--admin-text-muted)' }}>Show raw task evidence + metadata</summary>
@@ -439,6 +515,83 @@ export default async function TaskDetailPage({ params }: Props) {
       </Panel>
     </AdminShell>
   );
+}
+
+function CheckpointCard({ dCount, targetDate, captured }: { dCount: 7 | 14 | 28 | 90; targetDate: string; captured: Checkpoint | null }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const dueDate = addDays(targetDate, SETTLE_LAG_DAYS);
+  const stateLabel = (() => {
+    if (!captured) return today >= dueDate ? 'awaiting cron' : 'pending';
+    return captured.outcome.replace(/_/g, ' ');
+  })();
+  const tone: 'default' | 'green' | 'amber' | 'red' = (() => {
+    if (!captured || captured.status === 'pending') return 'default';
+    if (captured.outcome === 'observed_improvement') return 'green';
+    if (captured.outcome === 'observed_decline') return 'red';
+    return 'amber';
+  })();
+  const toneBorder = tone === 'green' ? '#1d8a4b' : tone === 'red' ? '#c43f3f' : tone === 'amber' ? '#b58b1a' : 'var(--admin-border)';
+  const toneBg = tone === 'green' ? 'rgba(29,138,75,0.08)' : tone === 'red' ? 'rgba(196,63,63,0.07)' : tone === 'amber' ? 'rgba(181,139,26,0.08)' : 'var(--admin-bg)';
+  return (
+    <div style={{ padding: 10, border: `1px solid ${toneBorder}`, borderRadius: 6, background: toneBg, display: 'grid', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <strong style={{ fontSize: 14 }}>D{dCount}</strong>
+        <span style={{ fontSize: 10.5, color: 'var(--admin-text-muted)' }}>target {targetDate}</span>
+      </div>
+      <div style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: 0.3 }}>{stateLabel}</div>
+      {captured && captured.primary && (
+        <div style={{ fontSize: 12 }}>
+          <code>{captured.primary.metric}</code>:{' '}
+          {captured.primary.pair.pre == null || captured.primary.pair.post == null ? (
+            <span style={{ color: 'var(--admin-text-muted)' }}>—</span>
+          ) : (
+            <>
+              <code>{fmtNum(captured.primary.pair.pre)}</code> → <code>{fmtNum(captured.primary.pair.post)}</code>
+              {captured.primary.pair.delta_pct != null && (
+                <span style={{ marginLeft: 6, fontWeight: 600 }}>
+                  {captured.primary.pair.delta_pct > 0 ? '+' : ''}{captured.primary.pair.delta_pct.toFixed(1)}%
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {captured && captured.pre_window && captured.post_window && (
+        <div style={{ fontSize: 10.5, color: 'var(--admin-text-muted)' }}>
+          pre <code>{captured.pre_window.start}→{captured.pre_window.end}</code> · post <code>{captured.post_window.start}→{captured.post_window.end}</code>
+        </div>
+      )}
+      {captured && captured.gsc_site && (
+        <details>
+          <summary style={{ cursor: 'pointer', fontSize: 10.5, color: 'var(--admin-text-muted)' }}>GSC + GA4 detail</summary>
+          <div style={{ fontSize: 11, marginTop: 4 }}>
+            <MeasureRow label="GSC clicks" pair={captured.gsc_site.clicks} />
+            <MeasureRow label="GSC impressions" pair={captured.gsc_site.impressions} />
+            <MeasureRow label="GSC CTR" pair={captured.gsc_site.ctr} isPct />
+            <MeasureRow label="GSC avg position" pair={captured.gsc_site.avg_position} isPosition />
+            {captured.ga4_site && <MeasureRow label="GA4 active users" pair={captured.ga4_site.active_users} />}
+            {captured.ga4_site && <MeasureRow label="GA4 sessions" pair={captured.ga4_site.sessions} />}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function MeasureRow({ label, pair, isPct, isPosition }: { label: string; pair: { pre: number | null; post: number | null; delta_pct: number | null }; isPct?: boolean; isPosition?: boolean }) {
+  const fmt = (v: number | null) => v == null ? '—' : isPct ? `${(v * 100).toFixed(2)}%` : isPosition ? v.toFixed(1) : v.toLocaleString();
+  return (
+    <div style={{ display: 'flex', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--admin-text-muted)', width: 130 }}>{label}:</span>
+      <span><code>{fmt(pair.pre)}</code> → <code>{fmt(pair.post)}</code></span>
+      {pair.delta_pct != null && <span style={{ marginLeft: 'auto' }}>{pair.delta_pct > 0 ? '+' : ''}{pair.delta_pct.toFixed(1)}%</span>}
+    </div>
+  );
+}
+
+function fmtNum(v: number): string {
+  if (Math.abs(v) < 1 && v !== 0) return v.toFixed(3);
+  return v.toLocaleString();
 }
 
 function BaselineKV({ label, value }: { label: string; value: number | string | null }) {

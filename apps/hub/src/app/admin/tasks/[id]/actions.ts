@@ -18,6 +18,10 @@ import {
   extractEvidenceTargets,
   type BaselineSnapshot,
 } from '@/server/claude/baseline';
+import {
+  buildSchedule,
+  type MeasurementSchedule,
+} from '@/server/intelligence/measurement';
 
 // CN-05 OS Phase 2 — Server Action that assembles the Claude Code
 // implementation prompt for a given task, saves it to
@@ -205,6 +209,7 @@ export async function confirmReceiptVerifiedAction(
   const prevMeta =
     ((task.metadata ?? {}) as {
       implementation_receipts?: ImplementationReceiptStored[];
+      measurement_schedule?: MeasurementSchedule;
     }) ?? {};
   const receipts = Array.isArray(prevMeta.implementation_receipts)
     ? prevMeta.implementation_receipts
@@ -212,6 +217,7 @@ export async function confirmReceiptVerifiedAction(
   if (receipts.length === 0) return;
 
   const now = new Date().toISOString();
+  const latestReceipt = receipts[0] as ImplementationReceiptStored | undefined;
   const nextReceipts = receipts.map((r, i) =>
     i === 0
       ? {
@@ -221,9 +227,30 @@ export async function confirmReceiptVerifiedAction(
         }
       : r,
   );
+
+  // CN-05 OS — lay down a measurement schedule anchored on the
+  // verified receipt's completed_at. Only when no schedule already
+  // exists; the anchor is fixed on first verification so re-confirms
+  // don't move the goalposts. (A revised receipt that supersedes an
+  // earlier one still measures against the ORIGINAL anchor — the
+  // operator can delete metadata.measurement_schedule to force a
+  // reset, but we never do that automatically.)
+  let schedulePatch: Record<string, unknown> = {};
+  if (!prevMeta.measurement_schedule && latestReceipt?.completed_at) {
+    const schedule = buildSchedule({
+      taskId,
+      anchorIsoTimestamp: latestReceipt.completed_at,
+      primarySuccessMetric: latestReceipt.primary_success_metric ?? null,
+      commitSha: latestReceipt.commit_sha ?? null,
+      deploymentSha: latestReceipt.production_deployment_sha ?? null,
+    });
+    schedulePatch = { measurement_schedule: schedule };
+  }
+
   const nextMeta = {
     ...(prevMeta as Record<string, unknown>),
     implementation_receipts: nextReceipts,
+    ...schedulePatch,
   };
   await sb
     .from('network_tasks')

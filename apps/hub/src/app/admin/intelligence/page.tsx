@@ -12,6 +12,7 @@ import { intelTypeLabel, siteDisplayName } from '@/lib/display-names';
 import {
   createTaskFromItemAction, snoozeItemAction, dismissItemAction, resolveItemAction, refreshIntelligenceAction,
 } from './actions';
+import { deriveMeasurementState, type MeasurementState } from '@/server/intelligence/measurement';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -79,6 +80,22 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
 
   const lastRefreshIso = (latestRunRow.data as { finished_at: string | null } | null)?.finished_at ?? null;
   const refreshState = freshnessState(lastRefreshIso, { freshHours: 26, agingHours: 36 });
+
+  // CN-05 OS — fetch measurement state for every task-linked row in
+  // one query so the Inbox can render the right chip (awaiting
+  // verification / scheduled / in progress / complete). Service-role
+  // reads only; no writes.
+  const taskIds = Array.from(new Set(rows.map((r) => r.task_id).filter((id): id is string => typeof id === 'string')));
+  const measurementStateByTask = new Map<string, MeasurementState>();
+  if (taskIds.length > 0) {
+    const { data: taskMetaRows } = await sb
+      .from('network_tasks')
+      .select('id, metadata')
+      .in('id', taskIds);
+    for (const r of ((taskMetaRows ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>)) {
+      measurementStateByTask.set(r.id, deriveMeasurementState(r.metadata));
+    }
+  }
 
   // Three deterministic sections.
   const needsAction = rows.filter((r) => r.priority_score >= 70);
@@ -167,31 +184,31 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
 
       {/* ─── Sections ─── */}
       {needsAction.length > 0 && (
-        <IntelSection title="Needs action now" eyebrow={`${needsAction.length} · priority ≥ 70`} rows={needsAction} />
+        <IntelSection title="Needs action now" eyebrow={`${needsAction.length} · priority ≥ 70`} rows={needsAction} measurementStateByTask={measurementStateByTask} />
       )}
       {opportunities.length > 0 && (
-        <IntelSection title="Opportunities" eyebrow={`${opportunities.length} · priority 45-69`} rows={opportunities} />
+        <IntelSection title="Opportunities" eyebrow={`${opportunities.length} · priority 45-69`} rows={opportunities} measurementStateByTask={measurementStateByTask} />
       )}
       {backlog.length > 0 && (
-        <IntelSection title="Backlog" eyebrow={`${backlog.length} · priority < 45`} rows={backlog} collapsibleAfter={10} />
+        <IntelSection title="Backlog" eyebrow={`${backlog.length} · priority < 45`} rows={backlog} collapsibleAfter={10} measurementStateByTask={measurementStateByTask} />
       )}
     </AdminShell>
   );
 }
 
-function IntelSection({ title, eyebrow, rows, collapsibleAfter }: { title: string; eyebrow: string; rows: IntelligenceRowRead[]; collapsibleAfter?: number }) {
+function IntelSection({ title, eyebrow, rows, collapsibleAfter, measurementStateByTask }: { title: string; eyebrow: string; rows: IntelligenceRowRead[]; collapsibleAfter?: number; measurementStateByTask: Map<string, MeasurementState> }) {
   const visible = collapsibleAfter ? rows.slice(0, collapsibleAfter) : rows;
   const hidden = collapsibleAfter ? rows.slice(collapsibleAfter) : [];
   return (
     <Panel title={title} eyebrow={eyebrow}>
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {visible.map((row) => <IntelCard key={row.id} row={row} />)}
+        {visible.map((row) => <IntelCard key={row.id} row={row} measurementState={row.task_id ? measurementStateByTask.get(row.task_id) ?? null : null} />)}
       </ul>
       {hidden.length > 0 && (
         <details style={{ marginTop: 10 }}>
           <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Show {hidden.length} more</summary>
           <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
-            {hidden.map((row) => <IntelCard key={row.id} row={row} />)}
+            {hidden.map((row) => <IntelCard key={row.id} row={row} measurementState={row.task_id ? measurementStateByTask.get(row.task_id) ?? null : null} />)}
           </ul>
         </details>
       )}
@@ -199,7 +216,7 @@ function IntelSection({ title, eyebrow, rows, collapsibleAfter }: { title: strin
   );
 }
 
-function IntelCard({ row }: { row: IntelligenceRowRead }) {
+function IntelCard({ row, measurementState }: { row: IntelligenceRowRead; measurementState: MeasurementState | null }) {
   const band = priorityBand(row.priority_score ?? 0);
   const signalBadge = row.signal_kind === 'opportunity' ? 'info'
                    : row.signal_kind === 'positive'    ? 'success'
@@ -237,6 +254,10 @@ function IntelCard({ row }: { row: IntelligenceRowRead }) {
           <StatusBadge state="info" label={intelTypeLabel(row.type)} />
           <span style={{ fontSize: 13.5, fontWeight: 600 }}>{row.title}</span>
           {row.status === 'task_created' && <StatusBadge state="success" label="task created" />}
+          {measurementState === 'awaiting_verification' && <StatusBadge state="info" label="awaiting verification" />}
+          {measurementState === 'scheduled' && <StatusBadge state="info" label="scheduled for measurement" />}
+          {measurementState === 'in_progress' && <StatusBadge state="info" label="being measured" />}
+          {measurementState === 'complete' && <StatusBadge state="success" label="measurement complete" />}
           {row.status === 'snoozed' && row.snoozed_until && (
             <StatusBadge state="warning" label={`snoozed to ${safeDate(row.snoozed_until)}`} />
           )}
