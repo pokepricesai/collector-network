@@ -219,9 +219,79 @@ export default async function JobsPage({ searchParams }: PageProps) {
     (activeByGroup[groupLabel(r.group)] ??= []).push(r);
   }
 
-  // Problem count summary.
-  const failing = active.filter((r) => r.agg.aggregated === 'failed' || r.agg.aggregated === 'partial').length;
-  const stale   = active.filter((r) => r.agg.aggregated === 'never').length;
+  // Jobs simplification — operator-facing health summary.
+  //
+  // The brief: "Jobs genuinely overdue" and "Last successful GSC,
+  // GA4, revenue and Intelligence data refreshes, where verified."
+  // Do NOT flag weekly jobs as stale simply because they haven't
+  // run in 24h.
+  //
+  // We define "overdue" relative to each job's own schedule label
+  // (parsed from registry.scheduleLabel). "Never run" is only a
+  // problem when the job HAS a schedule — manual jobs can legitimately
+  // show no history until an operator runs them.
+
+  function expectedCadenceHours(scheduleLabel: string | null): number | null {
+    if (!scheduleLabel) return null;
+    const s = scheduleLabel.toLowerCase();
+    if (/weekly|monday|every\s+week/.test(s)) return 24 * 7;
+    if (/hourly|every\s+hour/.test(s)) return 1;
+    if (/every\s+15\s*min/.test(s)) return 0.3;
+    if (/every\s+(10|5)\s*min/.test(s)) return 0.2;
+    if (/every\s+30\s*min/.test(s)) return 0.6;
+    if (/every\s+6h|every\s+6\s*hours/.test(s)) return 6;
+    if (/every\s+12h|every\s+12\s*hours/.test(s)) return 12;
+    // Default assumption for "Daily HH:MM UTC" style labels.
+    if (/daily/.test(s)) return 24;
+    return null;
+  }
+
+  function isOverdue(row: Row): boolean {
+    // Only count scheduled jobs with a declared cadence.
+    if (row.classification !== 'scheduled') return false;
+    const cadenceHrs = expectedCadenceHours(row.scheduleLabel);
+    if (cadenceHrs == null) return false;
+    const latest = row.agg.latest;
+    if (!latest) return true;
+    const ageHrs = (Date.now() - new Date(latest.started_at).getTime()) / 3_600_000;
+    // Allow a 1.5× grace margin — a daily job isn't "overdue" at
+    // 24h-and-1-minute, only when it's materially past its tick.
+    return ageHrs > cadenceHrs * 1.5;
+  }
+
+  const failing = active.filter((r) => r.agg.aggregated === 'failed' || r.agg.aggregated === 'partial');
+  const overdue = active.filter((r) => isOverdue(r));
+
+  // Specific operator-facing freshness checks. The brief: "Last
+  // successful GSC, GA4, revenue and Intelligence data refreshes,
+  // where verified." We derive from the actual latest-run records.
+  function freshnessFor(jobName: string): { ageHrs: number | null; label: string; tone: 'ok' | 'warn' | 'danger' } {
+    const latest = latestPerJob.get(jobName);
+    if (!latest || !latest.started_at) return { ageHrs: null, label: 'no record', tone: 'danger' };
+    const ageHrs = (Date.now() - new Date(latest.started_at).getTime()) / 3_600_000;
+    const tone: 'ok' | 'warn' | 'danger' = ageHrs <= 26 ? 'ok' : ageHrs <= 48 ? 'warn' : 'danger';
+    const label = ageHrs < 1 ? `${Math.round(ageHrs * 60)}min ago`
+                : ageHrs < 48 ? `${Math.round(ageHrs)}h ago`
+                : `${Math.round(ageHrs / 24)}d ago`;
+    return { ageHrs, label, tone };
+  }
+  const gscFresh    = freshnessFor('gsc.incremental');
+  const ga4Fresh    = freshnessFor('ga4.incremental');
+  const intelFresh  = freshnessFor('intelligence.refresh');
+  const revFresh    = freshnessFor('impact.epn.sync');
+  const oppFresh    = freshnessFor('opportunities.generate');
+
+  // System health = worst of failing / overdue / stale critical.
+  const healthTone: 'healthy' | 'needs_attention' | 'problem' =
+    failing.length > 0 ? 'problem'
+    : overdue.length > 0 ? 'needs_attention'
+    : (gscFresh.tone === 'danger' || ga4Fresh.tone === 'danger') ? 'needs_attention'
+    : 'healthy';
+  const healthLabel = healthTone === 'healthy' ? 'Healthy'
+    : healthTone === 'needs_attention' ? 'Needs attention'
+    : 'Problem';
+  const healthState: 'success' | 'warning' | 'failed' =
+    healthTone === 'healthy' ? 'success' : healthTone === 'problem' ? 'failed' : 'warning';
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/jobs">
@@ -230,28 +300,71 @@ export default async function JobsPage({ searchParams }: PageProps) {
         title="Jobs"
         description={
           <>
-            Scheduled + manual jobs. Every run writes to <code>network_job_runs</code>. Runs stuck past {STALE_RUN_MINUTES}min are auto-recovered ({recovered} this page load). Failing / stale / partial jobs rise to the top.
-            {failing > 0 && <> · <strong style={{ color: 'var(--failed, #c0392b)' }}>{failing} job{failing === 1 ? '' : 's'} failing or partial</strong></>}
-            {stale > 0 && <> · <strong style={{ color: 'var(--warning, #e67e22)' }}>{stale} not run in 24h</strong></>}
+            A summary of what the system is doing in the background. See the health panel below for current state; the full technical registry is under Advanced.
           </>
         }
         actions={
           <Link href={showAll ? '/admin/jobs' : '/admin/jobs?view=all'} className="ui-btn ui-btn--secondary ui-btn--sm">
-            {showAll ? 'Hide utility jobs' : 'Show utility jobs'}
+            {showAll ? 'Hide advanced' : 'Show advanced'}
           </Link>
         }
       />
 
-      {(['Ingest', 'Analysis', 'Ops'] as const).map((grp) => (
-        activeByGroup[grp]?.length ? (
-          <Panel key={grp} title={grp}>
-            <JobTable rows={activeByGroup[grp]!} sitesById={sitesById} />
-          </Panel>
-        ) : null
-      ))}
+      <Panel title="System health" eyebrow="At-a-glance">
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+          <StatusBadge state={healthState} label={healthLabel} />
+          {failing.length > 0 && (
+            <span style={{ fontSize: 12.5, color: 'var(--failed, #c0392b)', fontWeight: 600 }}>
+              {failing.length} job{failing.length === 1 ? '' : 's'} failing or partial
+            </span>
+          )}
+          {overdue.length > 0 && (
+            <span style={{ fontSize: 12.5, color: 'var(--warning, #e67e22)', fontWeight: 600 }}>
+              {overdue.length} overdue vs schedule
+            </span>
+          )}
+          {failing.length === 0 && overdue.length === 0 && (
+            <span style={{ fontSize: 12.5, color: 'var(--admin-text-muted)' }}>
+              All scheduled jobs are running on time. Latest data refreshes below.
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+          <HealthKV label="Google Search Console" age={gscFresh.label} tone={gscFresh.tone} />
+          <HealthKV label="Google Analytics 4"    age={ga4Fresh.label} tone={ga4Fresh.tone} />
+          <HealthKV label="Intelligence refresh"  age={intelFresh.label} tone={intelFresh.tone} />
+          <HealthKV label="Affiliate revenue"     age={revFresh.label} tone={revFresh.tone} />
+          <HealthKV label="SEO opportunities"     age={oppFresh.label} tone={oppFresh.tone} />
+        </div>
+        {failing.length > 0 && (
+          <div style={{ marginTop: 12, fontSize: 12.5 }}>
+            <strong style={{ color: 'var(--failed, #c0392b)' }}>Failing / partial:</strong>{' '}
+            {failing.map((r, i) => <span key={r.id}>{i > 0 && ' · '}{r.label}</span>)}
+          </div>
+        )}
+        {overdue.length > 0 && (
+          <div style={{ marginTop: 8, fontSize: 12.5 }}>
+            <strong style={{ color: 'var(--warning, #e67e22)' }}>Overdue:</strong>{' '}
+            {overdue.map((r, i) => <span key={r.id}>{i > 0 && ' · '}{r.label} <span style={{ color: 'var(--admin-text-muted)' }}>({r.scheduleLabel})</span></span>)}
+          </div>
+        )}
+        <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+          Stuck jobs past {STALE_RUN_MINUTES}min auto-recovered ({recovered} this page load). Overdue is calculated against each job's own schedule, not a blanket 24h — weekly jobs are not flagged until past their expected cadence.
+        </div>
+      </Panel>
 
+      {/* Advanced section — the full technical registry. Collapsed
+          by default. Keeps every existing Run button, every detail
+          and the per-group tables. */}
       {showAll && (
         <>
+          {(['Ingest', 'Analysis', 'Ops'] as const).map((grp) => (
+            activeByGroup[grp]?.length ? (
+              <Panel key={grp} title={grp}>
+                <JobTable rows={activeByGroup[grp]!} sitesById={sitesById} />
+              </Panel>
+            ) : null
+          ))}
           {utility.length > 0 && (
             <Panel title="Utility jobs" eyebrow="Backfills + diagnostics">
               <JobTable rows={utility} sitesById={sitesById} />
@@ -265,6 +378,16 @@ export default async function JobsPage({ searchParams }: PageProps) {
         </>
       )}
     </AdminShell>
+  );
+}
+
+function HealthKV({ label, age, tone }: { label: string; age: string; tone: 'ok' | 'warn' | 'danger' }) {
+  const colour = tone === 'ok' ? 'var(--admin-text)' : tone === 'warn' ? 'var(--warning, #e67e22)' : 'var(--failed, #c0392b)';
+  return (
+    <div style={{ padding: '6px 10px', border: '1px solid var(--admin-border)', borderRadius: 6 }}>
+      <div style={{ fontSize: 10.5, color: 'var(--admin-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2, color: colour }}>{age}</div>
+    </div>
   );
 }
 

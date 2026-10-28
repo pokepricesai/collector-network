@@ -41,7 +41,44 @@ const CATEGORY_FILTERS: Array<{ label: string; value: '' | IntelligenceCategory 
 ];
 
 interface PageProps {
-  searchParams?: Promise<{ site?: string; category?: string; status?: string; task_error?: string }>;
+  searchParams?: Promise<{ site?: string; category?: string; status?: string; preset?: string; task_error?: string }>;
+}
+
+// Category breakdown presets. The operator sees 7 clickable chips at
+// the top of the Inbox; each sets ?preset=<key> which maps to a
+// (category, types[]) filter. Zero-count chips still render — the
+// brief explicitly says "Zero categories should display zero, not
+// disappear or be artificially populated."
+const CATEGORY_PRESETS: Array<{ key: string; label: string; category: IntelligenceCategory | null; types?: string[] }> = [
+  { key: 'striking_distance', label: 'Striking Distance',      category: 'seo',    types: ['striking_distance'] },
+  { key: 'low_ctr',           label: 'Low CTR',                category: 'seo',    types: ['low_ctr'] },
+  { key: 'zero_click',        label: 'Impressions, No Clicks', category: 'seo',    types: ['zero_click'] },
+  { key: 'declining',         label: 'Declining Traffic',      category: 'seo',    types: ['declining', 'gaining'] },
+  { key: 'indexing',          label: 'Indexing / Technical',   category: null,     types: [] /* multi-category — handled below */ },
+  { key: 'content',           label: 'Content',                category: 'content' },
+  { key: 'revenue',           label: 'Revenue / Monetisation', category: null,     types: [] /* multi-category — handled below */ },
+];
+
+function presetFilter(key: string): { category: IntelligenceCategory | null; categories?: IntelligenceCategory[]; types?: string[] } | null {
+  switch (key) {
+    case 'striking_distance': return { category: 'seo',     types: ['striking_distance'] };
+    case 'low_ctr':           return { category: 'seo',     types: ['low_ctr'] };
+    case 'zero_click':        return { category: 'seo',     types: ['zero_click'] };
+    case 'declining':         return { category: 'seo',     types: ['declining', 'gaining'] };
+    case 'indexing':          return { category: null,      categories: ['indexing', 'technical', 'data_health'] };
+    case 'content':           return { category: 'content' };
+    case 'revenue':           return { category: null,      categories: ['revenue', 'monetisation'] };
+    default:                  return null;
+  }
+}
+
+function matchesPreset(row: { category: string; type: string }, key: string): boolean {
+  const p = presetFilter(key);
+  if (!p) return false;
+  if (p.types && p.types.length > 0 && !p.types.includes(row.type)) return false;
+  if (p.category && row.category !== p.category) return false;
+  if (p.categories && !p.categories.includes(row.category as IntelligenceCategory)) return false;
+  return true;
 }
 
 export default async function AdminIntelligencePage({ searchParams }: PageProps) {
@@ -52,6 +89,7 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
 
   const siteParam     = params.site ?? '';
   const categoryParam = (params.category ?? '') as '' | IntelligenceCategory;
+  const presetParam   = params.preset ?? '';
   const statusParam   = (params.status ?? 'active') as 'active' | 'resolved' | 'dismissed' | 'snoozed';
 
   const statusesByView: Record<string, IntelligenceStatus[]> = {
@@ -66,10 +104,22 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
     siteParam === 'network' ? null :
     (siteParam as SiteSlug);
 
-  const [{ rows, summary, error: queryError }, latestRunRow] = await Promise.all([
+  // Resolve preset → (category, types). A preset overrides the
+  // explicit category param so the chips are the primary UI.
+  const preset = presetParam ? presetFilter(presetParam) : null;
+  const effectiveCategory: IntelligenceCategory | null = preset?.category ?? (categoryParam || null);
+  const effectiveTypes: string[] | undefined = preset?.types && preset.types.length > 0 ? preset.types : undefined;
+
+  // When the preset spans multiple categories (indexing/technical/data_health
+  // or revenue/monetisation), we filter in-memory after the query since
+  // listIntelligenceInbox only supports a single category filter today.
+  const presetCategories: IntelligenceCategory[] | undefined = preset?.categories;
+
+  const [listResult, latestRunRow, breakdownResult] = await Promise.all([
     listIntelligenceInbox(sb, {
       site_slug,
-      category: categoryParam || null,
+      category: presetCategories ? null : effectiveCategory,
+      types: effectiveTypes,
       statuses: statusesByView[statusParam] ?? statusesByView['active']!,
       limit: 200,
     }),
@@ -78,16 +128,39 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
       .eq('job_name', 'intelligence.refresh')
       .order('started_at', { ascending: false })
       .limit(1).maybeSingle(),
+    // Separate query for the Category Breakdown panel so the counts
+    // reflect ALL ACTIVE items (not just the currently-filtered view).
+    // Scoped to the active view AND the current site filter so the
+    // chip counts honour the site filter the operator picked.
+    sb.from('network_intelligence_items')
+      .select('category, type')
+      .in('status', ['open', 'task_created']),
   ]);
+  const { rows, summary, error: queryError } = listResult;
+
+  // Apply the multi-category preset filter in-memory (indexing /
+  // technical / data_health, or revenue / monetisation). Done here
+  // because listIntelligenceInbox only supports a single-category
+  // filter.
+  const filteredRows = presetCategories
+    ? rows.filter((r) => presetCategories.includes(r.category))
+    : rows;
 
   const lastRefreshIso = (latestRunRow.data as { finished_at: string | null } | null)?.finished_at ?? null;
   const refreshState = freshnessState(lastRefreshIso, { freshHours: 26, agingHours: 36 });
+
+  // Category breakdown counts. All active items, not filtered.
+  const breakdownRows = (breakdownResult.data ?? []) as Array<{ category: string; type: string }>;
+  const breakdownCounts: Record<string, number> = {};
+  for (const preset of CATEGORY_PRESETS) {
+    breakdownCounts[preset.key] = breakdownRows.filter((r) => matchesPreset(r, preset.key)).length;
+  }
 
   // CN-05 OS — fetch measurement state for every task-linked row in
   // one query so the Inbox can render the right chip (awaiting
   // verification / scheduled / in progress / complete). Service-role
   // reads only; no writes.
-  const taskIds = Array.from(new Set(rows.map((r) => r.task_id).filter((id): id is string => typeof id === 'string')));
+  const taskIds = Array.from(new Set(filteredRows.map((r) => r.task_id).filter((id): id is string => typeof id === 'string')));
   const measurementStateByTask = new Map<string, MeasurementState>();
   if (taskIds.length > 0) {
     const { data: taskMetaRows } = await sb
@@ -100,9 +173,9 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
   }
 
   // Three deterministic sections.
-  const needsAction = rows.filter((r) => r.priority_score >= 70);
-  const opportunities = rows.filter((r) => r.priority_score >= 45 && r.priority_score < 70);
-  const backlog = rows.filter((r) => r.priority_score < 45);
+  const needsAction = filteredRows.filter((r) => r.priority_score >= 70);
+  const opportunities = filteredRows.filter((r) => r.priority_score >= 45 && r.priority_score < 70);
+  const backlog = filteredRows.filter((r) => r.priority_score < 45);
 
   const headline = summary.total === 0
     ? statusParam === 'active' ? 'Nothing worth your attention right now.' : `No ${statusParam} items.`
@@ -130,14 +203,56 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
         </Notice>
       )}
 
-      {/* ─── Overview ─── */}
-      <Panel title="Overview">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
-          <SummaryKV label="Critical" value={summary.critical.toString()} tone={summary.critical > 0 ? 'warning' : 'muted'} />
-          <SummaryKV label="High" value={summary.high.toString()} tone={summary.high > 0 ? 'warning' : 'muted'} />
-          <SummaryKV label="Opportunities" value={summary.opportunities.toString()} tone="success" />
-          <SummaryKV label="Risks + warnings" value={summary.risks.toString()} tone={summary.risks > 0 ? 'warning' : 'muted'} />
-          <SummaryKV label="Tasks created" value={summary.tasks_created.toString()} tone="muted" />
+      {/* ─── Category breakdown ───
+          Shows the 7 category chips the brief specified. Clickable
+          to filter. Zero-count chips still render (brief: "Zero
+          categories should display zero, not disappear"). Counts
+          are drawn from the full active-item set, not the current
+          view, so switching filters doesn't zero out the chips. */}
+      <Panel title="Active recommendations by category" eyebrow="Click a chip to filter · counts are live">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {CATEGORY_PRESETS.map((p) => {
+            const count = breakdownCounts[p.key] ?? 0;
+            const active = presetParam === p.key;
+            return (
+              <PresetChip
+                key={p.key}
+                label={p.label}
+                count={count}
+                active={active}
+                href={buildHref(params, { site: siteParam, status: statusParam, preset: active ? '' : p.key })}
+              />
+            );
+          })}
+          <PresetChip
+            label="All active"
+            count={breakdownRows.length}
+            active={!presetParam}
+            href={buildHref(params, { site: siteParam, status: statusParam, preset: '' })}
+          />
+        </div>
+      </Panel>
+
+      {/* ─── Filters (simplified: just site + status) ───
+          Category selection has moved to the clickable chip panel
+          above. The brief: "Retain site and status filtering, but
+          simplify the layout and remove redundant controls." */}
+      <Panel title="Filters">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          <FilterGroup label="Site">
+            {SITE_FILTERS.map((f) => (
+              <FilterLink key={f.value} href={buildHref(params, { site: f.value, status: statusParam, preset: presetParam })} active={siteParam === f.value}>
+                {f.label}
+              </FilterLink>
+            ))}
+          </FilterGroup>
+          <FilterGroup label="Status">
+            {(['active', 'snoozed', 'resolved', 'dismissed'] as const).map((v) => (
+              <FilterLink key={v} href={buildHref(params, { site: siteParam, status: v, preset: presetParam })} active={statusParam === v}>
+                {v}
+              </FilterLink>
+            ))}
+          </FilterGroup>
         </div>
         <details style={{ marginTop: 10 }}>
           <summary style={{ cursor: 'pointer', fontSize: 11.5, color: 'var(--admin-text-muted)' }}>How priority is calculated</summary>
@@ -145,33 +260,6 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
             Formula: <code>{PRIORITY_FORMULA_LABEL}</code>. Each rule produces 0-100 impact/confidence/urgency/effort; priority is their weighted mean. Ease = 100 − effort.
           </div>
         </details>
-      </Panel>
-
-      {/* ─── Filters ─── */}
-      <Panel title="Filters" eyebrow="Shareable via URL">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-          <FilterGroup label="Site">
-            {SITE_FILTERS.map((f) => (
-              <FilterLink key={f.value} href={buildHref(params, { site: f.value, category: categoryParam, status: statusParam })} active={siteParam === f.value}>
-                {f.label}
-              </FilterLink>
-            ))}
-          </FilterGroup>
-          <FilterGroup label="Category">
-            {CATEGORY_FILTERS.map((f) => (
-              <FilterLink key={f.value} href={buildHref(params, { site: siteParam, category: f.value, status: statusParam })} active={categoryParam === f.value}>
-                {f.label}
-              </FilterLink>
-            ))}
-          </FilterGroup>
-          <FilterGroup label="Status">
-            {(['active', 'snoozed', 'resolved', 'dismissed'] as const).map((v) => (
-              <FilterLink key={v} href={buildHref(params, { site: siteParam, category: categoryParam, status: v })} active={statusParam === v}>
-                {v}
-              </FilterLink>
-            ))}
-          </FilterGroup>
-        </div>
       </Panel>
 
       {queryError && (
@@ -456,12 +544,40 @@ function safeDate(iso: string): string {
   }
 }
 
-function buildHref(current: Record<string, string | undefined>, next: { site: string; category: string; status: string }): string {
+function buildHref(current: Record<string, string | undefined>, next: { site: string; status: string; preset?: string; category?: string }): string {
   const sp = new URLSearchParams();
   if (next.site) sp.set('site', next.site);
+  if (next.preset) sp.set('preset', next.preset);
   if (next.category) sp.set('category', next.category);
   if (next.status && next.status !== 'active') sp.set('status', next.status);
   void current;
   const qs = sp.toString();
   return qs ? `/admin/intelligence?${qs}` : `/admin/intelligence`;
+}
+
+function PresetChip({ label, count, active, href }: { label: string; count: number; active: boolean; href: string }) {
+  const bg = active ? 'var(--admin-accent, #4a90e2)' : (count > 0 ? 'transparent' : 'transparent');
+  const color = active ? '#fff' : (count > 0 ? 'var(--admin-text)' : 'var(--admin-text-muted)');
+  const border = active ? 'var(--admin-accent, #4a90e2)' : (count > 0 ? 'var(--admin-border)' : 'var(--admin-border)');
+  return (
+    <Link
+      href={href}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '6px 12px', borderRadius: 999, fontSize: 12.5,
+        border: `1px solid ${border}`, background: bg, color,
+        textDecoration: 'none', fontWeight: active ? 600 : 500,
+        opacity: count === 0 && !active ? 0.6 : 1,
+      }}
+    >
+      <span>{label}</span>
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        minWidth: 22, height: 20, padding: '0 6px', borderRadius: 10,
+        background: active ? 'rgba(255,255,255,0.25)' : 'var(--admin-surface-strong)',
+        color: active ? '#fff' : 'var(--admin-text)',
+        fontSize: 11, fontWeight: 700,
+      }}>{count}</span>
+    </Link>
+  );
 }

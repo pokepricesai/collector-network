@@ -40,6 +40,10 @@ export interface IntelligenceRowRead {
 export interface IntelligenceInboxFilters {
   site_slug?: SiteSlug | null;         // null = network-wide only; undefined = all
   category?: IntelligenceCategory | null;
+  /** When set, additionally filter by one or more `type` values.
+   *  The Intelligence Inbox category breakdown presets use this to
+   *  jump straight to e.g. SEO + striking_distance in one click. */
+  types?: string[];
   statuses?: IntelligenceStatus[];
   limit?: number;
 }
@@ -77,6 +81,8 @@ export async function listIntelligenceInbox(
 
   // Category filter.
   if (filters.category) q = q.eq('category', filters.category);
+  // Type filter (used by the Category Breakdown presets).
+  if (filters.types && filters.types.length > 0) q = q.in('type', filters.types);
 
   // Site filter: slug === null means "network-only"; slug === a slug
   // means that site's rows only; undefined means no filter.
