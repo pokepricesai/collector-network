@@ -40,13 +40,14 @@ const CATEGORY_FILTERS: Array<{ label: string; value: '' | IntelligenceCategory 
 ];
 
 interface PageProps {
-  searchParams?: Promise<{ site?: string; category?: string; status?: string }>;
+  searchParams?: Promise<{ site?: string; category?: string; status?: string; task_error?: string }>;
 }
 
 export default async function AdminIntelligencePage({ searchParams }: PageProps) {
   const { admin, sb } = await requireAdmin('/admin/intelligence');
   const sites = await listNetworkSites(sb);
   const params = (await searchParams) ?? {};
+  const taskError = params.task_error;
 
   const siteParam     = params.site ?? '';
   const categoryParam = (params.category ?? '') as '' | IntelligenceCategory;
@@ -121,6 +122,12 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
           </div>
         }
       />
+
+      {taskError && (
+        <Notice tone="danger">
+          <strong>Create task failed:</strong> {taskError}
+        </Notice>
+      )}
 
       {/* ─── Overview ─── */}
       <Panel title="Overview">

@@ -1,50 +1,73 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { runIntelligenceEngine } from '@/server/intelligence/engine';
 
-// Create a network_tasks row from an intelligence item, linking both
-// directions. Idempotent: if the item already has task_id, the
-// action is a no-op and the UI shows the linked task.
+// CN-05 OS UX fix — Create task now navigates the operator directly
+// to the task detail page where Freeze Baseline + Generate Claude
+// Code Prompt live. Failures surface as a readable notice on the
+// Intelligence inbox instead of being swallowed by console.error.
+//
+// The server-side flow is:
+//   1. Load the intel item (eq id). Missing → stale link; redirect
+//      back with a notice so the operator can refresh.
+//   2. Already-linked (item.task_id set) → open that task directly.
+//   3. Existing open task carrying this intelligence_item_id →
+//      backfill the link + open the existing task (prevents
+//      duplicate siblings even when the inbox serves a stale item).
+//   4. Insert a new task via the canonical network_tasks path.
+//      Flip the intel item to task_created ONLY after the task
+//      row exists. Then redirect to the task detail page.
+//
+// We use `redirect()` (which throws a NEXT_REDIRECT control flow
+// signal); the trailing paths are unreachable on the happy path,
+// which is why error-only branches sit above every redirect.
+
+function errorRedirect(message: string): never {
+  const qs = new URLSearchParams({ task_error: message }).toString();
+  redirect(`/admin/intelligence?${qs}`);
+}
+
 export async function createTaskFromItemAction(formData: FormData): Promise<void> {
   const id = formData.get('item_id');
-  if (typeof id !== 'string') return;
+  if (typeof id !== 'string') errorRedirect('Missing intelligence item id — try again from the inbox.');
   const { sb, admin } = await requireAdmin('/admin/intelligence');
 
-  const { data: itemRow } = await sb
+  const { data: itemRow, error: loadErr } = await sb
     .from('network_intelligence_items')
-    .select('id, site_id, category, type, title, summary, recommended_action, evidence, source_type, source_id, source_key, impact_score, confidence_score, urgency_score, effort_score, priority_score, task_id')
+    .select('id, site_id, status, category, type, title, summary, recommended_action, evidence, source_type, source_id, source_key, impact_score, confidence_score, urgency_score, effort_score, priority_score, task_id')
     .eq('id', id)
     .maybeSingle();
+  if (loadErr) errorRedirect(`Could not load the intelligence item: ${loadErr.message}`);
   const item = itemRow as null | {
-    id: string; site_id: string | null; category: string; type: string;
+    id: string; site_id: string | null; status: string; category: string; type: string;
     title: string; summary: string; recommended_action: string;
     evidence: Record<string, unknown>; source_type: string; source_id: string | null; source_key: string;
     impact_score: number; confidence_score: number; urgency_score: number; effort_score: number; priority_score: number;
     task_id: string | null;
   };
-  if (!item) return;
+  if (!item) errorRedirect('Intelligence item not found — the inbox may have refreshed. Reload and try again.');
+
+  // Idempotency path 1: this item already has a task_id. Open it.
   if (item.task_id) {
-    // Already linked. Revalidate so the UI reflects task state.
     revalidatePath('/admin/intelligence');
-    return;
+    revalidatePath('/admin/tasks');
+    redirect(`/admin/tasks/${item.task_id}`);
   }
 
-  // Determine task priority from the item's priority_score band.
-  const taskPriority =
-    item.priority_score >= 85 ? 'critical' :
-    item.priority_score >= 70 ? 'high' :
-    item.priority_score >= 45 ? 'normal' : 'low';
-
-  // Duplicate prevention: if a task already carries this
-  // intelligence_item_id in its evidence AND is still open, reuse
-  // it rather than inserting a sibling.
+  // Idempotency path 2: a prior Create task left an open task
+  // carrying this intelligence_item_id in its evidence but the
+  // intel item's task_id back-reference never got written (the
+  // exact failure mode this fix addresses). Backfill the link and
+  // open the existing task — never insert a sibling.
   const { data: existing } = await sb
     .from('network_tasks')
     .select('id, status')
     .contains('evidence', { intelligence_item_id: item.id })
     .in('status', ['open', 'in_progress', 'waiting'])
+    .order('created_at', { ascending: false })
     .limit(1);
   const existingOpen = (existing ?? []) as Array<{ id: string; status: string }>;
   if (existingOpen.length > 0) {
@@ -55,18 +78,22 @@ export async function createTaskFromItemAction(formData: FormData): Promise<void
     }).eq('id', item.id);
     revalidatePath('/admin/intelligence');
     revalidatePath('/admin/tasks');
-    return;
+    redirect(`/admin/tasks/${existingId}`);
   }
 
-  const { data: insRow, error } = await sb
+  // Priority band derived from the engine score.
+  const taskPriority =
+    item.priority_score >= 85 ? 'critical' :
+    item.priority_score >= 70 ? 'high' :
+    item.priority_score >= 45 ? 'normal' : 'low';
+
+  const { data: insRow, error: insErr } = await sb
     .from('network_tasks')
     .insert({
       site_id: item.site_id,
       title: item.title.slice(0, 240),
       description: `${item.summary}\n\nRecommended action: ${item.recommended_action}`,
       task_type: 'intelligence',
-      // Intelligence-sourced tasks are improvements. Fixes come
-      // from the operator noticing something broken.
       task_kind: 'improvement',
       task_source: 'intelligence',
       priority: taskPriority,
@@ -93,12 +120,15 @@ export async function createTaskFromItemAction(formData: FormData): Promise<void
     })
     .select('id')
     .single();
-  if (error || !insRow) {
-    console.error('[intelligence/actions] task insert failed:', error?.message);
-    return;
+  if (insErr || !insRow) {
+    errorRedirect(`Task creation failed: ${insErr?.message ?? 'no row returned'}. Opportunity remains actionable; try again.`);
   }
   const task_id = (insRow as { id: string }).id;
 
+  // Flip the intel item ONLY after the task row exists. If this
+  // update errors, the task still exists and the next click
+  // follows the "existing task" backfill branch above, so no sibling
+  // is created.
   await sb.from('network_intelligence_items').update({
     status: 'task_created',
     task_id,
@@ -106,6 +136,7 @@ export async function createTaskFromItemAction(formData: FormData): Promise<void
 
   revalidatePath('/admin/intelligence');
   revalidatePath('/admin/tasks');
+  redirect(`/admin/tasks/${task_id}`);
 }
 
 // Snooze: 1 / 7 / 30 day options.
