@@ -10,8 +10,9 @@ import { PRIORITY_FORMULA_LABEL, priorityBand } from '@/server/intelligence/scor
 import type { IntelligenceCategory, IntelligenceStatus, SiteSlug } from '@/server/intelligence/types';
 import { intelTypeLabel, siteDisplayName } from '@/lib/display-names';
 import {
-  createTaskFromItemAction, snoozeItemAction, dismissItemAction, resolveItemAction, refreshIntelligenceAction,
+  snoozeItemAction, dismissItemAction, resolveItemAction, refreshIntelligenceAction,
 } from './actions';
+import { CreateTaskButton } from './CreateTaskButton';
 import { deriveMeasurementState, type MeasurementState } from '@/server/intelligence/measurement';
 
 export const dynamic = 'force-dynamic';
@@ -285,10 +286,7 @@ function IntelCard({ row, measurementState }: { row: IntelligenceRowRead; measur
 
         {row.status === 'open' && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
-            <form action={createTaskFromItemAction}>
-              <input type="hidden" name="item_id" value={row.id} />
-              <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm">Create task</button>
-            </form>
+            <CreateTaskButton itemId={row.id} />
             <details style={{ display: 'inline-block' }}>
               <summary className="ui-btn ui-btn--secondary ui-btn--sm" style={{ cursor: 'pointer', fontSize: 11 }}>More…</summary>
               <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>

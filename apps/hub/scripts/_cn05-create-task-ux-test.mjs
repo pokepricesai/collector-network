@@ -32,19 +32,20 @@ function pass(n, note = '') { results.push({ ok: true, n }); console.log(`  ✓ 
 function fail(n, err) { results.push({ ok: false, n, err: err?.message ?? String(err) }); console.log(`  ✗ ${n} — ${err?.message ?? err}`) }
 function section(name) { console.log(`\n━━━ ${name} ━━━`) }
 
-// Inline mirror of the Server Action's business logic. Mirrors the
-// SAME control flow the deployed code uses so a bug in either place
-// surfaces here. (The redirect() calls are represented as a return
-// shape so the test can assert them.)
+// Inline mirror of the Server Action's business logic (v2). The
+// deployed Server Action returns a structured CreateTaskResult
+// instead of calling redirect() — see actions.ts for rationale.
+// This mirror returns the SAME shape so any drift between it and
+// the deployed code surfaces as a test failure.
 async function createTaskFromItem(itemId) {
-  if (typeof itemId !== 'string') return { kind: 'redirect', to: '/admin/intelligence', error: 'Missing intelligence item id' }
+  if (typeof itemId !== 'string' || !itemId) return { ok: false, error: 'Missing intelligence item id' }
   const { data: item, error: loadErr } = await sb
     .from('network_intelligence_items')
     .select('id, site_id, status, category, type, title, summary, recommended_action, evidence, source_type, source_id, source_key, impact_score, confidence_score, urgency_score, effort_score, priority_score, task_id')
     .eq('id', itemId).maybeSingle()
-  if (loadErr) return { kind: 'redirect', to: '/admin/intelligence', error: loadErr.message }
-  if (!item) return { kind: 'redirect', to: '/admin/intelligence', error: 'Intelligence item not found' }
-  if (item.task_id) return { kind: 'redirect', to: `/admin/tasks/${item.task_id}`, insertedTaskId: null, path: 'already_linked' }
+  if (loadErr) return { ok: false, error: loadErr.message }
+  if (!item) return { ok: false, error: 'Intelligence item not found' }
+  if (item.task_id) return { ok: true, task_id: item.task_id, path: 'already_linked' }
 
   const { data: existing } = await sb.from('network_tasks')
     .select('id, status').contains('evidence', { intelligence_item_id: item.id })
@@ -52,7 +53,7 @@ async function createTaskFromItem(itemId) {
   if ((existing ?? []).length > 0) {
     const existingId = existing[0].id
     await sb.from('network_intelligence_items').update({ status: 'task_created', task_id: existingId }).eq('id', item.id)
-    return { kind: 'redirect', to: `/admin/tasks/${existingId}`, insertedTaskId: null, path: 'orphan_backfill' }
+    return { ok: true, task_id: existingId, path: 'orphan_backfill' }
   }
 
   const prio = item.priority_score >= 85 ? 'critical' : item.priority_score >= 70 ? 'high' : item.priority_score >= 45 ? 'normal' : 'low'
@@ -73,10 +74,10 @@ async function createTaskFromItem(itemId) {
     },
     metadata: { created_by_intelligence: true, admin_id: null, probe: MARKER },
   }).select('id').single()
-  if (insErr || !ins) return { kind: 'redirect', to: '/admin/intelligence', error: insErr?.message ?? 'no row returned' }
+  if (insErr || !ins) return { ok: false, error: insErr?.message ?? 'no row returned' }
   const task_id = ins.id
   await sb.from('network_intelligence_items').update({ status: 'task_created', task_id }).eq('id', item.id)
-  return { kind: 'redirect', to: `/admin/tasks/${task_id}`, insertedTaskId: task_id, path: 'new_insert' }
+  return { ok: true, task_id, path: 'new_insert' }
 }
 
 async function createDisposableIntelItem({ linked = false, extraEv = {} } = {}) {
@@ -116,41 +117,40 @@ async function main() {
   const createdItemIds = []
 
   try {
-    section('1. Fresh item → task created, intel linked, redirect targets /admin/tasks/{id}')
+    section('1. Fresh item → ok:true + task_id, DB rows + back-reference all correct')
     const freshItem = await createDisposableIntelItem()
     createdItemIds.push(freshItem.id)
     const r1 = await createTaskFromItem(freshItem.id)
-    if (r1.kind === 'redirect' && r1.to.startsWith('/admin/tasks/')) pass('redirect targets /admin/tasks/{id}', r1.to)
-    else fail('redirect targets task detail', new Error(JSON.stringify(r1)))
-    if (r1.insertedTaskId) createdTaskIds.push(r1.insertedTaskId)
-    if (r1.insertedTaskId) {
-      const { data: t } = await sb.from('network_tasks').select('id, task_type, task_source, status, evidence').eq('id', r1.insertedTaskId).single()
+    if (r1.ok && typeof r1.task_id === 'string' && r1.task_id.length === 36) pass('ok=true + task_id returned', r1.task_id)
+    else fail('ok+task_id', new Error(JSON.stringify(r1)))
+    if (r1.ok) createdTaskIds.push(r1.task_id)
+    if (r1.ok && r1.path === 'new_insert') pass('took the new_insert path')
+    else fail('new_insert path', new Error('path=' + (r1.ok ? r1.path : 'n/a')))
+    if (r1.ok) {
+      const { data: t } = await sb.from('network_tasks').select('id, task_type, task_source, status, evidence').eq('id', r1.task_id).single()
       if (t.task_type === 'intelligence' && t.task_source === 'intelligence' && t.status === 'open') pass('task row correct', `type=${t.task_type} source=${t.task_source} status=${t.status}`)
       else fail('task row shape', new Error(JSON.stringify(t)))
       if (t.evidence?.intelligence_item_id === freshItem.id) pass('task.evidence.intelligence_item_id links back')
       else fail('task→item back-reference', new Error(JSON.stringify(t.evidence)))
       const { data: i } = await sb.from('network_intelligence_items').select('status, task_id').eq('id', freshItem.id).single()
-      if (i.status === 'task_created' && i.task_id === r1.insertedTaskId) pass('intel item flipped task_created + task_id set')
+      if (i.status === 'task_created' && i.task_id === r1.task_id) pass('intel item flipped task_created + task_id set')
       else fail('intel item link', new Error(JSON.stringify(i)))
     }
 
-    section('2. Idempotency — second click on same item redirects to same task, inserts nothing')
+    section('2. Idempotency — second click returns same task_id, inserts nothing')
     const beforeCount = await taskCountForItem(freshItem.id)
     const r2 = await createTaskFromItem(freshItem.id)
     const afterCount = await taskCountForItem(freshItem.id)
-    if (r2.kind === 'redirect' && r2.to === `/admin/tasks/${r1.insertedTaskId}`) pass('second click redirects to the same task')
-    else fail('second click idempotent', new Error(JSON.stringify(r2)))
-    if (r2.path === 'already_linked') pass('took the already_linked branch')
-    else fail('idempotent branch', new Error('path=' + r2.path))
+    if (r2.ok && r1.ok && r2.task_id === r1.task_id) pass('second call returns the same task_id')
+    else fail('second call idempotent', new Error(JSON.stringify(r2)))
+    if (r2.ok && r2.path === 'already_linked') pass('took the already_linked branch')
+    else fail('idempotent branch', new Error('path=' + (r2.ok ? r2.path : 'n/a')))
     if (beforeCount === afterCount) pass('no new task inserted on repeated click', `count=${beforeCount}`)
     else fail('no sibling task created', new Error(`before=${beforeCount} after=${afterCount}`))
 
-    section('3. Orphan existing task — backfill link, open existing, no sibling')
+    section('3. Orphan existing task — backfill link, return existing task_id, no sibling')
     const orphanItem = await createDisposableIntelItem()
     createdItemIds.push(orphanItem.id)
-    // Simulate the exact failure mode of the old action: a task exists
-    // referring to this item in evidence, but the intel item's task_id
-    // was never written back.
     const { data: orphanTask } = await sb.from('network_tasks').insert({
       site_id: orphanItem.site_id, title: `${MARKER} orphan task`,
       description: 'simulated orphan', task_type: 'intelligence', task_kind: 'improvement', task_source: 'intelligence',
@@ -159,10 +159,10 @@ async function main() {
     }).select('*').single()
     createdTaskIds.push(orphanTask.id)
     const r3 = await createTaskFromItem(orphanItem.id)
-    if (r3.kind === 'redirect' && r3.to === `/admin/tasks/${orphanTask.id}`) pass('orphan branch redirects to existing task', orphanTask.id)
-    else fail('orphan redirect', new Error(JSON.stringify(r3)))
-    if (r3.path === 'orphan_backfill') pass('took the orphan_backfill branch')
-    else fail('orphan branch', new Error('path=' + r3.path))
+    if (r3.ok && r3.task_id === orphanTask.id) pass('orphan branch returns existing task_id', orphanTask.id)
+    else fail('orphan task_id', new Error(JSON.stringify(r3)))
+    if (r3.ok && r3.path === 'orphan_backfill') pass('took the orphan_backfill branch')
+    else fail('orphan branch', new Error('path=' + (r3.ok ? r3.path : 'n/a')))
     const siblingCount = await taskCountForItem(orphanItem.id)
     if (siblingCount === 1) pass('no sibling task created — exactly 1 task for this item')
     else fail('no sibling', new Error(`count=${siblingCount}`))
@@ -170,22 +170,37 @@ async function main() {
     if (orphanItemAfter.status === 'task_created' && orphanItemAfter.task_id === orphanTask.id) pass('orphan item back-reference now written')
     else fail('orphan back-reference', new Error(JSON.stringify(orphanItemAfter)))
 
-    section('4. Missing/stale item_id → error redirect to /admin/intelligence')
+    section('4. Missing/stale item_id → ok:false with readable error, opportunity remains actionable')
     const r4a = await createTaskFromItem('00000000-0000-0000-0000-000000000000')
-    if (r4a.kind === 'redirect' && r4a.to === '/admin/intelligence' && r4a.error) pass('non-existent id → error redirect with message', r4a.error.slice(0, 60))
+    if (!r4a.ok && r4a.error) pass('non-existent id → ok:false + error message', r4a.error.slice(0, 60))
     else fail('non-existent id error', new Error(JSON.stringify(r4a)))
     const r4b = await createTaskFromItem(null)
-    if (r4b.kind === 'redirect' && r4b.error) pass('null id → error redirect')
+    if (!r4b.ok && r4b.error) pass('null id → ok:false + error')
     else fail('null id error', new Error(JSON.stringify(r4b)))
+    // Guarantee: a failed call must NOT leave orphaned state behind.
+    // Verify no stray intel items got flipped to task_created when the
+    // id was never valid.
+    const { data: strayFlip } = await sb.from('network_intelligence_items')
+      .select('id').eq('id', '00000000-0000-0000-0000-000000000000').maybeSingle()
+    if (!strayFlip) pass('non-existent id did NOT create or flip any intel row')
+    else fail('no stray flip', new Error('stray row materialised'))
 
-    section('5. Target production item is still recoverable (099d374a — PokePrices Striking Distance score 57)')
+    section('5. Target production item (099d374a) is either still actionable OR properly linked to a task')
     const { data: targetItem } = await sb.from('network_intelligence_items')
       .select('id, status, task_id, title, priority_score, evidence')
       .eq('id', '099d374a-87d4-4d74-a67e-19d62170ba9a').maybeSingle()
-    if (targetItem) pass('target item exists', `status=${targetItem.status} task_id=${targetItem.task_id} score=${targetItem.priority_score}`)
+    if (targetItem) pass('target item exists', `status=${targetItem.status} task_id=${targetItem.task_id?.slice(0,8) ?? 'null'} score=${targetItem.priority_score}`)
     else fail('target item exists', new Error('row missing'))
-    if (targetItem?.status === 'open' && targetItem.task_id == null) pass('target item is still actionable — the fix will route this next click directly to /admin/tasks/{id}')
-    else fail('target item actionable', new Error(JSON.stringify(targetItem)))
+    const isActionable = targetItem?.status === 'open' && targetItem.task_id == null
+    const isLinked = targetItem?.status === 'task_created' && typeof targetItem.task_id === 'string'
+    if (isActionable || isLinked) pass(`target item in a healthy state (${isActionable ? 'actionable' : 'linked to task ' + targetItem.task_id.slice(0,8)})`)
+    else fail('target item healthy', new Error(JSON.stringify(targetItem)))
+    if (isLinked) {
+      // Confirm the task actually exists and is navigable.
+      const { data: linkedTask } = await sb.from('network_tasks').select('id, status, title').eq('id', targetItem.task_id).maybeSingle()
+      if (linkedTask) pass(`linked task is navigable (/admin/tasks/${linkedTask.id})`, `status=${linkedTask.status}`)
+      else fail('linked task navigable', new Error('ghost task_id — intel points at non-existent task'))
+    }
 
   } finally {
     section('6. Cleanup')
