@@ -11,6 +11,7 @@ import { revenueMovementRule, trafficWithoutRevenueRule, revenueEfficiencyRule }
 import { highValueOpportunityRule, contentPerformanceRule } from './content';
 import { siteGrowthRule, siteGrowthReportingRule } from './growth';
 import { indexingCoverageRule } from './indexing';
+import { releaseReadinessRule } from './releases';
 
 export const INTELLIGENCE_RULES: readonly IntelligenceRule[] = Object.freeze([
   strikingDistanceRule,
@@ -25,6 +26,7 @@ export const INTELLIGENCE_RULES: readonly IntelligenceRule[] = Object.freeze([
   trafficWithoutRevenueRule,
   highValueOpportunityRule,
   contentPerformanceRule,
+  releaseReadinessRule,
   siteGrowthRule,
   siteGrowthReportingRule,
 ]);

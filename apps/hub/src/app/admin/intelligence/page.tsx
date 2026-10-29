@@ -14,6 +14,11 @@ import {
 } from './actions';
 import { CreateTaskButton } from './CreateTaskButton';
 import { deriveMeasurementState, type MeasurementState } from '@/server/intelligence/measurement';
+import { listUpcomingReleasesCompact } from '@/server/releases/queries';
+import {
+  CONFIRMATION_LABEL, CONFIRMATION_TONE, TCG_LABEL, PRODUCT_TYPE_LABEL,
+  daysUntilRelease, formatReleaseDate,
+} from '@/server/releases/types';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -115,7 +120,7 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
   // listIntelligenceInbox only supports a single category filter today.
   const presetCategories: IntelligenceCategory[] | undefined = preset?.categories;
 
-  const [listResult, latestRunRow, breakdownResult] = await Promise.all([
+  const [listResult, latestRunRow, breakdownResult, upcomingReleases] = await Promise.all([
     listIntelligenceInbox(sb, {
       site_slug,
       category: presetCategories ? null : effectiveCategory,
@@ -135,6 +140,10 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
     sb.from('network_intelligence_items')
       .select('category, type')
       .in('status', ['open', 'task_created']),
+    // CN-05 Growth Intelligence · compact upcoming releases.
+    // Returns [] when the migration hasn't been applied yet, so
+    // the inbox stays functional during rollout.
+    listUpcomingReleasesCompact(sb, 30, 6),
   ]);
   const { rows, summary, error: queryError } = listResult;
 
@@ -231,6 +240,52 @@ export default async function AdminIntelligencePage({ searchParams }: PageProps)
             href={buildHref(params, { site: siteParam, status: statusParam, preset: '' })}
           />
         </div>
+      </Panel>
+
+      {/* ─── Upcoming TCG Releases (compact) ───
+          Shows the next 30 days of confirmed / announced releases
+          across all 5 TCGs. Clickable to the full calendar at
+          /admin/intelligence/releases. The brief: "A compact summary
+          of the next releases at the top." Keeps the inbox lean —
+          detailed curation + filters live on the dedicated page. */}
+      <Panel
+        title="Upcoming TCG Releases"
+        eyebrow="Next 30 days · click a row to open · manual curation (v1)"
+        actions={
+          <Link href="/admin/intelligence/releases" className="ui-btn ui-btn--secondary ui-btn--sm">
+            View all releases
+          </Link>
+        }
+      >
+        {upcomingReleases.length === 0 ? (
+          <div style={{ padding: '6px 0', fontSize: 12.5, color: 'var(--admin-text-muted)' }}>
+            No releases on the calendar. <Link href="/admin/intelligence/releases">Add the next publisher-announced set</Link> and it will appear here.
+          </div>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {upcomingReleases.map((r) => {
+              const d = daysUntilRelease(r);
+              const dChip = d == null ? null : d === 0 ? 'today' : d < 7 ? `in ${d}d` : `in ${d}d`;
+              return (
+                <li key={r.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--admin-border)' }}>
+                  <Link href={`/admin/intelligence/releases/${r.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'baseline', textDecoration: 'none', color: 'inherit' }}>
+                    <span style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', minWidth: 110 }}>
+                      <strong style={{ color: 'var(--admin-text)' }}>{formatReleaseDate(r)}</strong>
+                      {dChip && <span style={{ marginLeft: 6 }}>· {dChip}</span>}
+                    </span>
+                    <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'baseline', minWidth: 0 }}>
+                      <strong style={{ fontSize: 13 }}>{r.set_name}</strong>
+                      <StatusBadge state="info" label={TCG_LABEL[r.tcg]} />
+                      <StatusBadge state="info" label={PRODUCT_TYPE_LABEL[r.product_type]} />
+                      {r.language === 'ja' && <StatusBadge state="info" label="JP" />}
+                    </span>
+                    <StatusBadge state={CONFIRMATION_TONE[r.confirmation_status]} label={CONFIRMATION_LABEL[r.confirmation_status]} />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </Panel>
 
       {/* ─── Filters (simplified: just site + status) ───
