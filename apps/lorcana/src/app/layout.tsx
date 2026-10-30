@@ -132,10 +132,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             when NEXT_PUBLIC_GA_ID is unset. */}
         <GoogleAnalytics />
         {/* CN-05 Sprint 4 — capture-phase affiliate_click beacon.
-            Fires a GA4 affiliate_click event on any <a data-affiliate="1">
-            click. endpoint={null} = GA4 only, no server beacon /
-            Supabase write (per CN-05 Sprint 3 brief). */}
-        <AffiliateTracking endpoint={null} />
+            CN-SPRINT 2026-10-30: enabled server beacon (default
+            '/api/affiliate/event' pointed at the local route that
+            SECURITY DEFINER-writes network_affiliate_clicks for the
+            Lorcana site_id only). Lorcana has ~100 GA4 users/day,
+            per-click write volume is trivial. GA4 attribution
+            continues; the server beacon adds per-site rows in the
+            shared DB so EPN revenue can be split by site over time. */}
+        <AffiliateTracking />
       </body>
     </html>
   );

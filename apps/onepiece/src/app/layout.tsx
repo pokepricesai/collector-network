@@ -132,10 +132,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             when NEXT_PUBLIC_GA_ID is unset. */}
         <GoogleAnalytics />
         {/* CN-05 Sprint 5 — capture-phase affiliate_click beacon.
-            endpoint={null} = GA4-only, no server beacon / Supabase
-            write (per CN-05 Sprint 3 brief on protecting shared DB
-            capacity). */}
-        <AffiliateTracking endpoint={null} />
+            CN-SPRINT 2026-10-30: enabled server beacon (default
+            '/api/affiliate/event' pointed at the local route that
+            SECURITY DEFINER-writes network_affiliate_clicks for the
+            OP site_id only). Baseline shows ~150 GA4 users/day, so
+            per-click write volume is trivial. Original GA4-only
+            posture is retained via GA4 — the server beacon
+            supplements it with per-site attribution in the shared
+            DB so £311.51 of unattributed EPN revenue can be split
+            by site over time. */}
+        <AffiliateTracking />
       </body>
     </html>
   );
