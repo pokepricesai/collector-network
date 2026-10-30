@@ -12,6 +12,10 @@
     {
       "path": "/api/prewarm",
       "schedule": "5 */6 * * *"
+    },
+    {
+      "path": "/api/prewarm?group=hot-finder",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

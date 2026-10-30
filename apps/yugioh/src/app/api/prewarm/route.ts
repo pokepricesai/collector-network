@@ -21,6 +21,20 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+// Hot subset — the four price-sort card-finder variants are the
+// only URLs with a documented cold-path cost (~11s observed in QC1,
+// 30s cold measured by audit 2026-10-30). page revalidate = 900s,
+// so a 6h prewarm leaves a ~5h45m window where any visitor hits
+// the cold scan. CN-SPRINT fix 2026-10-30: a second cron warms
+// just these four every 30 min so the cold path is practically
+// unreachable.
+const HOT_FINDER: readonly string[] = [
+  '/card-finder?sort=price-desc',
+  '/card-finder?sort=price-asc',
+  '/card-finder?sort=price-desc&_cur=EUR',
+  '/card-finder?sort=price-asc&_cur=EUR',
+];
+
 const ALLOWLIST: readonly string[] = [
   '/',
   // Card Finder cold hits ran ~11s in production QC1 because the
@@ -36,10 +50,7 @@ const ALLOWLIST: readonly string[] = [
   // per (source, currency, direction) so both currencies need to be
   // warmed for `?sort=price-desc` and `?sort=price-asc`.
   '/card-finder',
-  '/card-finder?sort=price-desc',
-  '/card-finder?sort=price-asc',
-  '/card-finder?sort=price-desc&_cur=EUR',
-  '/card-finder?sort=price-asc&_cur=EUR',
+  ...HOT_FINDER,
   '/market',
   '/market/most-valuable',
   '/market/most-valuable?currency=EUR',
@@ -160,14 +171,21 @@ export async function GET(req: Request) {
   if (!isAuthorised(req)) {
     return NextResponse.json({ ok: false, error: 'unauthorised' }, { status: 401 });
   }
+  // ?group=hot-finder restricts the warm to the price-sort variants
+  // only — fired on a tight 30-min cadence to keep the cold scan
+  // unreachable. Default (no query param) warms the full allowlist.
+  const url = new URL(req.url);
+  const group = url.searchParams.get('group');
+  const paths = group === 'hot-finder' ? HOT_FINDER : ALLOWLIST;
   const origin = siteUrl();
   const start = performance.now();
-  const results = await runWithConcurrency(origin, ALLOWLIST);
+  const results = await runWithConcurrency(origin, paths);
   const ok = results.filter((r) => r.ok).length;
   const totalMs = Math.round(performance.now() - start);
   return NextResponse.json({
     ok: true,
     origin,
+    group: group ?? 'all',
     totalMs,
     warmed: ok,
     total: results.length,
