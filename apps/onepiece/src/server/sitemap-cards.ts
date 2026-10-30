@@ -154,7 +154,15 @@ export async function buildShardResponse(shard: number): Promise<Response> {
     '\n</urlset>';
 
   return new NextResponse(xml, {
-    headers: { 'Content-Type': 'application/xml' },
+    headers: {
+      'Content-Type': 'application/xml',
+      // Route-level `revalidate = 3600` is ignored on raw NextResponse
+      // bodies — Vercel's edge cache only honours it when the handler
+      // returns via the metadata-route pathway. Setting s-maxage here
+      // makes the shard genuinely cacheable; each warm hit saves a
+      // paginated Supabase scan over ~thousands of card URLs.
+      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+    },
   });
 }
 

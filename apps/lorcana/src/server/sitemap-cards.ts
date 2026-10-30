@@ -116,7 +116,13 @@ export async function buildShardResponse(shard: number): Promise<Response> {
     '\n</urlset>';
 
   return new NextResponse(xml, {
-    headers: { 'Content-Type': 'application/xml' },
+    headers: {
+      'Content-Type': 'application/xml',
+      // Route-level revalidate is ignored on raw NextResponse bodies —
+      // same fix as the OnePiece shard. Lets Vercel edge cache the
+      // sitemap for 1h instead of regenerating it per crawler ping.
+      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+    },
   });
 }
 

@@ -303,6 +303,9 @@ export default async function LogicalCardPage({ params }: Props) {
                     href={link.href}
                     target="_blank"
                     rel="sponsored nofollow noopener noreferrer"
+                    data-affiliate="1"
+                    data-vendor="ebay"
+                    data-placement="card-header"
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       padding: '8px 14px', borderRadius: 10,
