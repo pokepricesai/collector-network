@@ -15,6 +15,7 @@ import {
   type PrintingPricing,
 } from '@collector-network/market-data';
 import { getLorcanaClient, getLorcanaGameId } from './client';
+import { enrichPricingMap } from './price-freshness';
 import { toLcGamedata, type LcGamedata } from '../lib/lorcana/gamedata';
 import { inferTreatment, type LcTreatmentInfo } from '../lib/lorcana/treatment';
 import { normaliseRarity, type LcRarity } from '../lib/lorcana/rarity';
@@ -94,10 +95,14 @@ export async function getPrintingBundle(
   if (!printing || printing.game_id !== gameId) return null;
   const card = await getCardById(supabase, printing.tcg_card_id);
   if (!card) return null;
-  const [sets, pricingMap] = await Promise.all([
+  const [sets, pricingMapRaw] = await Promise.all([
     getSetsByIds(supabase, [card.set_id]),
     getPrintingPricingBatch(supabase, [printing.id]),
   ]);
+  // CN-06.01-P02 Lorcana freshness pilot: enrich each quote with
+  // ingestStartedAt behind the LORCANA_FRESHNESS_PILOT flag. No-op
+  // when the flag is off (default).
+  const pricingMap = await enrichPricingMap(pricingMapRaw);
   const setsById = new Map(sets.map((s) => [s.id, s]));
   const pricing =
     pricingMap.get(printing.id) ??
@@ -144,7 +149,9 @@ async function composeBundle(
   const setsById = new Map(sets.map((s) => [s.id, s]));
   const printingsByCard = groupBy(printings, (p) => p.tcg_card_id);
   const allPrintingIds = printings.map((p) => p.id);
-  const pricingMap = await getPrintingPricingBatch(supabase, allPrintingIds);
+  const pricingMapRaw = await getPrintingPricingBatch(supabase, allPrintingIds);
+  // CN-06.01-P02 Lorcana freshness pilot: see note in getPrintingBundle.
+  const pricingMap = await enrichPricingMap(pricingMapRaw);
 
   const cardViews: LcCardView[] = cards.map((card) => {
     const rarity = normaliseRarity(card.rarity);

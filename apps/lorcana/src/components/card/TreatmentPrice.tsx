@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PrintingPricing } from '@collector-network/market-data';
+import type { PrintingPricing, RetailQuote, GradedQuote } from '@collector-network/market-data';
+import { classifyFreshness } from '@collector-network/market-data';
 import { formatPrice } from '@/lib/lorcana/format-price';
 import { formatPrice as formatSelected } from '@/lib/currency';
 import { selectPreferredRetailQuote } from '@collector-network/market-data';
@@ -74,17 +75,10 @@ export default function TreatmentPrice({
   );
   const preferred = selectPreferredRetailQuote(currencyScopedRetail, resolved);
 
-  const rawFloor = pickLowestNonNull(
-    pricing.raw.map((r) => ({ price: r.price, currency: r.currency })),
-  );
-  const gradedTop = pickHighestNonNull(
-    pricing.graded.map((g) => ({
-      price: g.price,
-      currency: g.currency,
-      grader: g.grader,
-      grade: g.grade,
-    })),
-  );
+  // Keep the full quote around (not just {price, currency}) so the
+  // freshness classifier can read updatedAt + ingestStartedAt.
+  const rawFloor = pickLowestNonNull(pricing.raw);
+  const gradedTop = pickHighestNonNull(pricing.graded);
 
   if (!preferred && !rawFloor && !gradedTop) {
     return (
@@ -100,6 +94,15 @@ export default function TreatmentPrice({
     );
   }
 
+  // CN-06.01-P02 Lorcana freshness pilot: compute a discreet
+  // "Last observed X days ago" label per rendered row. Falls through
+  // (label=null) when the ingestStartedAt + updatedAt combination
+  // classifies as fresh, or when the pilot is not enriched (both
+  // timestamps missing). Preserves the price value in every case.
+  const retailLabel = preferred ? freshnessLabel(preferred, 'retail') : null;
+  const rawLabel = rawFloor ? freshnessLabel(rawFloor, 'graded') : null;
+  const gradedLabel = gradedTop ? freshnessLabel(gradedTop, 'graded') : null;
+
   return (
     <div
       style={{
@@ -112,6 +115,7 @@ export default function TreatmentPrice({
           label="Retail"
           headline={formatPrice(preferred.price, preferred.currency)}
           detail={`${preferred.source}${preferred.finish ? ' · ' + preferred.finish : ''}`}
+          freshnessNote={retailLabel}
         />
       ) : (
         <PriceRow
@@ -127,6 +131,7 @@ export default function TreatmentPrice({
           headline={formatPrice(rawFloor.price, rawFloor.currency)}
           detail="Ungraded floor"
           muted
+          freshnessNote={rawLabel}
         />
       )}
       {gradedTop && (
@@ -135,10 +140,27 @@ export default function TreatmentPrice({
           headline={formatPrice(gradedTop.price, gradedTop.currency)}
           detail="Top graded quote"
           accent="gold"
+          freshnessNote={gradedLabel}
         />
       )}
     </div>
   );
+}
+
+function freshnessLabel(q: RetailQuote | GradedQuote, kind: 'retail' | 'graded'): string | null {
+  // Pilot gate: the freshness subtext only renders when the SERVER
+  // has enriched the quote with `ingestStartedAt`. That enrichment
+  // runs only when the LORCANA_FRESHNESS_PILOT env var is set
+  // (see src/server/price-freshness.ts). This ensures the display
+  // genuinely turns on and off with the feature flag, instead of
+  // silently emitting provider-only staleness labels when the pilot
+  // is off.
+  if (q.ingestStartedAt == null) return null;
+  return classifyFreshness({
+    providerUpdatedAt: q.updatedAt,
+    ingestStartedAt: q.ingestStartedAt,
+    kind,
+  }).label;
 }
 
 function PriceRow({
@@ -147,12 +169,18 @@ function PriceRow({
   detail,
   muted,
   accent,
+  freshnessNote,
 }: {
   label: string;
   headline: string;
   detail: string;
   muted?: boolean;
   accent?: 'gold';
+  // Optional short neutral subtext, e.g. "Last observed 35 days ago".
+  // Null or undefined when the quote is fresh. Rendered beneath the
+  // source detail line at reduced emphasis; never replaces the
+  // price value.
+  freshnessNote?: string | null;
 }) {
   return (
     <div
@@ -192,6 +220,21 @@ function PriceRow({
         >
           {detail}
         </span>
+        {freshnessNote && (
+          <span
+            data-testid="price-freshness-note"
+            style={{
+              display: 'block',
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              opacity: 0.75,
+              marginTop: 2,
+              fontStyle: 'italic',
+            }}
+          >
+            {freshnessNote}
+          </span>
+        )}
       </span>
     </div>
   );

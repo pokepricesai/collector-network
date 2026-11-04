@@ -22,6 +22,9 @@ export function toRetailQuote(row: TcgMarketPriceCurrent): RetailQuote {
     avg7d: row.avg_7d,
     avg30d: row.avg_30d,
     updatedAt: row.updated_at,
+    // Preserve ingest-run pointer where present on the row. Optional:
+    // older rows / non-TCGGraph sources may leave source_run_id null.
+    sourceRunId: (row as { source_run_id?: string | null }).source_run_id ?? null,
   };
 }
 
@@ -36,6 +39,7 @@ export function toGradedQuote(row: TcgGradedPriceCurrent): GradedQuote {
     price: row.price,
     cardSalesVolume: row.card_sales_volume,
     updatedAt: row.updated_at,
+    sourceRunId: (row as { source_run_id?: string | null }).source_run_id ?? null,
   };
 }
 
