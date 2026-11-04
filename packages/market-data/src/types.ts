@@ -15,7 +15,24 @@ export interface RetailQuote {
   avg1d: number | null;
   avg7d: number | null;
   avg30d: number | null;
+  // Provider-reported timestamp copied verbatim from the TCGGraph
+  // price payload (ingest-core.mjs:335 → `pr.updatedAt`). This is the
+  // provider's claim about the quote; it is NOT our ingestion time.
+  // CN-06.01-P02 (2026-11-04): do not describe this as proof a price
+  // changed — treat it as "last provider-reported observation".
   updatedAt: string;
+  // Optional ingest-provenance pointer. Populated when callers opt in
+  // (e.g. the Lorcana freshness pilot); null-safe elsewhere so
+  // existing consumers remain unchanged. Resolve via
+  // tcg_ingest_runs.started_at to get the ingestion timestamp.
+  sourceRunId?: string | null;
+  // Resolved ingestion timestamp (tcg_ingest_runs.started_at) joined
+  // in by a caller's enrichment step. Separate from provider
+  // updatedAt. Null when the caller did not enrich (e.g. feature flag
+  // off, or source_run_id was null, or the ingest_runs row was not
+  // found). Consumers must treat null as "unknown ingest time", not
+  // as "fresh" or "stale".
+  ingestStartedAt?: string | null;
 }
 
 import type { GradedAttribution } from '@collector-network/database';
@@ -32,7 +49,11 @@ export interface GradedQuote {
   currency: string;
   price: number | null;
   cardSalesVolume: number | null;
+  // Same semantics as RetailQuote.updatedAt — provider-reported,
+  // not ingest time.
   updatedAt: string;
+  sourceRunId?: string | null;
+  ingestStartedAt?: string | null;
 }
 
 // Grader value used in the shared graded table to denote raw-market
