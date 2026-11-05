@@ -21,6 +21,7 @@
     { "path": "/api/cron/pp-tcg-fx",               "schedule": "30 1 * * *" },
     { "path": "/api/cron/pp-tcg-history-sampler",  "schedule": "0 5 * * *" },
     { "path": "/api/cron/measure-intelligence",    "schedule": "40 4 * * *" },
-    { "path": "/api/cron/releases-sweep",          "schedule": "50 4 * * *" }
+    { "path": "/api/cron/releases-sweep",          "schedule": "50 4 * * *" },
+    { "path": "/api/cron/cn-psa-refresh-daily",    "schedule": "0 11 * * *" }
   ]
 }
