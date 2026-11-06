@@ -23,6 +23,8 @@
     { "path": "/api/cron/measure-intelligence",    "schedule": "40 4 * * *" },
     { "path": "/api/cron/releases-ingest",         "schedule": "45 4 * * *" },
     { "path": "/api/cron/releases-sweep",          "schedule": "50 4 * * *" },
-    { "path": "/api/cron/cn-psa-refresh-daily",    "schedule": "0 11 * * *" }
+    { "path": "/api/cron/cn-psa-refresh-daily",    "schedule": "0 11 * * *" },
+    { "path": "/api/cron/stock-probe",             "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/stock-deliver",           "schedule": "*/3 * * * *" }
   ]
 }
