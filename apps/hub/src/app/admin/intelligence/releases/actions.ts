@@ -113,10 +113,15 @@ export async function createReleaseAction(fd: FormData): Promise<void> {
     redirect(`/admin/intelligence/releases?${qs}`);
   }
   const now = new Date().toISOString();
+  // Operator-created rows are pre-reviewed by definition: the
+  // operator supplied the source and set the fields themselves.
+  // Mark them approved immediately so they surface on the public
+  // feed without a second approval click.
   const { error } = await sb.from('network_tcg_releases').insert({
     ...parsed.value,
     source_verified_at: now,
     verification_mode: 'manual',
+    review_status: 'approved',
     created_by: admin.adminRowId,
     updated_by: admin.adminRowId,
   });
@@ -127,6 +132,142 @@ export async function createReleaseAction(fd: FormData): Promise<void> {
   revalidatePath('/admin/intelligence/releases');
   revalidatePath('/admin/intelligence');
   redirect('/admin/intelligence/releases?created=1');
+}
+
+// ─────────────────── Review-gate actions ───────────────────
+//
+// Separates "automated discovery" from "operator-approved". An
+// automated-ingested row lands with review_status='pending_review'
+// and is NOT visible in the public feed until an operator
+// explicitly approves it. Operator can also reject outright.
+
+async function setReviewStatus(
+  fd: FormData,
+  nextStatus: 'approved' | 'rejected',
+): Promise<void> {
+  const id = fd.get('id');
+  if (typeof id !== 'string') redirect('/admin/intelligence/releases?update_error=missing_id');
+  const { sb, admin } = await requireAdmin('/admin/intelligence/releases');
+  const { data: existing } = await sb.from('network_tcg_releases')
+    .select('review_status').eq('id', id).maybeSingle();
+  const prev = (existing as { review_status: string } | null)?.review_status ?? 'pending_review';
+  if (prev === nextStatus) {
+    redirect(`/admin/intelligence/releases/${id}?updated=1`);
+  }
+  const { error } = await sb.from('network_tcg_releases')
+    .update({ review_status: nextStatus, updated_by: admin.adminRowId })
+    .eq('id', id);
+  if (error) {
+    const qs = new URLSearchParams({ update_error: error.message }).toString();
+    redirect(`/admin/intelligence/releases/${id}?${qs}`);
+  }
+  await sb.from('network_tcg_release_changes').insert({
+    release_id: id,
+    change_type: 'review_status_changed',
+    previous_value: { review_status: prev },
+    new_value: { review_status: nextStatus },
+    changed_by: admin.adminRowId,
+    change_source: 'operator',
+  });
+  revalidatePath('/admin/intelligence/releases');
+  revalidatePath(`/admin/intelligence/releases/${id}`);
+  revalidatePath('/admin/intelligence');
+  redirect(`/admin/intelligence/releases/${id}?updated=1`);
+}
+
+export async function approveReleaseAction(fd: FormData): Promise<void> {
+  await setReviewStatus(fd, 'approved');
+}
+
+export async function rejectReleaseAction(fd: FormData): Promise<void> {
+  await setReviewStatus(fd, 'rejected');
+}
+
+// When the ingester detects a date shift on an approved row it
+// does NOT overwrite release_date. It writes to
+// proposed_release_date + proposed_change_at + proposed_change_source
+// so the public feed keeps serving the approved value until the
+// operator explicitly accepts or rejects the proposal.
+export async function acceptProposedDateAction(fd: FormData): Promise<void> {
+  const id = fd.get('id');
+  if (typeof id !== 'string') redirect('/admin/intelligence/releases?update_error=missing_id');
+  const { sb, admin } = await requireAdmin('/admin/intelligence/releases');
+  const { data: existing } = await sb.from('network_tcg_releases')
+    .select('release_date, release_date_precision, proposed_release_date, proposed_release_date_precision, proposed_change_source')
+    .eq('id', id).maybeSingle();
+  const prev = existing as {
+    release_date: string | null;
+    release_date_precision: 'day' | 'month' | 'tbc';
+    proposed_release_date: string | null;
+    proposed_release_date_precision: 'day' | 'month' | 'tbc' | null;
+    proposed_change_source: string | null;
+  } | null;
+  if (!prev || !prev.proposed_release_date) {
+    redirect(`/admin/intelligence/releases/${id}?update_error=no_proposed_date`);
+  }
+  const now = new Date().toISOString();
+  const { error } = await sb.from('network_tcg_releases').update({
+    release_date: prev.proposed_release_date,
+    release_date_precision: prev.proposed_release_date_precision ?? prev.release_date_precision,
+    previous_release_date: prev.release_date,
+    date_changed_at: now,
+    proposed_release_date: null,
+    proposed_release_date_precision: null,
+    proposed_change_at: null,
+    proposed_change_source: null,
+    source_verified_at: now,
+    updated_by: admin.adminRowId,
+  }).eq('id', id);
+  if (error) {
+    const qs = new URLSearchParams({ update_error: error.message }).toString();
+    redirect(`/admin/intelligence/releases/${id}?${qs}`);
+  }
+  await sb.from('network_tcg_release_changes').insert({
+    release_id: id,
+    change_type: 'date_accepted',
+    previous_value: { release_date: prev.release_date },
+    new_value: { release_date: prev.proposed_release_date, accepted_from: prev.proposed_change_source },
+    changed_by: admin.adminRowId,
+    change_source: 'operator',
+  });
+  revalidatePath('/admin/intelligence/releases');
+  revalidatePath(`/admin/intelligence/releases/${id}`);
+  redirect(`/admin/intelligence/releases/${id}?updated=1`);
+}
+
+export async function rejectProposedDateAction(fd: FormData): Promise<void> {
+  const id = fd.get('id');
+  if (typeof id !== 'string') redirect('/admin/intelligence/releases?update_error=missing_id');
+  const { sb, admin } = await requireAdmin('/admin/intelligence/releases');
+  const { data: existing } = await sb.from('network_tcg_releases')
+    .select('proposed_release_date, proposed_change_source')
+    .eq('id', id).maybeSingle();
+  const prev = existing as { proposed_release_date: string | null; proposed_change_source: string | null } | null;
+  if (!prev || !prev.proposed_release_date) {
+    redirect(`/admin/intelligence/releases/${id}?update_error=no_proposed_date`);
+  }
+  const { error } = await sb.from('network_tcg_releases').update({
+    proposed_release_date: null,
+    proposed_release_date_precision: null,
+    proposed_change_at: null,
+    proposed_change_source: null,
+    updated_by: admin.adminRowId,
+  }).eq('id', id);
+  if (error) {
+    const qs = new URLSearchParams({ update_error: error.message }).toString();
+    redirect(`/admin/intelligence/releases/${id}?${qs}`);
+  }
+  await sb.from('network_tcg_release_changes').insert({
+    release_id: id,
+    change_type: 'date_rejected',
+    previous_value: { proposed_release_date: prev.proposed_release_date, proposed_change_source: prev.proposed_change_source },
+    new_value: null,
+    changed_by: admin.adminRowId,
+    change_source: 'operator',
+  });
+  revalidatePath('/admin/intelligence/releases');
+  revalidatePath(`/admin/intelligence/releases/${id}`);
+  redirect(`/admin/intelligence/releases/${id}?updated=1`);
 }
 
 export async function updateReleaseAction(fd: FormData): Promise<void> {

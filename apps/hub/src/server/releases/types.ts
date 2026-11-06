@@ -17,6 +17,7 @@ export type ConfirmationStatus =
   | 'confirmed' | 'announced_tbc' | 'rumoured'
   | 'postponed' | 'released' | 'cancelled';
 export type VerificationMode = 'manual' | 'automated';
+export type ReviewStatus = 'pending_review' | 'approved' | 'rejected';
 
 export interface TcgReleaseRow {
   id: string;
@@ -38,15 +39,42 @@ export interface TcgReleaseRow {
   source_notes: string | null;
   source_verified_at: string | null;        // full ISO
   verification_mode: VerificationMode;
+  // CN-06.06 corrections: separates automated discovery from
+  // operator approval. Rows are invisible on the public feed
+  // until review_status='approved'.
+  review_status: ReviewStatus;
   site_set_url: string | null;
   previous_release_date: string | null;
   date_changed_at: string | null;
+  // Reviewable date-change proposal. When the ingester detects a
+  // shift on an already-approved row it writes here, not to
+  // release_date. The operator explicitly accepts or rejects.
+  proposed_release_date: string | null;
+  proposed_release_date_precision: ReleaseDatePrecision | null;
+  proposed_change_at: string | null;
+  proposed_change_source: string | null;
+  // Sub-products (Scryfall Star Trek Commander/Stardates under
+  // the Star Trek expansion) point at a parent primary release
+  // event. The public feed returns parent rows only.
+  parent_release_id: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
 }
+
+export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {
+  pending_review: 'Pending review',
+  approved: 'Approved',
+  rejected: 'Rejected',
+};
+
+export const REVIEW_STATUS_TONE: Record<ReviewStatus, 'success' | 'info' | 'warning' | 'failed' | 'disabled'> = {
+  pending_review: 'warning',
+  approved: 'success',
+  rejected: 'failed',
+};
 
 export const TCG_LABEL: Record<Tcg, string> = {
   pokemon: 'Pokémon',

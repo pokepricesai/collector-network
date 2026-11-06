@@ -6,10 +6,15 @@ import { listNetworkSites } from '@/server/admin/sites';
 import { listReleases } from '@/server/releases/queries';
 import {
   CONFIRMATION_LABEL, CONFIRMATION_TONE, PRODUCT_TYPE_LABEL, TCG_LABEL,
+  REVIEW_STATUS_LABEL, REVIEW_STATUS_TONE,
   daysUntilRelease, formatReleaseDate,
-  type ConfirmationStatus, type Tcg,
+  type ConfirmationStatus, type ReviewStatus, type Tcg,
 } from '@/server/releases/types';
-import { createReleaseAction } from './actions';
+import {
+  createReleaseAction,
+  approveReleaseAction, rejectReleaseAction,
+  acceptProposedDateAction, rejectProposedDateAction,
+} from './actions';
 
 // Release Tracker · list + create.
 //
@@ -29,12 +34,20 @@ interface PageProps {
     language?: string;
     product_type?: string;
     status?: string;
+    review?: string;
     horizon?: string;
     created?: string;
     deleted?: string;
     create_error?: string;
   }>;
 }
+
+const REVIEW_OPTIONS: Array<{ v: '' | ReviewStatus; label: string }> = [
+  { v: 'pending_review', label: 'Pending review' },
+  { v: 'approved', label: 'Approved' },
+  { v: 'rejected', label: 'Rejected' },
+  { v: '', label: 'All' },
+];
 
 const TCG_OPTIONS: Array<{ v: Tcg; label: string }> = [
   { v: 'pokemon', label: 'Pokémon' },
@@ -58,6 +71,7 @@ export default async function ReleasesPage({ searchParams }: PageProps) {
   const sites = await listNetworkSites(sb);
   const sp = (await searchParams) ?? {};
   const tcgFilter = (sp.tcg ?? '') as '' | Tcg;
+  const reviewFilter = (sp.review ?? 'pending_review') as '' | ReviewStatus;
   const horizon = sp.horizon ?? 'next_90d';
 
   // Horizon → date range.
@@ -77,8 +91,18 @@ export default async function ReleasesPage({ searchParams }: PageProps) {
     from_date: from,
     to_date: to,
     statuses,
+    review_statuses: reviewFilter ? [reviewFilter] : undefined,
     limit: 500,
   });
+
+  // Review-queue counts — operator sees these in the header strip
+  // regardless of the current filter.
+  const { count: pendingCount } = await sb.from('network_tcg_releases')
+    .select('*', { count: 'exact', head: true })
+    .eq('review_status', 'pending_review');
+  const { count: proposalCount } = await sb.from('network_tcg_releases')
+    .select('*', { count: 'exact', head: true })
+    .not('proposed_release_date', 'is', null);
 
   return (
     <AdminShell admin={admin} sites={sites} activeSlug="network" pathname="/admin/intelligence/releases">
@@ -93,18 +117,40 @@ export default async function ReleasesPage({ searchParams }: PageProps) {
       {sp.deleted && <Notice tone="info">Release deleted.</Notice>}
       {sp.create_error && <Notice tone="danger"><strong>Could not create release:</strong> {sp.create_error}</Notice>}
 
+      {/* ─── Review-queue strip ─── */}
+      {((pendingCount ?? 0) > 0 || (proposalCount ?? 0) > 0) && (
+        <Notice tone="warning">
+          {(pendingCount ?? 0) > 0 && (
+            <>
+              <strong>{pendingCount}</strong> {pendingCount === 1 ? 'release awaits' : 'releases await'} human review.{' '}
+            </>
+          )}
+          {(proposalCount ?? 0) > 0 && (
+            <>
+              <strong>{proposalCount}</strong> {proposalCount === 1 ? 'date change proposal' : 'date change proposals'} pending accept/reject.{' '}
+            </>
+          )}
+          Discovered rows are invisible on the public feed until approved.
+        </Notice>
+      )}
+
       {/* ─── Filters ─── */}
       <Panel title="Filters">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          <FilterGroup label="Review">
+            {REVIEW_OPTIONS.map((r) => (
+              <FilterLink key={r.v} href={buildHref({ tcg: tcgFilter, review: r.v, horizon })} active={reviewFilter === r.v}>{r.label}</FilterLink>
+            ))}
+          </FilterGroup>
           <FilterGroup label="TCG">
-            <FilterLink href={buildHref(sp, { tcg: '', horizon })} active={!tcgFilter}>All</FilterLink>
+            <FilterLink href={buildHref({ tcg: '', review: reviewFilter, horizon })} active={!tcgFilter}>All</FilterLink>
             {TCG_OPTIONS.map((t) => (
-              <FilterLink key={t.v} href={buildHref(sp, { tcg: t.v, horizon })} active={tcgFilter === t.v}>{t.label}</FilterLink>
+              <FilterLink key={t.v} href={buildHref({ tcg: t.v, review: reviewFilter, horizon })} active={tcgFilter === t.v}>{t.label}</FilterLink>
             ))}
           </FilterGroup>
           <FilterGroup label="Horizon">
             {HORIZONS.map((h) => (
-              <FilterLink key={h.v} href={buildHref(sp, { tcg: tcgFilter, horizon: h.v })} active={horizon === h.v}>{h.label}</FilterLink>
+              <FilterLink key={h.v} href={buildHref({ tcg: tcgFilter, review: reviewFilter, horizon: h.v })} active={horizon === h.v}>{h.label}</FilterLink>
             ))}
           </FilterGroup>
         </div>
@@ -203,6 +249,10 @@ function Select({ name, options, required }: { name: string; options: Array<{ v:
 function ReleaseCard({ row }: { row: Awaited<ReturnType<typeof listReleases>>[number] }) {
   const d = daysUntilRelease(row);
   const dChip = d == null ? null : d < 0 ? `${Math.abs(d)}d ago` : d === 0 ? 'today' : `in ${d}d`;
+  const hasProposal = row.proposed_release_date != null;
+  const proposedLabel = hasProposal
+    ? formatReleaseDate({ release_date: row.proposed_release_date, release_date_precision: row.proposed_release_date_precision ?? row.release_date_precision })
+    : null;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 12, alignItems: 'start' }}>
       <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', minWidth: 110 }}>
@@ -212,6 +262,7 @@ function ReleaseCard({ row }: { row: Awaited<ReturnType<typeof listReleases>>[nu
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'baseline' }}>
           <strong style={{ fontSize: 13.5 }}>{row.set_name}</strong>
+          <StatusBadge state={REVIEW_STATUS_TONE[row.review_status]} label={REVIEW_STATUS_LABEL[row.review_status]} />
           <StatusBadge state="info" label={TCG_LABEL[row.tcg]} />
           <StatusBadge state="info" label={PRODUCT_TYPE_LABEL[row.product_type]} />
           <StatusBadge state="info" label={row.language === 'ja' ? 'Japanese' : row.language === 'en' ? 'English' : 'Other'} />
@@ -233,8 +284,43 @@ function ReleaseCard({ row }: { row: Awaited<ReturnType<typeof listReleases>>[nu
           <span>Mode: <code>{row.verification_mode}</code></span>
           {row.previous_release_date && <span style={{ color: 'var(--warning, #e67e22)' }}>Date changed from <code>{row.previous_release_date}</code></span>}
         </div>
+        {hasProposal && (
+          <div style={{
+            marginTop: 8, padding: '6px 10px', fontSize: 12,
+            background: 'var(--admin-surface-strong, #fff7e6)',
+            border: '1px solid var(--warning, #e67e22)',
+            borderRadius: 6,
+            display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+          }}>
+            <strong>Proposed date change:</strong>
+            <span>{formatReleaseDate(row)} → <strong>{proposedLabel}</strong></span>
+            {row.proposed_change_source && <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>via <code>{row.proposed_change_source}</code></span>}
+            <form action={acceptProposedDateAction} style={{ display: 'inline' }}>
+              <input type="hidden" name="id" value={row.id} />
+              <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm" style={{ fontSize: 11 }}>Accept</button>
+            </form>
+            <form action={rejectProposedDateAction} style={{ display: 'inline' }}>
+              <input type="hidden" name="id" value={row.id} />
+              <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Reject</button>
+            </form>
+          </div>
+        )}
       </div>
-      <Link href={`/admin/intelligence/releases/${row.id}`} className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Edit</Link>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+        {row.review_status === 'pending_review' && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            <form action={approveReleaseAction} style={{ display: 'inline' }}>
+              <input type="hidden" name="id" value={row.id} />
+              <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm" style={{ fontSize: 11 }}>Approve</button>
+            </form>
+            <form action={rejectReleaseAction} style={{ display: 'inline' }}>
+              <input type="hidden" name="id" value={row.id} />
+              <button type="submit" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Reject</button>
+            </form>
+          </div>
+        )}
+        <Link href={`/admin/intelligence/releases/${row.id}`} className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Edit</Link>
+      </div>
     </div>
   );
 }
@@ -263,11 +349,11 @@ function FilterLink({ href, active, children }: { href: string; active: boolean;
   );
 }
 
-function buildHref(current: Record<string, string | undefined>, next: { tcg: string; horizon: string }): string {
+function buildHref(next: { tcg: string; review: string; horizon: string }): string {
   const sp = new URLSearchParams();
   if (next.tcg) sp.set('tcg', next.tcg);
+  if (next.review && next.review !== 'pending_review') sp.set('review', next.review);
   if (next.horizon && next.horizon !== 'next_90d') sp.set('horizon', next.horizon);
-  void current;
   const qs = sp.toString();
   return qs ? `/admin/intelligence/releases?${qs}` : `/admin/intelligence/releases`;
 }

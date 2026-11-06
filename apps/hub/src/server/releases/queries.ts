@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { TcgReleaseRow, Tcg, Language, ProductType, ConfirmationStatus } from './types';
+import type { TcgReleaseRow, Tcg, Language, ProductType, ConfirmationStatus, ReviewStatus } from './types';
 
 // Read helpers for the release tracker. Admin-scoped only; the
 // RLS policies on network_tcg_releases are admin-only.
@@ -10,6 +10,7 @@ export interface ListFilters {
   language?: Language;
   product_type?: ProductType;
   statuses?: ConfirmationStatus[];
+  review_statuses?: ReviewStatus[];
   from_date?: string;      // inclusive ISO date
   to_date?: string;        // inclusive ISO date
   limit?: number;
@@ -27,6 +28,7 @@ export async function listReleases(
   if (filters.language) q = q.eq('language', filters.language);
   if (filters.product_type) q = q.eq('product_type', filters.product_type);
   if (filters.statuses && filters.statuses.length > 0) q = q.in('confirmation_status', filters.statuses);
+  if (filters.review_statuses && filters.review_statuses.length > 0) q = q.in('review_status', filters.review_statuses);
   if (filters.from_date) q = q.gte('release_date', filters.from_date);
   if (filters.to_date) q = q.lte('release_date', filters.to_date);
   const { data, error } = await q;
