@@ -709,6 +709,39 @@ describe('identityMatchesDescription', () => {
   })
 })
 
+describe('P04 security migration — RLS + REVOKE + GRANT', () => {
+  const SEC_MIGRATION_SQL = readFileSync(
+    join(process.cwd(), '..', '..', 'supabase', 'migrations', '20261106130000_cn0605_psa_security.sql'),
+    'utf8',
+  )
+  it('enables RLS on every cn_psa_* table', () => {
+    for (const t of [
+      'cn_psa_candidates', 'cn_psa_pop_latest', 'cn_psa_pop_history',
+      'cn_psa_api_usage', 'cn_psa_mapping_review', 'cn_psa_pilot',
+    ]) {
+      expect(SEC_MIGRATION_SQL).toMatch(new RegExp(`ALTER TABLE public\\.${t}\\s+ENABLE ROW LEVEL SECURITY`))
+    }
+  })
+  it('REVOKEs EXECUTE on cn_psa_pilot_arm from anon + authenticated + PUBLIC', () => {
+    expect(SEC_MIGRATION_SQL).toMatch(/REVOKE ALL ON FUNCTION public\.cn_psa_pilot_arm[^;]*FROM PUBLIC,\s*anon,\s*authenticated/)
+  })
+  it('GRANTs EXECUTE on cn_psa_pilot_arm to service_role', () => {
+    expect(SEC_MIGRATION_SQL).toMatch(/GRANT\s+EXECUTE ON FUNCTION public\.cn_psa_pilot_arm[^;]*TO service_role/)
+  })
+  it('locks down every PSA RPC function (8 functions)', () => {
+    const fns = [
+      'cn_psa_reserve_slots', 'cn_psa_acquire_lock', 'cn_psa_release_lock',
+      'cn_psa_record_candidate_failure', 'cn_psa_recompute_priority',
+      'cn_psa_writethrough_pokepop',
+      'cn_psa_pilot_reserve_attempt', 'cn_psa_pilot_arm',
+    ]
+    for (const f of fns) {
+      expect(SEC_MIGRATION_SQL).toMatch(new RegExp(`REVOKE ALL ON FUNCTION public\\.${f}`))
+      expect(SEC_MIGRATION_SQL).toMatch(new RegExp(`GRANT\\s+EXECUTE ON FUNCTION public\\.${f}[^;]*TO service_role`))
+    }
+  })
+})
+
 describe('P04 migration — pilot singleton + RPCs declared', () => {
   it('migration defines cn_psa_pilot singleton with id=TRUE constraint', () => {
     expect(PILOT_MIGRATION_SQL).toMatch(/CREATE TABLE IF NOT EXISTS public\.cn_psa_pilot/)
