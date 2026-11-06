@@ -1,22 +1,48 @@
 import 'server-only';
 
-// CN-06.05-P03: PSA public API client (GetPSASpecPopulation only).
+// CN-06.05-P03/P04: PSA public API client — GetPSASpecPopulation only.
 //
 // Endpoint:  GET https://api.psacard.com/publicapi/pop/GetPSASpecPopulation/{specID}
-// Auth:      Authorization: bearer <PSA_PUBLIC_API_TOKEN>  (per PSA docs; token obtained from
-//            the PSA account dashboard; the operator sets this in Vercel env).
-// Documentation link kept in a comment, NOT fetched at runtime.
+// Auth:      Authorization: bearer <PSA_PUBLIC_API_TOKEN>
+// Swagger:   https://api.psacard.com/publicapi/swagger.json
 //
-// This client NEVER:
-//   - Logs the token.
-//   - Writes the token to the database.
-//   - Retries on 401/403/429 (abort + surface to caller for day-level halt).
+// Response schema (verified against the swagger, 2026-11-06):
+//   PSASpecPopulationModel {
+//     SpecID:      int32
+//     Description: string
+//     PSAPop:      PSASpecPopSummaryModel  — total/grade counts for the main spec
+//     PSADNAPop:   PSASpecPopSummaryModel  — same shape, PSA/DNA (autograph) sub-pop
+//   }
 //
-// Validation: the endpoint returns a payload including `SpecID` (or the
-// variant key the docs use); we reject responses whose returned SpecID
-// does not match the request. Mis-matching responses are treated as
-// hard failures — never upserted — to honour the mapping invariants
-// in the P03 brief.
+//   PSASpecPopSummaryModel {
+//     Total:    int32     — grand total graded under this sub-pop
+//     Auth:     int32     — authentic-only (not numerically graded)
+//     Grade1 … Grade10:                   numeric grade counts
+//     Grade1_5 … Grade9_5:                half-grade counts
+//     Grade1Q … Grade9Q, Grade1_5Q … Grade9_5Q:   qualified-grade counts
+//     (Grade10 has NO Grade10Q — a PSA 10 cannot be qualified.)
+//   }
+//
+// We store:
+//   psa_1 … psa_10            (from Grade1 … Grade10)
+//   psa_1_5 … psa_9_5         (from Grade1_5 … Grade9_5)
+//   auth                      (from Auth)
+//   total_graded              (from Total; NEVER synthesised when PSA omits it)
+//   qualified_total           (SUM of all Grade*Q present; NEVER synthesised)
+//   gem_rate                  (derived only when Total > 0 AND Grade10 is present)
+//
+// PSADNAPop is intentionally not written to our pop tables today — the
+// cn_psa_pop_latest columns describe the main pop only. The full response
+// is preserved in cn_psa_pop_latest.raw_response_jsonb for future use.
+//
+// Safety invariants (enforced here; see unit tests):
+//   • Malformed response (no PSAPop envelope, no recognised keys)
+//     → ok:false with kind='parse'. Nothing is written.
+//   • Missing Total is NOT fabricated by summing grade counts. total_graded
+//     stays null; the scheduler still records the attempt but no synthetic
+//     zero population surfaces downstream.
+//   • Missing/non-numeric grade values become null, not 0.
+//   • Returned SpecID must equal the requested one; mismatches reject.
 
 export type PsaApiError = {
   kind: 'network' | 'http' | 'parse' | 'spec_mismatch' | 'rate_limited' | 'unauthorized' | 'forbidden'
@@ -25,13 +51,12 @@ export type PsaApiError = {
   retryAfterSeconds?: number
 }
 
-/** Result of a GetPSASpecPopulation call. */
 export type PsaSpecPopulationResult =
-  | { ok: true; specId: string; payload: PsaSpecPopulationPayload; rawJson: unknown }
+  | { ok: true; specId: string; description: string | null; payload: PsaSpecPopulationPayload; rawJson: unknown }
   | { ok: false; error: PsaApiError }
 
-/** The normalised shape we persist. Fields map to the documented
- *  PSAPop structure. Any field not present in the response stays null. */
+/** Normalised payload persisted into cn_psa_pop_latest / legacy psa_population.
+ *  Every field is null-or-number. Nulls mean PSA did not supply a value. */
 export type PsaSpecPopulationPayload = {
   auth:       number | null
   psa_1:      number | null
@@ -64,94 +89,101 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** Normalise a wide variety of key casings into a PsaSpecPopulationPayload.
- *  PSA's historical/public responses use PascalCase; we also accept
- *  snake_case to tolerate future shape changes. Unknown keys are ignored.
- *  Qualified pop keys (if the API exposes them) aggregate into qualified_total. */
+/** Parse the PSA SpecPopulation response body into our normalised shape.
+ *
+ *  Returns null on structural failure (envelope missing, no grade keys at
+ *  all) — the caller treats this as a parse error and never writes. */
 export function parsePsaSpecPopulation(payload: unknown): PsaSpecPopulationPayload | null {
   if (!payload || typeof payload !== 'object') return null
-  const raw = payload as Record<string, unknown>
+  const envelope = payload as Record<string, unknown>
 
-  // Accept either a direct object or a { PSAPop: { ... } } envelope.
-  const pop = (raw.PSAPop && typeof raw.PSAPop === 'object' ? raw.PSAPop
-            : (raw.psaPop && typeof raw.psaPop === 'object' ? raw.psaPop
-            : raw)) as Record<string, unknown>
+  // Accept either a direct PSAPop object OR the full PSASpecPopulationModel
+  // wrapper (which is what the API returns).
+  const pop = (envelope.PSAPop && typeof envelope.PSAPop === 'object'
+    ? envelope.PSAPop
+    : envelope) as Record<string, unknown>
 
-  const pick = (...keys: string[]): number | null => {
-    for (const k of keys) {
-      if (k in pop && pop[k] != null) return toNum(pop[k])
-    }
-    return null
-  }
+  // Structural guard: a valid PSAPop sub-object must carry at least one of
+  // the documented Swagger keys. If none appear, this is not a valid
+  // envelope — refuse rather than fabricate a zero population.
+  const DOCUMENTED_KEYS: readonly string[] = [
+    'Total','Auth',
+    'Grade1','Grade1_5','Grade2','Grade2_5','Grade3','Grade3_5',
+    'Grade4','Grade4_5','Grade5','Grade5_5','Grade6','Grade6_5',
+    'Grade7','Grade7_5','Grade8','Grade8_5','Grade9','Grade9_5','Grade10',
+    'Grade1Q','Grade1_5Q','Grade2Q','Grade2_5Q','Grade3Q','Grade3_5Q',
+    'Grade4Q','Grade4_5Q','Grade5Q','Grade5_5Q','Grade6Q','Grade6_5Q',
+    'Grade7Q','Grade7_5Q','Grade8Q','Grade8_5Q','Grade9Q','Grade9_5Q',
+  ]
+  const hasAnyDocumented = DOCUMENTED_KEYS.some(k => k in pop)
+  if (!hasAnyDocumented) return null
+
+  const g = (k: string): number | null => (k in pop ? toNum(pop[k]) : null)
 
   const out: PsaSpecPopulationPayload = {
-    auth:    pick('Auth', 'auth'),
-    psa_1:   pick('PSA1', 'psa_1'),
-    psa_1_5: pick('PSA1_5', 'psa_1_5', 'PSAHalf1'),
-    psa_2:   pick('PSA2', 'psa_2'),
-    psa_2_5: pick('PSA2_5', 'psa_2_5', 'PSAHalf2'),
-    psa_3:   pick('PSA3', 'psa_3'),
-    psa_3_5: pick('PSA3_5', 'psa_3_5', 'PSAHalf3'),
-    psa_4:   pick('PSA4', 'psa_4'),
-    psa_4_5: pick('PSA4_5', 'psa_4_5', 'PSAHalf4'),
-    psa_5:   pick('PSA5', 'psa_5'),
-    psa_5_5: pick('PSA5_5', 'psa_5_5', 'PSAHalf5'),
-    psa_6:   pick('PSA6', 'psa_6'),
-    psa_6_5: pick('PSA6_5', 'psa_6_5', 'PSAHalf6'),
-    psa_7:   pick('PSA7', 'psa_7'),
-    psa_7_5: pick('PSA7_5', 'psa_7_5', 'PSAHalf7'),
-    psa_8:   pick('PSA8', 'psa_8'),
-    psa_8_5: pick('PSA8_5', 'psa_8_5', 'PSAHalf8'),
-    psa_9:   pick('PSA9', 'psa_9'),
-    psa_9_5: pick('PSA9_5', 'psa_9_5', 'PSAHalf9'),
-    psa_10:  pick('PSA10', 'psa_10'),
-    qualified_total: pick('QualifiedTotal', 'qualified_total'),
-    total_graded:    pick('TotalPop', 'TotalGraded', 'total_graded'),
-    gem_rate:        pick('GemRate', 'gem_rate'),
+    auth:    g('Auth'),
+    psa_1:   g('Grade1'),   psa_1_5: g('Grade1_5'),
+    psa_2:   g('Grade2'),   psa_2_5: g('Grade2_5'),
+    psa_3:   g('Grade3'),   psa_3_5: g('Grade3_5'),
+    psa_4:   g('Grade4'),   psa_4_5: g('Grade4_5'),
+    psa_5:   g('Grade5'),   psa_5_5: g('Grade5_5'),
+    psa_6:   g('Grade6'),   psa_6_5: g('Grade6_5'),
+    psa_7:   g('Grade7'),   psa_7_5: g('Grade7_5'),
+    psa_8:   g('Grade8'),   psa_8_5: g('Grade8_5'),
+    psa_9:   g('Grade9'),   psa_9_5: g('Grade9_5'),
+    psa_10:  g('Grade10'),
+    qualified_total: null,  // sum below ONLY if at least one Q key is present
+    total_graded:    g('Total'),
+    gem_rate:        null,  // derived below ONLY if Total > 0 and psa_10 present
   }
 
-  // Compute total_graded as a fallback sum if PSA did not provide it.
-  if (out.total_graded == null) {
-    let sum = 0
-    for (const v of [
-      out.auth,
-      out.psa_1, out.psa_1_5, out.psa_2, out.psa_2_5, out.psa_3, out.psa_3_5,
-      out.psa_4, out.psa_4_5, out.psa_5, out.psa_5_5, out.psa_6, out.psa_6_5,
-      out.psa_7, out.psa_7_5, out.psa_8, out.psa_8_5, out.psa_9, out.psa_9_5,
-      out.psa_10, out.qualified_total,
-    ]) if (v != null) sum += v
-    out.total_graded = sum > 0 ? sum : null
+  // Qualified-total: sum every Grade*Q field that PSA actually returned.
+  // If none are present, qualified_total stays null (NOT 0).
+  const Q_KEYS: readonly string[] = [
+    'Grade1Q','Grade1_5Q','Grade2Q','Grade2_5Q','Grade3Q','Grade3_5Q',
+    'Grade4Q','Grade4_5Q','Grade5Q','Grade5_5Q','Grade6Q','Grade6_5Q',
+    'Grade7Q','Grade7_5Q','Grade8Q','Grade8_5Q','Grade9Q','Grade9_5Q',
+  ]
+  let qSum: number | null = null
+  for (const k of Q_KEYS) {
+    if (k in pop) {
+      const n = toNum(pop[k])
+      if (n != null) qSum = (qSum ?? 0) + n
+    }
   }
+  out.qualified_total = qSum
 
-  // Compute gem_rate if missing.
-  if (out.gem_rate == null && out.total_graded && out.total_graded > 0 && out.psa_10 != null) {
+  // Gem rate: derived ONLY when PSA supplied both a positive Total and a
+  // numeric Grade10. Never synthesise from a missing Total.
+  if (out.total_graded != null && out.total_graded > 0 && out.psa_10 != null) {
     out.gem_rate = Math.round((out.psa_10 / out.total_graded) * 10_000) / 100
   }
 
   return out
 }
 
-/** Validate the returned payload's SpecID matches the requested one.
- *  Accepts common key variants. Returns the matched spec_id string
- *  on success, or null if the response doesn't identify its spec. */
+/** Validate the returned SpecID matches the requested one. SpecID sits on
+ *  the outer PSASpecPopulationModel, not under PSAPop. */
 export function extractReturnedSpecId(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null
   const raw = payload as Record<string, unknown>
-  const envelope = (raw.PSAPop && typeof raw.PSAPop === 'object' ? raw.PSAPop as Record<string, unknown>
-                : (raw.psaPop && typeof raw.psaPop === 'object' ? raw.psaPop as Record<string, unknown>
-                : raw))
-  for (const k of ['SpecID', 'specId', 'SpecId', 'spec_id', 'PSASpecId']) {
-    const v = envelope[k]
-    if (typeof v === 'string' && v.trim()) return v.trim()
-    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
-  }
+  const v = raw.SpecID ?? raw.specId ?? raw.spec_id
+  if (typeof v === 'string' && v.trim()) return v.trim()
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v)
   return null
 }
 
-/** Fetch GetPSASpecPopulation for one spec_id. Pure wrapper around fetch();
- *  no retry, no backoff — the scheduler is in charge of day-level pacing
- *  and halting. Token is read fresh from env so a rotation takes effect
- *  on the next call without redeploy. */
+/** Extract Description from the PSASpecPopulationModel envelope. Useful
+ *  for operator identity cross-check when reviewing pilot results. */
+export function extractDescription(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const raw = payload as Record<string, unknown>
+  const d = raw.Description
+  return typeof d === 'string' ? d : null
+}
+
+/** Fetch GetPSASpecPopulation for one spec_id. No retries. Token read fresh
+ *  from env so rotation takes effect without redeploy. */
 export async function fetchPsaSpecPopulation(
   specId: string,
   opts: { fetchImpl?: typeof fetch; baseUrl?: string; timeoutMs?: number } = {},
@@ -190,7 +222,7 @@ export async function fetchPsaSpecPopulation(
   if (res.status === 401) return { ok: false, error: { kind: 'unauthorized', status: 401, message: 'PSA 401 unauthorized', retryAfterSeconds } }
   if (res.status === 403) return { ok: false, error: { kind: 'forbidden',    status: 403, message: 'PSA 403 forbidden',    retryAfterSeconds } }
   if (res.status === 429) return { ok: false, error: { kind: 'rate_limited', status: 429, message: 'PSA 429 rate limited', retryAfterSeconds } }
-  if (!res.ok)            return { ok: false, error: { kind: 'http',          status: res.status, message: `PSA HTTP ${res.status}`, retryAfterSeconds } }
+  if (!res.ok)            return { ok: false, error: { kind: 'http',         status: res.status, message: `PSA HTTP ${res.status}`, retryAfterSeconds } }
 
   let json: unknown
   try {
@@ -207,5 +239,5 @@ export async function fetchPsaSpecPopulation(
   const payload = parsePsaSpecPopulation(json)
   if (!payload) return { ok: false, error: { kind: 'parse', message: 'response did not parse into PsaSpecPopulationPayload' } }
 
-  return { ok: true, specId, payload, rawJson: json }
+  return { ok: true, specId, description: extractDescription(json), payload, rawJson: json }
 }

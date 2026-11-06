@@ -316,7 +316,7 @@ describe('refresh.ts — passes candidate identity to the write-through RPC', ()
     // server, so we stub at the Supabase level and watch the RPC args.
     const seenArgs: Record<string, unknown>[] = []
     const stubFetch: typeof fetch = async () => new Response(
-      JSON.stringify({ PSAPop: { SpecID: '855610', PSA10: 5, TotalPop: 10 } }),
+      JSON.stringify({ SpecID: 855610, Description: 'FIXTURE', PSAPop: { Total: 10, Grade10: 5 } }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     )
     globalThis.fetch = stubFetch as unknown as typeof fetch
@@ -374,7 +374,7 @@ describe('refresh.ts — passes candidate identity to the write-through RPC', ()
       variant: 'Super Psychic Pokemon-Foil Promo',
     }
     const stubFetch: typeof fetch = async () => new Response(
-      JSON.stringify({ PSAPop: { SpecID: '2466278', PSA10: 122, TotalPop: 468 } }),
+      JSON.stringify({ SpecID: 2466278, Description: 'FIXTURE', PSAPop: { Total: 468, Grade10: 122 } }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     )
     globalThis.fetch = stubFetch as unknown as typeof fetch
