@@ -149,6 +149,7 @@ function flashFromFlag(flag: string | undefined): { tone: 'ok' | 'err'; text: st
     no_session: { tone: 'err', text: 'Sign in again before connecting Discord.' },
     no_discord_identity: { tone: 'err', text: 'Discord did not return an identity. Please try again.' },
     disconnect_failed: { tone: 'err', text: 'Failed to disconnect Discord. Please try again.' },
+    identity_removal_failed: { tone: 'err', text: 'Discord is still attached to your account — we could not fully remove the sign-in identity. Please try Disconnect again or contact support.' },
     invalid: { tone: 'err', text: 'Invalid Discord callback.' },
   };
   return map[flag] ?? null;

@@ -124,7 +124,8 @@ export async function getUserDiscordLink(
 /** Called by /api/auth/discord-link/callback after the user returns
  *  from Supabase's linkIdentity OAuth flow. We extract the Discord
  *  identity from auth.identities, then upsert via the server-side
- *  RPC which enforces the UNIQUE (discord_user_id) constraint.
+ *  RPC which uses auth.uid() to identify the row owner — the
+ *  authenticated caller cannot overwrite another user's row.
  *
  *  Returns { ok: true, link } on success, or { ok: false, code: 'already_linked' }
  *  when the Discord identity already belongs to another CN user. */
@@ -134,12 +135,15 @@ export type LinkResult =
 
 export async function linkDiscordFromAuthIdentity(
   supabase: SupabaseClient,
-  userId: string,
+  _userId: string,
 ): Promise<LinkResult> {
-  // Supabase stores linked providers on the user's identities list.
-  // After supabase.auth.linkIdentity({ provider: 'discord' }) succeeds,
-  // a 'discord' identity appears here with the Discord user id in
-  // provider_id + the user_metadata captured from Discord.
+  // The _userId parameter is retained for API compatibility with
+  // the callback route, but the server-side RPC now uses auth.uid()
+  // from the Supabase JWT — a session-less or cross-user call will
+  // be rejected with not_authenticated. See migration
+  // 20261107080000_cn_identity_01_sec_fixes.sql.
+  void _userId;
+
   const { data: userResp, error: userErr } = await supabase.auth.getUser();
   if (userErr || !userResp?.user) {
     return { ok: false, code: 'db_error', message: userErr?.message ?? 'no auth user' };
@@ -159,7 +163,6 @@ export async function linkDiscordFromAuthIdentity(
   }
 
   const { data: rpcData, error: rpcErr } = await supabase.rpc('collector_link_discord', {
-    p_user_id:         userId,
     p_discord_user_id: discordUserId,
     p_username:        discord.identity_data?.username ?? discord.identity_data?.name ?? null,
     p_avatar:          discord.identity_data?.avatar_url ?? null,
@@ -174,28 +177,53 @@ export async function linkDiscordFromAuthIdentity(
   return { ok: true, link: rpcData as DiscordLink };
 }
 
-/** Marks the Discord link as disconnected in our table. Also calls
- *  Supabase's unlinkIdentity under the hood so the Discord entry
- *  disappears from auth.identities and a subsequent "Connect
- *  Discord" click starts a fresh OAuth. */
+/** Disconnect Discord: removes the Supabase Auth linked identity
+ *  FIRST (so no Discord sign-in path remains attached to the user),
+ *  then marks our collector_discord_links row disconnected for
+ *  audit. Both steps must succeed — if the Supabase identity
+ *  removal fails, we do NOT flip our table, so the UI remains
+ *  honest about the state until the next attempt.
+ *
+ *  Idempotent: if no Discord identity is attached (already
+ *  removed, never linked), still flips our row to disconnected
+ *  and returns ok. */
+export type UnlinkResult =
+  | { ok: true }
+  | { ok: false; code: 'not_authenticated' | 'identity_removal_failed' | 'db_error'; message: string };
+
 export async function unlinkDiscord(
   supabase: SupabaseClient,
-  userId: string,
-): Promise<{ ok: boolean; message?: string }> {
-  // Flip our table first so the account UI reflects the state
-  // even if the Supabase identity unlink fails.
-  const { error: rpcErr } = await supabase.rpc('collector_unlink_discord', { p_user_id: userId });
-  if (rpcErr) return { ok: false, message: rpcErr.message };
+  _userId: string,
+): Promise<UnlinkResult> {
+  void _userId;
 
-  // Remove the Discord identity from Supabase so future sign-ins
-  // can't resurrect a stale link. Tolerate failure — the row is
-  // already soft-disconnected on our side.
+  // 1. Remove the Discord identity from Supabase first. If it never
+  //    existed, that's a benign no-op; we still flip our row.
   try {
-    const { data: idents } = await supabase.auth.getUserIdentities();
+    const { data: idents, error: identErr } = await supabase.auth.getUserIdentities();
+    if (identErr) {
+      return { ok: false, code: 'identity_removal_failed', message: identErr.message };
+    }
     const discord = (idents?.identities ?? []).find((i) => i.provider === 'discord');
-    if (discord) await supabase.auth.unlinkIdentity(discord);
+    if (discord) {
+      const { error: unlinkErr } = await supabase.auth.unlinkIdentity(discord);
+      if (unlinkErr) {
+        // The Supabase Auth identity is still attached. We must
+        // not flip our table — that would misrepresent the state.
+        return { ok: false, code: 'identity_removal_failed', message: unlinkErr.message };
+      }
+    }
   } catch (e) {
-    console.warn('[@collector-network/auth] unlinkIdentity best-effort failed:', (e as Error)?.message ?? String(e));
+    return { ok: false, code: 'identity_removal_failed', message: (e as Error)?.message ?? String(e) };
+  }
+
+  // 2. Identity is gone (or was never there). Flip our row.
+  const { error: rpcErr } = await supabase.rpc('collector_unlink_discord');
+  if (rpcErr) {
+    if (/not_authenticated/i.test(rpcErr.message)) {
+      return { ok: false, code: 'not_authenticated', message: rpcErr.message };
+    }
+    return { ok: false, code: 'db_error', message: rpcErr.message };
   }
   return { ok: true };
 }

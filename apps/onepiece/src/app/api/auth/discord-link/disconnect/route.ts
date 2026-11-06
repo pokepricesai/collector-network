@@ -16,11 +16,26 @@ import {
 export const dynamic = 'force-dynamic';
 
 export async function POST(): Promise<NextResponse> {
+  const siteUrl = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://onepieceprices.io';
   const user = await getCurrentUser();
-  if (!user) return NextResponse.redirect(new URL('/sign-in?returnTo=/account', 'http://x').toString(), { status: 303 });
+  if (!user) {
+    return NextResponse.redirect(new URL('/sign-in?returnTo=/account', siteUrl).toString(), { status: 303 });
+  }
   const supabase = await createServerSupabase();
   const result = await unlinkDiscord(supabase, user.id);
-  const flag = result.ok ? 'disconnected' : 'disconnect_failed';
-  // 303 → browser follows as GET.
-  return NextResponse.redirect(new URL(`/account?discord=${flag}`, process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://onepieceprices.io').toString(), { status: 303 });
+  // Distinct flag per failure mode so the Account page can surface
+  // a specific message. The identity_removal_failed case is the
+  // important one: user must see that Discord is still attached so
+  // they know to retry.
+  let flag: string;
+  if (result.ok) {
+    flag = 'disconnected';
+  } else if (result.code === 'identity_removal_failed') {
+    flag = 'identity_removal_failed';
+  } else if (result.code === 'not_authenticated') {
+    flag = 'no_session';
+  } else {
+    flag = 'disconnect_failed';
+  }
+  return NextResponse.redirect(new URL(`/account?discord=${flag}`, siteUrl).toString(), { status: 303 });
 }

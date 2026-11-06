@@ -85,4 +85,5 @@ export type {
   Feature,
   DiscordLink,
   LinkResult,
+  UnlinkResult,
 } from './entitlements';
