@@ -39,7 +39,14 @@ export interface IngestionResult {
   upserted: number;
   inserted: number;
   updated: number;
+  // Actual date overwrites on pending-review / not-yet-public rows.
   date_changes: number;
+  // Date SHIFTS that were converted to operator-reviewable PROPOSALS
+  // because the row was already approved. The public feed keeps
+  // serving the approved date until the operator acts.
+  date_proposals: number;
+  // Rows left untouched because they were manual or rejected.
+  skipped_preserved: number;
   skipped: number;
   errors: string[];
   duration_ms: number;
@@ -60,49 +67,131 @@ interface UpsertRow {
   source_url: string | null;
 }
 
-/** Upsert one row and write a change-log entry if the release_date
- *  moved from a previously-known value. Shared between all
- *  ingesters so the audit trail is consistent. */
+/** Upsert one row through the review gate. The ingester NEVER
+ *  publishes a row directly:
+ *
+ *    - New rows land with review_status='pending_review' (invisible
+ *      on the public feed until an operator approves).
+ *    - Manual rows (verification_mode='manual') are preserved as
+ *      before — only source_verified_at is refreshed.
+ *    - Rejected rows are left alone (operator said no).
+ *    - On a pending_review row with a shifted date, release_date
+ *      is updated directly — still invisible publicly, so no need
+ *      to double-gate.
+ *    - On an APPROVED row with a shifted date, the new date is
+ *      written to proposed_release_date, NOT release_date. The
+ *      operator must explicitly accept or reject the proposal.
+ *
+ *  Every state transition writes a change-log row with
+ *  change_source='ingestion' and the appropriate change_type.
+ *
+ *  Note: this function reads columns added by the 20261107010000
+ *  review-gate migration. The Hub deployment that carries this
+ *  ingester must land AFTER that migration is applied. */
 async function upsertRelease(
   sb: SupabaseClient,
   row: UpsertRow,
   sourceLabel: string,
-): Promise<{ inserted: boolean; dateChanged: boolean; error?: string }> {
+): Promise<{ inserted: boolean; dateChanged: boolean; dateProposed: boolean; skipped: boolean; error?: string }> {
   // Lookup existing by (tcg, set_code, language) unique key.
   const { data: existing, error: readErr } = await sb
     .from('network_tcg_releases')
-    .select('id, release_date, confirmation_status, source_url, verification_mode')
+    .select('id, release_date, release_date_precision, confirmation_status, source_url, verification_mode, review_status, proposed_release_date')
     .eq('tcg', row.tcg)
     .eq('set_code', row.set_code)
     .eq('language', row.language)
     .maybeSingle();
-  if (readErr && readErr.code !== 'PGRST116') return { inserted: false, dateChanged: false, error: readErr.message };
+  if (readErr && readErr.code !== 'PGRST116') {
+    return { inserted: false, dateChanged: false, dateProposed: false, skipped: false, error: readErr.message };
+  }
 
   const now = new Date().toISOString();
-  const prev = existing as { id: string; release_date: string | null; confirmation_status: string; source_url: string | null; verification_mode: string } | null;
+  const prev = existing as {
+    id: string;
+    release_date: string | null;
+    release_date_precision: 'day' | 'month' | 'tbc';
+    confirmation_status: string;
+    source_url: string | null;
+    verification_mode: 'manual' | 'automated';
+    review_status: 'pending_review' | 'approved' | 'rejected';
+    proposed_release_date: string | null;
+  } | null;
 
+  // ── NEW ROW ────────────────────────────────────────────────
+  // Insert with explicit review_status='pending_review' so the
+  // intent is visible in the row even if the column default is
+  // ever changed. The public view filters pending rows out.
   if (!prev) {
     const { error: insErr } = await sb.from('network_tcg_releases').insert({
       ...row,
       source_verified_at: now,
       verification_mode: 'automated',
+      review_status: 'pending_review',
     });
-    if (insErr) return { inserted: false, dateChanged: false, error: insErr.message };
-    return { inserted: true, dateChanged: false };
+    if (insErr) return { inserted: false, dateChanged: false, dateProposed: false, skipped: false, error: insErr.message };
+    return { inserted: true, dateChanged: false, dateProposed: false, skipped: false };
   }
 
-  // Preserve operator overrides: if a row was last touched manually,
-  // do NOT clobber it with the automated value. verification_mode
-  // 'manual' indicates the operator curated it; refresh its
-  // source_verified_at but leave date and status alone.
+  // ── MANUAL ROW (operator-curated) ──────────────────────────
+  // Never clobber. Only refresh source_verified_at so admin UI
+  // shows the row is still backed by the third-party catalogue.
   if (prev.verification_mode === 'manual') {
     await sb.from('network_tcg_releases')
       .update({ source_verified_at: now })
       .eq('id', prev.id);
-    return { inserted: false, dateChanged: false };
+    return { inserted: false, dateChanged: false, dateProposed: false, skipped: true };
+  }
+
+  // ── REJECTED ROW ───────────────────────────────────────────
+  // Operator said no. Do not resurrect by re-publishing or
+  // flipping back to pending_review. Just refresh timestamp.
+  if (prev.review_status === 'rejected') {
+    await sb.from('network_tcg_releases')
+      .update({ source_verified_at: now })
+      .eq('id', prev.id);
+    return { inserted: false, dateChanged: false, dateProposed: false, skipped: true };
   }
 
   const dateChanged = prev.release_date !== row.release_date && row.release_date != null;
+
+  // ── APPROVED ROW ───────────────────────────────────────────
+  // Date shift becomes a PROPOSAL. Public feed continues to
+  // serve the approved release_date. Non-date fields (name, set
+  // code, region, etc.) can refresh — those don't change the
+  // calendar entry's public date surface.
+  if (prev.review_status === 'approved') {
+    const update: Record<string, unknown> = {
+      set_name: row.set_name,
+      set_name_original: row.set_name_original,
+      product_type: row.product_type,
+      region: row.region,
+      source_url: row.source_url,
+      source_verified_at: now,
+    };
+    if (dateChanged) {
+      update.proposed_release_date = row.release_date;
+      update.proposed_release_date_precision = row.release_date_precision;
+      update.proposed_change_at = now;
+      update.proposed_change_source = `ingestion:${sourceLabel}`;
+    }
+    const { error: updErr } = await sb.from('network_tcg_releases').update(update).eq('id', prev.id);
+    if (updErr) return { inserted: false, dateChanged: false, dateProposed: false, skipped: false, error: updErr.message };
+    if (dateChanged) {
+      await sb.from('network_tcg_release_changes').insert({
+        release_id: prev.id,
+        change_type: 'date_proposed',
+        previous_value: { release_date: prev.release_date, source: sourceLabel },
+        new_value: { proposed_release_date: row.release_date, source: sourceLabel },
+        change_source: 'ingestion',
+      });
+      return { inserted: false, dateChanged: false, dateProposed: true, skipped: false };
+    }
+    return { inserted: false, dateChanged: false, dateProposed: false, skipped: false };
+  }
+
+  // ── PENDING_REVIEW ROW ─────────────────────────────────────
+  // Not yet public. Can update release_date freely; the review
+  // gate still holds until operator approves.
   const update: Record<string, unknown> = {
     set_name: row.set_name,
     set_name_original: row.set_name_original,
@@ -113,15 +202,13 @@ async function upsertRelease(
     confirmation_status: row.confirmation_status,
     source_url: row.source_url,
     source_verified_at: now,
-    verification_mode: 'automated',
   };
   if (dateChanged) {
     update.previous_release_date = prev.release_date;
     update.date_changed_at = now;
   }
   const { error: updErr } = await sb.from('network_tcg_releases').update(update).eq('id', prev.id);
-  if (updErr) return { inserted: false, dateChanged: false, error: updErr.message };
-
+  if (updErr) return { inserted: false, dateChanged: false, dateProposed: false, skipped: false, error: updErr.message };
   if (dateChanged) {
     await sb.from('network_tcg_release_changes').insert({
       release_id: prev.id,
@@ -131,7 +218,7 @@ async function upsertRelease(
       change_source: 'ingestion',
     });
   }
-  return { inserted: false, dateChanged };
+  return { inserted: false, dateChanged, dateProposed: false, skipped: false };
 }
 
 // ─────────────────── Scryfall / MTG ───────────────────
@@ -149,7 +236,7 @@ export async function ingestScryfallMTG(sb: SupabaseClient): Promise<IngestionRe
   const started = Date.now();
   const result: IngestionResult = {
     source: 'scryfall', ok: true, fetched: 0, upserted: 0, inserted: 0, updated: 0,
-    date_changes: 0, skipped: 0, errors: [], duration_ms: 0,
+    date_changes: 0, date_proposals: 0, skipped_preserved: 0, skipped: 0, errors: [], duration_ms: 0,
   };
   try {
     const res = await fetch('https://api.scryfall.com/sets', {
@@ -185,9 +272,11 @@ export async function ingestScryfallMTG(sb: SupabaseClient): Promise<IngestionRe
         source_url: `https://scryfall.com/sets/${s.code}`,
       }, 'scryfall');
       if (r.error) { result.errors.push(`${s.code}: ${r.error}`); continue; }
+      if (r.skipped) { result.skipped_preserved += 1; continue; }
       result.upserted += 1;
       if (r.inserted) result.inserted += 1; else result.updated += 1;
       if (r.dateChanged) result.date_changes += 1;
+      if (r.dateProposed) result.date_proposals += 1;
     }
   } catch (e) {
     result.ok = false;
@@ -210,7 +299,7 @@ export async function ingestYgoProDeckYGO(sb: SupabaseClient): Promise<Ingestion
   const started = Date.now();
   const result: IngestionResult = {
     source: 'ygoprodeck', ok: true, fetched: 0, upserted: 0, inserted: 0, updated: 0,
-    date_changes: 0, skipped: 0, errors: [], duration_ms: 0,
+    date_changes: 0, date_proposals: 0, skipped_preserved: 0, skipped: 0, errors: [], duration_ms: 0,
   };
   try {
     const res = await fetch('https://db.ygoprodeck.com/api/v7/cardsets.php', {
@@ -246,9 +335,11 @@ export async function ingestYgoProDeckYGO(sb: SupabaseClient): Promise<Ingestion
         source_url: `https://db.ygoprodeck.com/set/?search=${encodeURIComponent(s.set_name)}`,
       }, 'ygoprodeck');
       if (r.error) { result.errors.push(`${s.set_code}: ${r.error}`); continue; }
+      if (r.skipped) { result.skipped_preserved += 1; continue; }
       result.upserted += 1;
       if (r.inserted) result.inserted += 1; else result.updated += 1;
       if (r.dateChanged) result.date_changes += 1;
+      if (r.dateProposed) result.date_proposals += 1;
     }
   } catch (e) {
     result.ok = false;

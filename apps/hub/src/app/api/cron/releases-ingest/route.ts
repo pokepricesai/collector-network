@@ -46,6 +46,8 @@ export async function GET(req: Request) {
   const totalInserted = results.reduce((a, r) => a + r.inserted, 0);
   const totalUpdated = results.reduce((a, r) => a + r.updated, 0);
   const totalDateChanges = results.reduce((a, r) => a + r.date_changes, 0);
+  const totalDateProposals = results.reduce((a, r) => a + r.date_proposals, 0);
+  const totalSkippedPreserved = results.reduce((a, r) => a + r.skipped_preserved, 0);
   const totalSkipped = results.reduce((a, r) => a + r.skipped, 0);
 
   const anyUnavailable = results.some((r) => !r.ok);
@@ -66,7 +68,9 @@ export async function GET(req: Request) {
         duration_ms,
         per_source: results.map((r) => ({
           source: r.source, ok: r.ok, fetched: r.fetched, upserted: r.upserted,
-          inserted: r.inserted, updated: r.updated, date_changes: r.date_changes,
+          inserted: r.inserted, updated: r.updated,
+          date_changes: r.date_changes, date_proposals: r.date_proposals,
+          skipped_preserved: r.skipped_preserved,
           skipped: r.skipped, errors: r.errors.length,
         })),
       } as unknown as Record<string, unknown>,
@@ -82,6 +86,8 @@ export async function GET(req: Request) {
       inserted: totalInserted,
       updated: totalUpdated,
       date_changes: totalDateChanges,
+      date_proposals: totalDateProposals,
+      skipped_preserved: totalSkippedPreserved,
       skipped: totalSkipped,
     },
     results,
