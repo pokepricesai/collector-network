@@ -40,16 +40,33 @@ alter table public.network_tcg_releases
     or proposed_release_date_precision in ('day','month','quarter','tbc')
   );
 
--- ─────────────── unique(tcg, set_code, language, region) ───────────
+-- ─────────────── unique key (effective-identifier based) ──────────
 --
--- Drop the auto-named base-table unique constraint via a pg_catalog
--- lookup — we don't hard-code the auto-generated name because PG's
--- naming is implementation-dependent.
+-- Three different legitimate release shapes coexist on this table:
+--   * Known official set code      (e.g. MTG "TRK", YGO "MAMS")
+--   * No set code, name identifies (e.g. Pokémon "Delta Reign" —
+--     press.pokemon.com advertises the product but no public code)
+--   * Same code, different region  (e.g. YGO MAMS EU vs NA)
+--
+-- The original (tcg, set_code, language) base-table constraint
+-- collapsed all no-code rows for a TCG into one slot, which blocks
+-- three real Pokémon releases. A naive (tcg, COALESCE(set_code,''),
+-- language, COALESCE(region,'')) replacement has the same defect
+-- (all three Pokémon releases hash to 'pokemon|''|en|US').
+--
+-- Solution: use set_code when the publisher provides one, and
+-- fall back to the set_name when they don't. The "name:" prefix
+-- prevents a theoretical collision where a future set_code string
+-- happens to equal a set_name. Key is deterministic, index-friendly,
+-- and semantically honest: "two rows are duplicates iff they
+-- identify the same product in the same region+language."
 
 do $$
 declare
   cname text;
 begin
+  -- Drop the auto-named base-table constraint (name is PG-generated,
+  -- not hard-coded in the migration history).
   select conname into cname
   from pg_constraint
   where conrelid = 'public.network_tcg_releases'::regclass
@@ -60,14 +77,18 @@ begin
   end if;
 end $$;
 
--- Replace with a region-aware unique index. COALESCE on set_code
--- and region so NULL on either column still enforces uniqueness
--- within the (tcg, '', language, '') / (tcg, code, language, '')
--- scope. A plain unique constraint on the four columns wouldn't
--- catch duplicates when either is NULL (PG default).
+-- Drop any PRIOR partial run of this migration that created the
+-- less-correct region-only variant of the index. Safe no-op if
+-- absent.
+drop index if exists public.network_tcg_releases_unique_key;
 
+-- Effective-identifier unique index. NULL set_code falls back to
+-- 'name:' || set_name so no-code rows discriminate by product name.
 create unique index if not exists network_tcg_releases_unique_key
   on public.network_tcg_releases
-  (tcg, coalesce(set_code, ''), language, coalesce(region, ''));
+  (tcg,
+   language,
+   coalesce(region, ''),
+   coalesce(set_code, 'name:' || set_name));
 
 notify pgrst, 'reload schema';

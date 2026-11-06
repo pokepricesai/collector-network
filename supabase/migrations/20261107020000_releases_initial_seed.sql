@@ -64,10 +64,16 @@ select * from (values
        release_date, release_date_precision, confirmation_status,
        source_url, source_verified_at, verification_mode, review_status)
 where not exists (
+  -- Idempotency key MUST match the migration-030 unique index:
+  -- (tcg, language, COALESCE(region,''), COALESCE(set_code,'name:'||set_name)).
+  -- Rewriting it in the seed means a repeat run computes the same
+  -- effective key and skips every row that already exists.
   select 1 from public.network_tcg_releases r
-  where r.tcg = v.tcg and r.set_name = v.set_name
+  where r.tcg = v.tcg
     and r.language = v.language
     and coalesce(r.region, '') = coalesce(v.region, '')
+    and coalesce(r.set_code, 'name:' || r.set_name)
+      = coalesce(v.set_code, 'name:' || v.set_name)
 );
 
 -- ─────────────────────── Magic: the Gathering (5 rows) ──────
@@ -111,10 +117,16 @@ select * from (values
        release_date, release_date_precision, confirmation_status,
        source_url, source_verified_at, verification_mode, review_status)
 where not exists (
+  -- Idempotency key MUST match the migration-030 unique index:
+  -- (tcg, language, COALESCE(region,''), COALESCE(set_code,'name:'||set_name)).
+  -- Rewriting it in the seed means a repeat run computes the same
+  -- effective key and skips every row that already exists.
   select 1 from public.network_tcg_releases r
-  where r.tcg = v.tcg and r.set_name = v.set_name
+  where r.tcg = v.tcg
     and r.language = v.language
     and coalesce(r.region, '') = coalesce(v.region, '')
+    and coalesce(r.set_code, 'name:' || r.set_name)
+      = coalesce(v.set_code, 'name:' || v.set_name)
 );
 
 -- ─────────────────────── One Piece (5 rows) ──────────────────
@@ -160,10 +172,16 @@ select * from (values
        release_date, release_date_precision, confirmation_status,
        source_url, source_verified_at, verification_mode, review_status)
 where not exists (
+  -- Idempotency key MUST match the migration-030 unique index:
+  -- (tcg, language, COALESCE(region,''), COALESCE(set_code,'name:'||set_name)).
+  -- Rewriting it in the seed means a repeat run computes the same
+  -- effective key and skips every row that already exists.
   select 1 from public.network_tcg_releases r
-  where r.tcg = v.tcg and r.set_name = v.set_name
+  where r.tcg = v.tcg
     and r.language = v.language
     and coalesce(r.region, '') = coalesce(v.region, '')
+    and coalesce(r.set_code, 'name:' || r.set_name)
+      = coalesce(v.set_code, 'name:' || v.set_name)
 );
 
 -- ─────────────────────── Disney Lorcana (3 rows) ────────────
@@ -217,10 +235,16 @@ select * from (values
        confirmation_status,
        source_url, source_verified_at, verification_mode, review_status, source_notes)
 where not exists (
+  -- Idempotency key MUST match the migration-030 unique index:
+  -- (tcg, language, COALESCE(region,''), COALESCE(set_code,'name:'||set_name)).
+  -- Rewriting it in the seed means a repeat run computes the same
+  -- effective key and skips every row that already exists.
   select 1 from public.network_tcg_releases r
-  where r.tcg = v.tcg and r.set_name = v.set_name
+  where r.tcg = v.tcg
     and r.language = v.language
     and coalesce(r.region, '') = coalesce(v.region, '')
+    and coalesce(r.set_code, 'name:' || r.set_name)
+      = coalesce(v.set_code, 'name:' || v.set_name)
 );
 
 -- ─────────────────────── Yu-Gi-Oh! (6 rows) ──────────────────
@@ -304,10 +328,16 @@ select * from (values
        confirmation_status,
        source_url, source_verified_at, verification_mode, review_status)
 where not exists (
+  -- Idempotency key MUST match the migration-030 unique index:
+  -- (tcg, language, COALESCE(region,''), COALESCE(set_code,'name:'||set_name)).
+  -- Rewriting it in the seed means a repeat run computes the same
+  -- effective key and skips every row that already exists.
   select 1 from public.network_tcg_releases r
-  where r.tcg = v.tcg and r.set_name = v.set_name
+  where r.tcg = v.tcg
     and r.language = v.language
     and coalesce(r.region, '') = coalesce(v.region, '')
+    and coalesce(r.set_code, 'name:' || r.set_name)
+      = coalesce(v.set_code, 'name:' || v.set_name)
 );
 
 notify pgrst, 'reload schema';
