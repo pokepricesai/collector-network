@@ -34,7 +34,7 @@ interface PublicReleaseRow {
   language: 'en' | 'ja' | 'other';
   region: string | null;
   release_date: string | null;
-  release_date_precision: 'day' | 'month' | 'tbc';
+  release_date_precision: 'day' | 'month' | 'quarter' | 'tbc';
   prerelease_date: string | null;
   confirmation_status: 'confirmed' | 'announced_tbc' | 'postponed' | 'released';
   source_url: string | null;
@@ -81,6 +81,12 @@ async function fetchReleases(): Promise<FeedResponse | null> {
 
 function formatReleaseLabel(r: Pick<PublicReleaseRow, 'release_date' | 'release_date_precision'>): string {
   if (!r.release_date || r.release_date_precision === 'tbc') return 'TBC';
+  if (r.release_date_precision === 'quarter') {
+    const m = r.release_date.match(/^(\d{4})-(\d{2})/);
+    if (!m) return 'TBC';
+    const quarter = Math.floor((Number(m[2]) - 1) / 3) + 1;
+    return `Q${quarter} ${m[1]}`;
+  }
   const d = new Date(r.release_date + 'T00:00:00Z');
   if (r.release_date_precision === 'month') {
     return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -89,7 +95,10 @@ function formatReleaseLabel(r: Pick<PublicReleaseRow, 'release_date' | 'release_
 }
 
 function daysUntil(r: Pick<PublicReleaseRow, 'release_date' | 'release_date_precision'>): number | null {
-  if (!r.release_date || r.release_date_precision === 'tbc') return null;
+  // Day-countdown is only honest at day precision. A "in N days"
+  // chip on a month or quarter row would fabricate specificity.
+  if (!r.release_date) return null;
+  if (r.release_date_precision !== 'day') return null;
   const today = new Date();
   const todayMs = Date.parse(today.toISOString().slice(0, 10) + 'T00:00:00Z');
   const rMs = Date.parse(r.release_date + 'T00:00:00Z');
@@ -250,7 +259,10 @@ function ReleaseCard({ r }: { r: PublicReleaseRow }) {
   const dateBlock = (
     <div style={{ textAlign: 'center', minWidth: 72 }}>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-        {r.release_date_precision === 'month' ? 'Month' : r.release_date_precision === 'tbc' ? 'Status' : 'Date'}
+        {r.release_date_precision === 'tbc' ? 'Status'
+          : r.release_date_precision === 'quarter' ? 'Quarter'
+          : r.release_date_precision === 'month' ? 'Month'
+          : 'Date'}
       </div>
       <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>{label}</div>
       {d != null && (

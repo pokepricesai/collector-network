@@ -16,7 +16,7 @@ const VALID_PRODUCT_TYPE = new Set([
   'special_collection', 'premium', 'promo', 'other',
 ]);
 const VALID_LANGUAGE = new Set(['en', 'ja', 'other']);
-const VALID_PRECISION = new Set(['day', 'month', 'tbc']);
+const VALID_PRECISION = new Set(['day', 'month', 'quarter', 'tbc']);
 const VALID_STATUS = new Set([
   'confirmed', 'announced_tbc', 'rumoured',
   'postponed', 'released', 'cancelled',

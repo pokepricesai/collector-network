@@ -198,7 +198,12 @@ export default async function ReleasesPage({ searchParams }: PageProps) {
           <L label="Region"><input name="region" maxLength={32} style={inputStyle} placeholder="e.g. US / UK / Japan" /></L>
           <L label="Release date (YYYY-MM-DD or YYYY-MM)"><input name="release_date" maxLength={10} style={inputStyle} placeholder="2026-11-14" /></L>
           <L label="Precision">
-            <Select name="release_date_precision" options={[{v:'day',label:'Exact day'},{v:'month',label:'Month only'},{v:'tbc',label:'TBC'}]} />
+            <Select name="release_date_precision" options={[
+              {v:'day',label:'Exact day'},
+              {v:'month',label:'Month only'},
+              {v:'quarter',label:'Quarter (anchor Q2 as YYYY-04-01)'},
+              {v:'tbc',label:'TBC'},
+            ]} />
           </L>
           <L label="Prerelease date (optional)"><input name="prerelease_date" maxLength={10} style={inputStyle} placeholder="YYYY-MM-DD" /></L>
           <L label="Status">
