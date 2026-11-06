@@ -17,6 +17,7 @@ const STATIC: Array<{ path: string; priority: string; changefreq: string }> = [
   { path: '/leaders',     priority: '0.8',  changefreq: 'weekly'  },
   { path: '/colours',     priority: '0.8',  changefreq: 'weekly'  },
   { path: '/insights',    priority: '0.75', changefreq: 'weekly'  },
+  { path: '/releases',    priority: '0.75', changefreq: 'weekly'  },
   { path: '/contact',     priority: '0.3',  changefreq: 'monthly' },
   { path: '/privacy',     priority: '0.3',  changefreq: 'yearly'  },
   { path: '/terms',       priority: '0.3',  changefreq: 'yearly'  },
