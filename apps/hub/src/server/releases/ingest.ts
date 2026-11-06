@@ -62,7 +62,7 @@ interface UpsertRow {
   language: Language;
   region: string | null;
   release_date: string | null;
-  release_date_precision: 'day' | 'month' | 'tbc';
+  release_date_precision: 'day' | 'month' | 'quarter' | 'tbc';
   confirmation_status: 'confirmed' | 'announced_tbc';
   source_url: string | null;
 }
@@ -109,7 +109,7 @@ async function upsertRelease(
   const prev = existing as {
     id: string;
     release_date: string | null;
-    release_date_precision: 'day' | 'month' | 'tbc';
+    release_date_precision: 'day' | 'month' | 'quarter' | 'tbc';
     confirmation_status: string;
     source_url: string | null;
     verification_mode: 'manual' | 'automated';
