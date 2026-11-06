@@ -18,6 +18,32 @@ function parseWindow(v: string | undefined): MoverWindow {
   return (VALID_WINDOWS as number[]).includes(n) ? (n as MoverWindow) : 30;
 }
 
+/**
+ * CN-06.01-P14 — stale-data threshold per window.
+ *
+ * The op_market_movers_refresh RPC requires >= 3 observations per
+ * printing to include it in a snapshot. For a 7-day window, 11 days
+ * without a fresh refresh means the printings never accumulated the
+ * minimum observations in the 7-day sliding window — a legitimate
+ * insufficient-observations state, not a cron failure. We retain the
+ * old cache row rather than overwrite it with empty; this threshold
+ * decides when to STOP displaying that stale cache and show an
+ * honest "insufficient data" state instead.
+ *
+ * Thresholds equal the window itself. A 7-day board cannot defensibly
+ * show a snapshot older than 7 days, 30-day no older than 30, 90-day
+ * no older than 90. The operator reviewed 14 days (lenient) and
+ * explicitly required < 11 days for the 7-day window.
+ */
+const STALE_DAYS: Record<MoverWindow, number> = { 7: 7, 30: 30, 90: 90 };
+
+function isCacheStale(computedAt: Date | null, window: MoverWindow): boolean {
+  if (!computedAt) return false; // getMovers already throws on missing snapshot
+  const ageMs = Date.now() - computedAt.getTime();
+  const staleAfterMs = STALE_DAYS[window] * 86_400_000;
+  return ageMs > staleAfterMs;
+}
+
 export const metadata: Metadata = {
   title: 'One Piece movers, 7-, 30- and 90-day price change board',
   description:
@@ -38,6 +64,8 @@ export default async function MarketPage({
   // timestamp of that snapshot — surfaced below the hero so users
   // see how fresh the movers are.
   const { risers, fallers, computedAt } = await getMovers(window, 30, currency);
+  const stale = isCacheStale(computedAt, window);
+  const alternateWindow: MoverWindow = window === 7 ? 30 : window === 30 ? 90 : 30;
 
   return (
     <div style={{ padding: '32px 24px' }}>
@@ -110,16 +138,46 @@ export default async function MarketPage({
           </div>
         </header>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
-            gap: 20,
-          }}
-        >
-          <Column title="Risers" tone="up" movers={risers} />
-          <Column title="Fallers" tone="down" movers={fallers} />
-        </div>
+        {stale ? (
+          <div
+            role="status"
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 24,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              Insufficient recent data for the {window}-day board
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.55, maxWidth: 520, margin: '0 auto 16px' }}>
+              A mover requires at least three observed price days inside the {window}-day window.
+              The latest {window}-day snapshot (computed{' '}
+              {computedAt?.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })}
+              ) is older than the window itself, so showing it would misrepresent the current market.
+            </div>
+            <Link
+              href={`/market?window=${alternateWindow}`}
+              className="sort-btn"
+              style={{ textDecoration: 'none', display: 'inline-block' }}
+            >
+              View {alternateWindow}-day board instead
+            </Link>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
+              gap: 20,
+            }}
+          >
+            <Column title="Risers" tone="up" movers={risers} />
+            <Column title="Fallers" tone="down" movers={fallers} />
+          </div>
+        )}
 
         <Faq title="About the One Piece market" entries={MARKET_FAQ} />
       </div>
