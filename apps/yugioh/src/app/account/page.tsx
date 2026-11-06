@@ -1,9 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { requireUser } from '@collector-network/auth';
+import {
+  createServerSupabase,
+  getUserDiscordLink,
+  getUserMembership,
+  requireUser,
+} from '@collector-network/auth';
 import { Avatar } from '../../components/account/Avatar';
 import { Footer } from '../../components/Footer';
 import { Header } from '../../components/Header';
+import IdentityPanel from '../../components/account/IdentityPanel';
 import { readYgoProfile } from '../../lib/user-profile';
 import { AccountDashboard } from './AccountDashboard';
 import styles from './Account.module.css';
@@ -15,8 +21,18 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic';
 
-export default async function AccountPage() {
+interface Props {
+  searchParams?: Promise<{ discord?: string }>;
+}
+
+export default async function AccountPage({ searchParams }: Props) {
   const user = await requireUser('/account');
+  const supabase = await createServerSupabase();
+  const [membership, discordLink] = await Promise.all([
+    getUserMembership(supabase, user.id),
+    getUserDiscordLink(supabase, user.id),
+  ]);
+  const sp = (await searchParams) ?? {};
   const profile = readYgoProfile(user);
   const created = user.created_at
     ? new Date(user.created_at).toLocaleDateString('en-US', {
@@ -45,6 +61,12 @@ export default async function AccountPage() {
         </header>
 
         <AccountDashboard />
+
+        <IdentityPanel
+          membership={membership}
+          discordLink={discordLink}
+          discordFlag={sp.discord ?? null}
+        />
 
         <div className={styles.grid}>
           <Link href="/collection" className={styles.tile}>
