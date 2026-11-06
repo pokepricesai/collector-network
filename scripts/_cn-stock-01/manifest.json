@@ -1,0 +1,72 @@
+{
+  "_meta": {
+    "description": "CN-STOCK-01 access benchmark manifest. Product URLs collected from each retailer's public sitemap on 2026-11-06. This is a SAMPLE (3 retailers reachable, 2 blocked at sitemap discovery). Expand to 25-50 listings before the pilot by replacing this file with a wider manifest; the probe reads the same shape.",
+    "assembled_at": "2026-11-06",
+    "assembly_method": "retailer sitemap.xml → filter for TCG booster/bundle URL patterns",
+    "sites_blocked_from_sitemap_discovery": [
+      {
+        "retailer": "magic_madhouse",
+        "hostname": "www.magicmadhouse.co.uk",
+        "evidence": "robots.txt 200 OK but /sitemap.xml + /sitemap_index.xml + /sitemap_products.xml all return HTTP 404 with the store's 404 HTML page (not an empty response)",
+        "action": "Needs operator to supply current URLs or a discoverable sitemap path (BigCommerce installs vary)"
+      },
+      {
+        "retailer": "chaos_cards",
+        "hostname": "www.chaoscards.co.uk",
+        "evidence": "robots.txt 200 OK (advertises Sitemap: /sitemap.xml) but /sitemap.xml returns HTTP 403 (Cloudflare bot challenge; our generic User-Agent is not whitelisted)",
+        "action": "Cannot clear without either an allowlist from Chaos Cards or a merchant-authorised data feed"
+      }
+    ]
+  },
+  "politeness_delay_ms": 3000,
+  "listings": [
+    {
+      "retailer": "total_cards",
+      "country": "UK",
+      "game": "pokemon",
+      "product_name": "Pokemon Black & White Dark Explorers Blister Booster Pack",
+      "variant": "blister_pack",
+      "url": "https://totalcards.net/products/black-white-dark-explorers-blister-booster-pack"
+    },
+    {
+      "retailer": "total_cards",
+      "country": "UK",
+      "game": "pokemon",
+      "product_name": "Pokemon Black & White Dark Explorers Blister Booster Packs x4",
+      "variant": "blister_pack_x4",
+      "url": "https://totalcards.net/products/black-white-dark-explorers-blister-booster-packs-x4"
+    },
+    {
+      "retailer": "total_cards",
+      "country": "UK",
+      "game": "pokemon",
+      "product_name": "Pokemon HGSS Blastoise Checklane Blister Booster Pack",
+      "variant": "blister_pack",
+      "url": "https://totalcards.net/products/hgss-blastoise-checklane-blister-booster-pack"
+    },
+    {
+      "retailer": "game_nerdz",
+      "country": "US",
+      "game": "mtg",
+      "product_name": "Magic: The Gathering Streets of New Capenna Set Booster Box",
+      "variant": "booster_box",
+      "url": "https://www.gamenerdz.com/magic-the-gathering-streets-of-new-capenna-set-booster-box"
+    },
+    {
+      "retailer": "game_nerdz",
+      "country": "US",
+      "game": "mtg",
+      "product_name": "Magic: The Gathering Throne of Eldraine Booster Box",
+      "variant": "booster_box",
+      "url": "https://www.gamenerdz.com/magic-the-gathering-throne-of-eldraine-booster-box"
+    },
+    {
+      "retailer": "miniature_market",
+      "country": "US",
+      "game": "mtg",
+      "product_name": "Magic the Gathering Tales of Middle Earth Set Booster Pack",
+      "variant": "booster_pack",
+      "url": "https://www.miniaturemarket.com/magic-the-gathering-tales-of-middle-earth-set-booster-pack-wocd1523-pack.html"
+    }
+  ]
+}
