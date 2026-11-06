@@ -518,7 +518,7 @@ describe('executed SQL: schema invariants', () => {
     const id = parent.rows[0]!.id
     let threw = false
     try {
-      await db.exec(
+      await db.query(
         `update public.network_tcg_releases
            set parent_release_id = $1
            where id = $1`,

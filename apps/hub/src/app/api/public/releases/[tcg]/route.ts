@@ -13,14 +13,15 @@ import { createClient } from '@supabase/supabase-js';
 // without per-site Supabase query logic.
 //
 // Caching:
-//   * 24h s-maxage with 7d stale-while-revalidate on Vercel's CDN.
-//   * No-op response times are measured in ms once cached. The
-//     underlying view is small (dozens of rows per TCG), so even a
-//     cold fetch is cheap.
-//   * The sweep + ingest crons that mutate the view's source rows
-//     run at 04:45/04:50 UTC daily; the CDN naturally refreshes
-//     within 24h, which is comfortably inside the "worst-case date
-//     change visibility" budget.
+//   * 15-min s-maxage with 24h stale-while-revalidate on Vercel's
+//     CDN. Chosen so an operator approval reaches the public feed
+//     within ~15 minutes, not 24 hours. The underlying view is
+//     small (dozens of rows per TCG), so a cold refetch is cheap
+//     and the per-site /releases pages revalidate on the same
+//     cadence (next.revalidate = 900s).
+//   * stale-while-revalidate=86400 keeps the CDN serving the last
+//     good response for up to 24 hours if the origin is down,
+//     without blocking user-visible latency on revalidation.
 //
 // Data source:
 //   * network_tcg_releases_public view (anon-readable,
@@ -155,7 +156,7 @@ export async function GET(
         // 24h CDN cache + 7d stale-while-revalidate. Sites
         // re-fetch on their own revalidate cadence; the CDN
         // amortises Supabase load across all consumers.
-        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+        'Cache-Control': 'public, s-maxage=900, stale-while-revalidate=86400',
         'Content-Type': 'application/json',
       },
     },

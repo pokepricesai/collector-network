@@ -18,7 +18,7 @@ import { canonicalFor } from '@/lib/seo';
 //     thin "no content yet" page into Google's index while the
 //     operator is still curating.
 
-export const revalidate = 86400; // 24h ISR — matches the Hub feed's CDN cadence
+export const revalidate = 900; // 15-min ISR — matches the Hub feed's s-maxage
 export const dynamic = 'force-static';
 
 interface PublicReleaseRow {
@@ -64,7 +64,7 @@ async function fetchReleases(): Promise<FeedResponse | null> {
     const res = await fetch(`${hub}/api/public/releases/onepiece`, {
       // Next.js data cache aligns with our page revalidate. The
       // Hub endpoint also emits s-maxage=86400 for Vercel's CDN.
-      next: { revalidate: 86400, tags: ['releases:onepiece'] },
+      next: { revalidate: 900, tags: ['releases:onepiece'] },
     });
     if (!res.ok) {
       console.error(`[releases] hub feed HTTP ${res.status}`);
