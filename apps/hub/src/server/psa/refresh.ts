@@ -27,6 +27,60 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
 import { fetchPsaSpecPopulation, type PsaSpecPopulationPayload } from './apiClient'
 
+/** PSA responses lacking a numeric Total AND lacking any numeric grade
+ *  or Auth value are rejected as incomplete. Prevents silent overwrite
+ *  of existing counts with nulls. Used by the scheduler BEFORE writes. */
+export function isPsaPayloadComplete(p: PsaSpecPopulationPayload): boolean {
+  if (p.total_graded == null) return false
+  const numericGrades = [
+    p.auth, p.psa_1, p.psa_1_5, p.psa_2, p.psa_2_5, p.psa_3, p.psa_3_5,
+    p.psa_4, p.psa_4_5, p.psa_5, p.psa_5_5, p.psa_6, p.psa_6_5,
+    p.psa_7, p.psa_7_5, p.psa_8, p.psa_8_5, p.psa_9, p.psa_9_5, p.psa_10,
+  ]
+  const anyNumeric = numericGrades.some(v => v != null)
+  // Total>0 with no graded cells is suspicious; accept only if we at
+  // least have Auth or any grade.
+  return p.total_graded === 0 ? true : anyNumeric
+}
+
+/** Checks PSA's returned Description against the candidate's expected
+ *  identity (bare set_name + card_number). Accepts if the description
+ *  contains both substrings (case-insensitive, whitespace-normalised). */
+export function identityMatchesDescription(
+  description: string | null,
+  candidate: { set_name: string | null; card_number: string | null },
+): boolean {
+  if (!description) return false
+  const haystack = description.toLowerCase().replace(/\s+/g, ' ')
+  const bareSet = (candidate.set_name ?? '').replace(/^Pokemon\s+/i, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const num = (candidate.card_number ?? '').toLowerCase().trim()
+  if (!bareSet || !num) return false
+  if (!haystack.includes(bareSet)) return false
+  // PSA often formats numbers as "#N" — accept either plain or "#" prefixed.
+  if (!haystack.includes(num) && !haystack.includes('#' + num)) return false
+  return true
+}
+
+// CN-06.05-P04 pilot gate.
+//
+// Three additional invariants layered on top of the P03 daily cap:
+//   1. Lifetime attempts cap enforced by the cn_psa_pilot singleton.
+//      While pilot.active=TRUE, every API attempt must reserve one of
+//      <=5 lifetime slots via cn_psa_pilot_reserve_attempt() BEFORE
+//      the fetch. Failures count. Reaching cap auto-sets active=FALSE.
+//   2. When pilot.dry_run=TRUE, the legacy psa_population /
+//      psa_pop_history write-through is SKIPPED. Canonical data still
+//      lands in cn_psa_pop_latest / cn_psa_pop_history so the
+//      operator can inspect, but no public-facing display is modified.
+//   3. Completeness + identity verification BEFORE the legacy write
+//      (when not dry_run):
+//        - PSA response MUST include a numeric Total AND at least one
+//          numeric grade value (incl. Auth). Otherwise rejected.
+//        - PSA Description MUST contain the candidate set_name and
+//          card_number as substrings (case-insensitive). Otherwise
+//          rejected. The scheduler records the mismatch into the
+//          candidate's mapping_notes + per_item_errors; no write.
+
 export const CONFIG = {
   /** Operator ceiling (hard cap) enforced by cn_psa_reserve_slots. */
   hardCap:              100,
@@ -57,8 +111,13 @@ export const CONFIG = {
 export type RefreshOutcome = {
   started_at:               string
   finished_at:              string
-  status:                   'disabled' | 'no_lock' | 'ok' | 'partial' | 'halted_auth' | 'halted_rate_limit' | 'budget_exhausted' | 'no_candidates'
+  status:                   'disabled' | 'no_lock' | 'ok' | 'partial' | 'halted_auth' | 'halted_rate_limit' | 'budget_exhausted' | 'no_candidates' | 'pilot_exhausted' | 'pilot_inactive'
   reason?:                  string
+  pilot_mode:               boolean
+  dry_run:                  boolean
+  lifetime_cap?:            number
+  lifetime_used_before?:    number
+  lifetime_used_after?:     number
   reserved_slots:           number
   requests_sent:            number
   successes:                number
@@ -70,6 +129,7 @@ export type RefreshOutcome = {
   cohort_slots_used:        number
   first_time_slots_used:    number
   per_item_errors:          Array<{ spec_id: string; error: string }>
+  per_item_identity_checks: Array<{ spec_id: string; description: string | null; identity_ok: boolean }>
 }
 
 export type CandidateRow = {
@@ -148,9 +208,10 @@ async function upsertResult(
   rawJson: unknown,
   observedAt: string,
   snapshotDate: string,
+  dryRun: boolean,
 ): Promise<{ writethrough: { updated: number; skipped_legacy_dups: number; history_appended: number } | null }> {
   const specId = candidate.psa_spec_id
-  // 1. Upsert canonical latest.
+  // 1. Upsert canonical latest — always written (canonical store, operator-inspectable).
   const latestRow = {
     psa_spec_id: specId,
     snapshot_date: snapshotDate,
@@ -162,7 +223,7 @@ async function upsertResult(
   const { error: e1 } = await sb.from('cn_psa_pop_latest').upsert(latestRow, { onConflict: 'psa_spec_id' })
   if (e1) throw new Error(`[cn-psa] upsert latest ${specId}: ${e1.message}`)
 
-  // 2. Idempotent history append (unique on spec,snapshot).
+  // 2. Idempotent history append (unique on spec,snapshot) — always written.
   const historyRow = {
     psa_spec_id: specId,
     snapshot_date: snapshotDate,
@@ -174,16 +235,12 @@ async function upsertResult(
     .upsert(historyRow, { onConflict: 'psa_spec_id,snapshot_date' })
   if (e2) throw new Error(`[cn-psa] history ${specId}: ${e2.message}`)
 
-  // 3. Pokémon display write-through.
-  //    The RPC updates ONLY psa_population rows whose identity matches
-  //    the verified candidate: (psa_spec_id, bare set_name, card_number,
-  //    variant). Legacy duplicates that share spec_id but carry a
-  //    different set-name label are NOT overwritten — they are enqueued
-  //    into cn_psa_mapping_review for operator attention.
-  //    See migration cn_psa_writethrough_pokepop() for the SQL contract.
-  if (candidate.site_key !== 'pokeprices') {
-    return { writethrough: null }  // only Pokémon is active; nothing to update
-  }
+  // 3. Pokémon display write-through — SKIPPED in dry_run.
+  //    When live, the RPC updates ONLY psa_population rows whose identity
+  //    matches the candidate (spec_id + bare set_name + card_number + variant);
+  //    legacy duplicates are enqueued into cn_psa_mapping_review.
+  if (dryRun)                                 return { writethrough: null }
+  if (candidate.site_key !== 'pokeprices')    return { writethrough: null }
   const { data: wt, error: e3 } = await sb.rpc('cn_psa_writethrough_pokepop', {
     p_psa_spec_id:   specId,
     p_snapshot_date: snapshotDate,
@@ -191,12 +248,7 @@ async function upsertResult(
     p_candidate_num: candidate.card_number ?? '',
     p_candidate_var: candidate.variant ?? '',
   })
-  if (e3) {
-    // Write-through failure must not fail the ingest — the canonical
-    // data has already landed in cn_psa_pop_latest. Surface via error
-    // to the caller so the candidate row records it.
-    throw new Error(`[cn-psa] writethrough ${specId}: ${e3.message}`)
-  }
+  if (e3) throw new Error(`[cn-psa] writethrough ${specId}: ${e3.message}`)
   const stats = (wt ?? null) as { updated: number; skipped_legacy_dups: number; history_appended: number } | null
   return { writethrough: stats }
 }
@@ -237,6 +289,27 @@ async function markCandidateFailure(
   if (error) throw new Error(`[cn-psa] record failure ${candidateId}: ${error.message}`)
 }
 
+type PilotRow = {
+  active: boolean
+  lifetime_cap: number
+  lifetime_attempts_used: number
+  dry_run: boolean
+}
+
+/** Fetch the singleton pilot config. Returns null if the table is absent
+ *  (e.g. migration not yet applied in a particular environment). */
+async function readPilot(sb: SupabaseClient): Promise<PilotRow | null> {
+  const { data, error } = await sb.from('cn_psa_pilot')
+    .select('active, lifetime_cap, lifetime_attempts_used, dry_run')
+    .eq('id', true).maybeSingle()
+  if (error) {
+    // Treat PGRST205 (table absent) same as "no pilot row" — scheduler exits.
+    if ((error as any).code === 'PGRST205') return null
+    throw new Error(`[cn-psa] read pilot: ${error.message}`)
+  }
+  return (data ?? null) as PilotRow | null
+}
+
 /** Single bounded run of the scheduler. Never throws on routine errors;
  *  returns a structured outcome the cron route logs into network_job_runs. */
 export async function runOnce(sb: SupabaseClient): Promise<RefreshOutcome> {
@@ -245,6 +318,8 @@ export async function runOnce(sb: SupabaseClient): Promise<RefreshOutcome> {
     started_at: startedAt,
     finished_at: startedAt,
     status: 'ok',
+    pilot_mode: false,
+    dry_run: false,
     reserved_slots: 0,
     requests_sent: 0,
     successes: 0,
@@ -254,6 +329,7 @@ export async function runOnce(sb: SupabaseClient): Promise<RefreshOutcome> {
     cohort_slots_used: 0,
     first_time_slots_used: 0,
     per_item_errors: [],
+    per_item_identity_checks: [],
   }
 
   // 1. Flag gate.
@@ -262,6 +338,32 @@ export async function runOnce(sb: SupabaseClient): Promise<RefreshOutcome> {
   if (!flagEnabled || !hasToken) {
     out.status = 'disabled'
     out.reason = !flagEnabled ? 'CN_PSA_REFRESH_ENABLED != 1' : 'PSA_PUBLIC_API_TOKEN not set'
+    out.finished_at = new Date().toISOString()
+    return out
+  }
+
+  // 2. Pilot gate. Pilot MUST be active and have remaining lifetime
+  //    slots. Otherwise exit — routine daily operation is not enabled.
+  const pilot = await readPilot(sb)
+  if (!pilot) {
+    out.status = 'pilot_inactive'
+    out.reason = 'cn_psa_pilot singleton not found (migration not applied?)'
+    out.finished_at = new Date().toISOString()
+    return out
+  }
+  out.pilot_mode = pilot.active
+  out.dry_run = pilot.dry_run
+  out.lifetime_cap = pilot.lifetime_cap
+  out.lifetime_used_before = pilot.lifetime_attempts_used
+  if (!pilot.active) {
+    out.status = 'pilot_inactive'
+    out.reason = 'cn_psa_pilot.active = FALSE; routine mode requires separate approval'
+    out.finished_at = new Date().toISOString()
+    return out
+  }
+  if (pilot.lifetime_attempts_used >= pilot.lifetime_cap) {
+    out.status = 'pilot_exhausted'
+    out.reason = `pilot lifetime_cap reached (${pilot.lifetime_attempts_used}/${pilot.lifetime_cap})`
     out.finished_at = new Date().toISOString()
     return out
   }
@@ -337,7 +439,23 @@ export async function runOnce(sb: SupabaseClient): Promise<RefreshOutcome> {
     }
 
     // 7. Execute each attempt.
+    //
+    //    Pilot invariant: before every HTTP call, reserve ONE lifetime
+    //    pilot slot via cn_psa_pilot_reserve_attempt. If the RPC
+    //    returns FALSE (exhausted or deactivated mid-batch) we halt
+    //    immediately — no further calls. Every attempt (incl. failures)
+    //    has already decremented the slot by the time we evaluate the
+    //    HTTP result.
     for (const c of batch) {
+      // Pilot slot reservation — authoritative gate for the lifetime cap.
+      const { data: reservedPilot, error: rpErr } = await sb.rpc('cn_psa_pilot_reserve_attempt')
+      if (rpErr) throw new Error(`[cn-psa] pilot reserve: ${rpErr.message}`)
+      if (reservedPilot !== true) {
+        out.status = 'pilot_exhausted'
+        out.reason = 'cn_psa_pilot exhausted mid-batch'
+        break
+      }
+
       out.requests_sent += 1
       if (c.priority_rank != null && c.last_refresh_success_at != null) out.cohort_slots_used += 1
       else out.first_time_slots_used += 1
@@ -367,19 +485,45 @@ export async function runOnce(sb: SupabaseClient): Promise<RefreshOutcome> {
         continue
       }
 
-      // Observation date = today (our HTTP retrieval). PSA's upstream
-      // snapshot date is not separately returned, so we record the
-      // retrieval date as the display's "as of".
+      // Identity verification — compare PSA's returned Description
+      // against the candidate's expected (set, number). This is a soft
+      // gate in dry-run (surfaced for operator review) and a HARD gate
+      // live (skip legacy write-through if mismatch).
+      const identityOk = identityMatchesDescription(result.description, c)
+      out.per_item_identity_checks.push({
+        spec_id: c.psa_spec_id,
+        description: result.description,
+        identity_ok: identityOk,
+      })
+
+      // Completeness check — reject PSA responses lacking a numeric
+      // Total AND any numeric grade/Auth. Prevents silent overwrite
+      // of existing counts with nulls or synthetic zeros.
+      const isComplete = isPsaPayloadComplete(result.payload)
+      if (!isComplete) {
+        out.failures += 1
+        out.per_item_errors.push({ spec_id: c.psa_spec_id, error: 'incomplete: response lacks Total or all grade values' })
+        await markCandidateFailure(sb, c.id, attemptAt, 'incomplete PSA response (Total missing or no numeric grades)')
+        await sleep(CONFIG.perRequestDelayMs)
+        continue
+      }
+
+      // When live (not dry_run) AND identity failed → refuse the write-through.
+      // Still record the canonical fetch in cn_psa_pop_latest for inspection.
       const observedAt = attemptAt
       const snapshotDate = observedAt.slice(0, 10)
+      const effectiveDryRun = pilot.dry_run || !identityOk
       try {
-        const { writethrough } = await upsertResult(sb, c, result.payload, result.rawJson, observedAt, snapshotDate)
+        const { writethrough } = await upsertResult(sb, c, result.payload, result.rawJson, observedAt, snapshotDate, effectiveDryRun)
         await markCandidateSuccess(sb, c.id, observedAt)
         out.successes += 1
+        if (!identityOk) {
+          out.per_item_errors.push({
+            spec_id: c.psa_spec_id,
+            error: `identity: PSA Description "${(result.description ?? '').slice(0,80)}" does not match candidate (set=${c.set_name} num=${c.card_number}); legacy write-through skipped`,
+          })
+        }
         if (writethrough && writethrough.skipped_legacy_dups > 0) {
-          // Non-fatal — a legacy duplicate was preserved and queued for
-          // operator review. Record it in per-item errors so the cron
-          // response surface shows it in the Hub job metadata.
           out.per_item_errors.push({
             spec_id: c.psa_spec_id,
             error: `writethrough: ${writethrough.updated} updated, ${writethrough.skipped_legacy_dups} legacy duplicate(s) preserved for review`,
@@ -396,6 +540,12 @@ export async function runOnce(sb: SupabaseClient): Promise<RefreshOutcome> {
     }
 
     if (out.status === 'ok' && out.failures > 0 && out.successes === 0) out.status = 'partial'
+
+    // Record the post-batch pilot-counter state (best-effort; never fatal).
+    try {
+      const postPilot = await readPilot(sb)
+      if (postPilot) out.lifetime_used_after = postPilot.lifetime_attempts_used
+    } catch { /* ignore */ }
   } finally {
     const releaseStatus =
       out.status === 'halted_auth' ? 'halted_auth'
