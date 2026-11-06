@@ -54,7 +54,13 @@ interface FeedResponse {
 }
 
 function getHubUrl(): string {
-  const raw = process.env['NEXT_PUBLIC_HUB_URL'] ?? 'https://hub.collectornetwork.io';
+  // Hub's stable public Vercel alias. hub.collectornetwork.io is the
+  // operator-facing custom domain and is NOT exposed as a public DNS
+  // record; the /api/public/releases/* endpoint is served at
+  // collector-network.vercel.app (no SSO, publicly reachable). An
+  // explicit env var override wins so the custom domain can be
+  // pointed later without a code change.
+  const raw = process.env['NEXT_PUBLIC_HUB_URL'] ?? 'https://collector-network.vercel.app';
   return raw.replace(/\/$/, '');
 }
 
