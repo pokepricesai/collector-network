@@ -19,6 +19,7 @@ export const ROUTE_POLICY: { pattern: RegExp; policy: IndexPolicy; note?: string
   { pattern: /^\/card-finder$/,                     policy: 'INDEX', note: 'Card finder tool' },
   { pattern: /^\/insights$/,                        policy: 'INDEX', note: 'Insights index' },
   { pattern: /^\/insights\/[a-z0-9-]+$/,            policy: 'INDEX', note: 'Insight article' },
+  { pattern: /^\/releases$/,                        policy: 'INDEX', note: 'Release calendar (page emits noindex when empty)' },
   { pattern: /^\/set\/[a-z0-9-]+$/,                 policy: 'INDEX', note: 'Set detail' },
   { pattern: /^\/set\/[a-z0-9-]+\/card\/[^/]+$/,    policy: 'INDEX', note: 'Card printing detail' },
   { pattern: /^\/card\/[^/]+$/,                     policy: 'INDEX', note: 'Logical card page (treatments)' },
