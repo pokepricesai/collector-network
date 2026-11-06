@@ -33,14 +33,20 @@ function clamp(n: number, lo = 0, hi = 100): number { return Math.max(lo, Math.m
 
 export const releaseReadinessRule: IntelligenceRule = {
   id: 'content.release_readiness',
-  description: 'Impending TCG releases within 30d where site preparation is not yet linked. One item per release.',
+  description: 'Impending TCG releases within 90d where site preparation is not yet linked, plus pre-launch readiness checks within 14d. One item per release.',
   categoriesScanned: ['content'],
   async run(ctx: RuleContext): Promise<RuleRunResult> {
     const outputs: RuleOutput[] = [];
     const today = new Date();
     const todayIso = today.toISOString().slice(0, 10);
+    // Readiness window widened to 90 days per the brief:
+    // "Support preparation well before a major release, not only
+    // within 30 days." A quarter of visibility balances useful
+    // lead time against inbox noise. Scoring and emission rules
+    // below decay with distance so far-horizon items don't
+    // outrank imminent ones.
     const horizon = new Date(today);
-    horizon.setUTCDate(horizon.getUTCDate() + 30);
+    horizon.setUTCDate(horizon.getUTCDate() + 90);
     const horizonIso = horizon.toISOString().slice(0, 10);
 
     // Pull releases in the next 30 days + any TBC-but-announced
@@ -72,10 +78,18 @@ export const releaseReadinessRule: IntelligenceRule = {
       const d = daysUntilRelease(r, today);
       if (d == null || d < 0) continue;
 
-      // Skip when the operator has already linked a public page and
-      // the release is more than 14d away — treat as "prepared" to
-      // avoid noise.
-      if (r.site_set_url && d > 14) continue;
+      // Emission bands tuned to keep the inbox useful:
+      //   0–14d:  always emit (imminent — readiness check or missing page)
+      //   15–60d: emit when unlinked (needs planning)
+      //   61–90d: emit only when unlinked AND product_type suggests a
+      //           flagship expansion (far-horizon awareness)
+      // The 'postponed' status always emits regardless of band so the
+      // operator sees the slip in context.
+      const flagshipTypes = new Set(['expansion', 'premium']);
+      if (r.confirmation_status !== 'postponed') {
+        if (d > 14 && r.site_set_url) continue;
+        if (d > 60 && !flagshipTypes.has(r.product_type)) continue;
+      }
 
       // Score bands tuned conservatively.
       // Impact grows as release approaches (closer = higher impact).
