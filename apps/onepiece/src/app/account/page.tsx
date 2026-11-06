@@ -11,8 +11,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getCurrentUser, createServerSupabase } from '@collector-network/auth';
+import { getCurrentUser, createServerSupabase, getUserMembership, getUserDiscordLink } from '@collector-network/auth';
 import { canonicalFor } from '@/lib/seo';
+import IdentityPanel from '@/components/account/IdentityPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,15 +24,22 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AccountPage() {
+interface Props {
+  searchParams?: Promise<{ discord?: string }>;
+}
+
+export default async function AccountPage({ searchParams }: Props) {
   const user = await getCurrentUser();
   if (!user) redirect('/sign-in?returnTo=/account');
 
   const supabase = await createServerSupabase();
-  const collectionCountRes = await supabase
-    .from('op_collection_items')
-    .select('*', { count: 'exact', head: true });
+  const [collectionCountRes, membership, discordLink] = await Promise.all([
+    supabase.from('op_collection_items').select('*', { count: 'exact', head: true }),
+    getUserMembership(supabase, user.id),
+    getUserDiscordLink(supabase, user.id),
+  ]);
   const holdings = collectionCountRes.count ?? 0;
+  const sp = (await searchParams) ?? {};
 
   const joined = user.created_at
     ? new Date(user.created_at).toLocaleDateString('en-US', {
@@ -87,6 +95,12 @@ export default async function AccountPage() {
           </div>
         </div>
       </div>
+
+      <IdentityPanel
+        membership={membership}
+        discordLink={discordLink}
+        discordFlag={sp.discord ?? null}
+      />
 
       <section style={quickLinksStyle}>
         <div className="label-mono" style={{ marginBottom: 8, color: 'var(--gold-600)' }}>Quick links</div>

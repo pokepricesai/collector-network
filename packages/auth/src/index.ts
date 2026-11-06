@@ -68,3 +68,22 @@ export type {
   SiteMembership,
   UserConsentSource,
 } from './customer';
+
+// CN-IDENTITY-01 · network-wide memberships + Discord linking.
+export {
+  getUserMembership,
+  getUserDiscordLink,
+  userHasFeature,
+  requireFeature,
+  linkDiscordFromAuthIdentity,
+  unlinkDiscord,
+} from './entitlements';
+export type {
+  MembershipTier,
+  MembershipStatus,
+  MembershipSummary,
+  Feature,
+  DiscordLink,
+  LinkResult,
+  UnlinkResult,
+} from './entitlements';
