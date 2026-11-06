@@ -165,6 +165,30 @@ export interface FreshnessEntry {
   freshness_label: string;
 }
 
+export interface BriefUpcomingRelease {
+  release_id: string;
+  tcg: string;
+  site_slug: string;
+  site_display: string;
+  set_name: string;
+  release_label: string;        // '12 Nov 2026' or 'Nov 2026' honouring precision
+  days_until: number;
+  horizon_band: 'imminent' | 'this_month' | 'this_quarter';
+  product_type: string;
+  confirmation_status: string;
+  verification_mode: 'manual' | 'automated';
+  source_verified_days_ago: number | null;
+  site_set_url_present: boolean;
+  date_changed_recently: boolean;
+}
+
+export interface BriefReleasesBlock {
+  upcoming: BriefUpcomingRelease[];
+  recent_date_changes: number;     // date-shift events in last 7d
+  manual_sources_stale_count: number;  // manual rows w/ source_verified_at > 30d
+  automated_last_run_label: string | null;
+}
+
 export interface MorningBrief {
   generated_at: string;
   for_date: string;
@@ -181,6 +205,7 @@ export interface MorningBrief {
   content: ContentBlock;
   seo: SeoOpportunity[];
   health: HealthSummary;
+  releases: BriefReleasesBlock;
   freshness: FreshnessEntry[];
 }
 
@@ -302,7 +327,12 @@ export async function buildMorningBrief(
   const since7 = new Date(today.getTime() - 7 * dayMs).toISOString().slice(0, 10);
   void untilA; void sinceB;
 
-  const [intel, opInboxTasks, revenueTotals, revenuePriorTotals, articles, contentIdeas, latestGsc, latestGa4, latestRevenue, latestIntelRun] = await Promise.all([
+  const todayIso = today.toISOString().slice(0, 10);
+  const horizon90 = new Date(today.getTime() + 90 * dayMs).toISOString().slice(0, 10);
+  const change7d  = new Date(today.getTime() -  7 * dayMs).toISOString();
+  const stale30d  = new Date(today.getTime() - 30 * dayMs).toISOString();
+
+  const [intel, opInboxTasks, revenueTotals, revenuePriorTotals, articles, contentIdeas, latestGsc, latestGa4, latestRevenue, latestIntelRun, upcomingReleases, recentReleaseChanges, staleManualReleases, latestReleasesIngest] = await Promise.all([
     listIntelligenceInbox(sb, { statuses: ['open', 'task_created'], limit: 200 }),
     listTasks(sb, { task_sources: OPERATOR_INBOX_SOURCES, statuses: ['open', 'in_progress', 'waiting'], limit: 50 }),
     totalsSince(sb, sinceA),
@@ -321,6 +351,25 @@ export async function buildMorningBrief(
     sb.from('network_revenue_events').select('occurred_on').order('occurred_on', { ascending: false }).limit(1).maybeSingle(),
     sb.from('network_job_runs').select('finished_at')
       .eq('job_name', 'intelligence.refresh')
+      .order('started_at', { ascending: false })
+      .limit(1).maybeSingle(),
+    sb.from('network_tcg_releases')
+      .select('id, tcg, site_slug, set_name, release_date, release_date_precision, product_type, confirmation_status, verification_mode, source_verified_at, site_set_url, date_changed_at')
+      .in('confirmation_status', ['confirmed', 'announced_tbc', 'postponed'])
+      .gte('release_date', todayIso)
+      .lte('release_date', horizon90)
+      .order('release_date', { ascending: true })
+      .limit(10),
+    sb.from('network_tcg_releases')
+      .select('id', { count: 'exact', head: true })
+      .gte('date_changed_at', change7d),
+    sb.from('network_tcg_releases')
+      .select('id', { count: 'exact', head: true })
+      .eq('verification_mode', 'manual')
+      .in('confirmation_status', ['confirmed', 'announced_tbc', 'postponed'])
+      .lt('source_verified_at', stale30d),
+    sb.from('network_job_runs').select('finished_at, status')
+      .eq('job_name', 'releases.ingest')
       .order('started_at', { ascending: false })
       .limit(1).maybeSingle(),
   ]);
@@ -606,6 +655,58 @@ export async function buildMorningBrief(
     items: healthRows.slice(0, 10).map(toAttention),
   };
 
+  // ── releases ───────────────────────────────────────────────
+  interface ReleaseLiteRow {
+    id: string; tcg: string; site_slug: string; set_name: string;
+    release_date: string | null; release_date_precision: 'day' | 'month' | 'tbc';
+    product_type: string; confirmation_status: string;
+    verification_mode: 'manual' | 'automated';
+    source_verified_at: string | null;
+    site_set_url: string | null;
+    date_changed_at: string | null;
+  }
+  const releaseRows = (upcomingReleases.data ?? []) as ReleaseLiteRow[];
+  const upcoming: BriefUpcomingRelease[] = releaseRows.map((r) => {
+    const d = r.release_date
+      ? Math.floor((Date.parse(r.release_date + 'T00:00:00Z') - today.getTime()) / dayMs)
+      : -1;
+    const horizon_band: BriefUpcomingRelease['horizon_band'] =
+      d <= 14 ? 'imminent' : d <= 30 ? 'this_month' : 'this_quarter';
+    const releaseLabel = r.release_date == null ? 'TBC'
+      : r.release_date_precision === 'month'
+        ? new Date(r.release_date + 'T00:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+        : new Date(r.release_date + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const svdAgo = r.source_verified_at
+      ? Math.floor((today.getTime() - Date.parse(r.source_verified_at)) / dayMs) : null;
+    return {
+      release_id: r.id,
+      tcg: r.tcg,
+      site_slug: r.site_slug,
+      site_display: siteDisplayName(r.site_slug, 'Network'),
+      set_name: r.set_name,
+      release_label: releaseLabel,
+      days_until: d,
+      horizon_band,
+      product_type: r.product_type,
+      confirmation_status: r.confirmation_status,
+      verification_mode: r.verification_mode,
+      source_verified_days_ago: svdAgo,
+      site_set_url_present: r.site_set_url != null,
+      date_changed_recently: r.date_changed_at != null
+        && Date.parse(r.date_changed_at) >= today.getTime() - 7 * dayMs,
+    };
+  });
+  const latestIngest = (latestReleasesIngest.data as { finished_at: string | null; status: string } | null);
+  const automated_last_run_label = latestIngest?.finished_at
+    ? `${latestIngest.status === 'success' ? 'OK' : latestIngest.status} · ${relativeTime(latestIngest.finished_at)}`
+    : null;
+  const releases: BriefReleasesBlock = {
+    upcoming,
+    recent_date_changes: (recentReleaseChanges as unknown as { count: number | null }).count ?? 0,
+    manual_sources_stale_count: (staleManualReleases as unknown as { count: number | null }).count ?? 0,
+    automated_last_run_label,
+  };
+
   // ── network status + headline ──────────────────────────────
   let network_status: NetworkStatus = 'healthy';
   const anyAction = intelRows.some((r) =>
@@ -659,6 +760,7 @@ export async function buildMorningBrief(
     content,
     seo,
     health,
+    releases,
     freshness,
   };
 }

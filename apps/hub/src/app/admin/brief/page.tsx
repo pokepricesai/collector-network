@@ -5,7 +5,7 @@ import { EmptyPanelNotice } from '@/components/admin/EmptyPanelNotice';
 import { FreshnessBadge, freshnessState } from '@/components/admin/FreshnessBadge';
 import { requireAdmin } from '@/server/admin/require-admin';
 import { listNetworkSites } from '@/server/admin/sites';
-import { buildMorningBrief, type AttentionItem, type MorningBrief, type SeoOpportunity, type SiteSnapshot } from '@/server/brief/morning';
+import { buildMorningBrief, type AttentionItem, type BriefUpcomingRelease, type MorningBrief, type SeoOpportunity, type SiteSnapshot } from '@/server/brief/morning';
 import { formatMoneyMinor } from '@/lib/format';
 import { completeTaskAction } from '@/app/admin/tasks/actions';
 
@@ -178,6 +178,39 @@ export default async function BriefPage() {
         </Panel>
       </div>
 
+      {/* ─── Upcoming releases ──────────────────────────────── */}
+      <Panel
+        title="Upcoming TCG Releases"
+        eyebrow={`Next 90 days · ${brief.releases.upcoming.length} tracked`}
+        actions={<Link href="/admin/intelligence/releases" className="ui-btn ui-btn--secondary ui-btn--sm">Calendar</Link>}
+      >
+        {brief.releases.upcoming.length === 0 ? (
+          <EmptyPanelNotice>
+            No upcoming releases tracked in the next 90 days.
+            Add a release at <Link href="/admin/intelligence/releases">/admin/intelligence/releases</Link>, or wait for the daily auto-fetch (Scryfall MTG, ygoprodeck YGO).
+          </EmptyPanelNotice>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {brief.releases.upcoming.map((r) => <ReleaseRow key={r.release_id} r={r} />)}
+          </ul>
+        )}
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+          {brief.releases.recent_date_changes > 0 && (
+            <span style={{ color: 'var(--warning, #e67e22)', fontWeight: 600 }}>
+              {brief.releases.recent_date_changes} date change{brief.releases.recent_date_changes === 1 ? '' : 's'} in last 7d
+            </span>
+          )}
+          {brief.releases.manual_sources_stale_count > 0 && (
+            <span>
+              {brief.releases.manual_sources_stale_count} manual row{brief.releases.manual_sources_stale_count === 1 ? '' : 's'} needs re-verifying (&gt;30d)
+            </span>
+          )}
+          {brief.releases.automated_last_run_label && (
+            <span>Auto-fetch (Scryfall + ygoprodeck): {brief.releases.automated_last_run_label}</span>
+          )}
+        </div>
+      </Panel>
+
       {/* ─── Health ─────────────────────────────────────────── */}
       <Panel title="Health" eyebrow={brief.health.all_healthy ? 'All core systems healthy' : 'Needs attention'}>
         {brief.health.all_healthy ? (
@@ -291,6 +324,46 @@ function AttentionRow({ item }: { item: AttentionItem }) {
       <Link href={item.action_hint.href} className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
         {item.action_hint.label}
       </Link>
+    </li>
+  );
+}
+
+function ReleaseRow({ r }: { r: BriefUpcomingRelease }) {
+  const bandState = r.horizon_band === 'imminent' ? 'warning' : r.horizon_band === 'this_month' ? 'info' : 'disabled';
+  const bandLabel = r.horizon_band === 'imminent' ? `in ${r.days_until}d` : r.horizon_band === 'this_month' ? 'this month' : 'this quarter';
+  const verifLabel = r.verification_mode === 'automated'
+    ? `Auto · ${r.source_verified_days_ago != null ? `verified ${r.source_verified_days_ago}d ago` : 'just fetched'}`
+    : r.source_verified_days_ago != null && r.source_verified_days_ago > 30
+      ? `Manual · verified ${r.source_verified_days_ago}d ago (stale)`
+      : `Manual · verified ${r.source_verified_days_ago ?? 0}d ago`;
+  const verifState = r.verification_mode === 'automated' ? 'success'
+    : (r.source_verified_days_ago != null && r.source_verified_days_ago > 30) ? 'warning'
+    : 'info';
+  return (
+    <li style={{
+      padding: '8px 0',
+      borderBottom: '1px solid var(--admin-border)',
+      display: 'grid',
+      gridTemplateColumns: '1fr auto',
+      gap: 10,
+      alignItems: 'start',
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <StatusBadge state="info" label={r.site_display} />
+          <StatusBadge state={bandState} label={bandLabel} />
+          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.set_name}</span>
+          <span className="col-dim" style={{ fontSize: 11 }}>{r.release_label}</span>
+          {r.date_changed_recently && <StatusBadge state="warning" label="date changed recently" />}
+          {r.confirmation_status === 'postponed' && <StatusBadge state="warning" label="postponed" />}
+          {r.confirmation_status === 'announced_tbc' && <StatusBadge state="disabled" label="TBC" />}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <StatusBadge state={verifState} label={verifLabel} />
+          {!r.site_set_url_present && <span>No set page linked yet</span>}
+        </div>
+      </div>
+      <Link href={`/admin/intelligence/releases/${r.release_id}`} className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Open</Link>
     </li>
   );
 }

@@ -109,7 +109,7 @@ export default async function ReleasesPage({ searchParams }: PageProps) {
       <SectionHeader
         eyebrow="Collector Network · Intelligence · Releases"
         title="Upcoming TCG Releases"
-        description={<>Cross-TCG release calendar. v1 is manual curation only — each row carries its source URL and a verified-at timestamp. The daily sweep job promotes rows to <code>released</code> when their date passes; it does <strong>not</strong> scrape publisher sites.</>}
+        description={<>Cross-TCG release calendar. MTG English (Scryfall) and Yu-Gi-Oh! English (ygoprodeck) are auto-fetched daily; all other TCG × language combinations are manual curation. The daily sweep job promotes rows to <code>released</code> when their date passes and flags manual rows as stale after 30 days without re-verification.</>}
         actions={<Link className="ui-btn ui-btn--secondary ui-btn--sm" href="/admin/intelligence">← Intelligence</Link>}
       />
 
@@ -133,6 +133,57 @@ export default async function ReleasesPage({ searchParams }: PageProps) {
           Discovered rows are invisible on the public feed until approved.
         </Notice>
       )}
+
+      {/* ─── Source coverage ─── */}
+      <Panel title="Source coverage" eyebrow="What's automated · what needs manual verification">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+          <SourceCoverageCard
+            tcg="Magic: The Gathering (EN)"
+            source="Scryfall /sets"
+            mode="automated"
+            cadence="Daily 04:45 UTC"
+            notes="Permissive API, documented. released_at is official once Wizards announces. Expansions, commander, masterpiece and starter products included; tokens/promos/digital-only skipped."
+          />
+          <SourceCoverageCard
+            tcg="Yu-Gi-Oh! (EN)"
+            source="ygoprodeck /cardsets"
+            mode="automated"
+            cadence="Daily 04:45 UTC"
+            notes="Community-maintained mirror of Konami release data. tcg_date is used. English only; Japanese releases via OCG are not covered."
+          />
+          <SourceCoverageCard
+            tcg="Pokémon (EN)"
+            source="pokemontcg.io (backfill only)"
+            mode="manual"
+            cadence="Operator-entered"
+            notes="pokemontcg.io ingests sets AFTER they release and cannot inform upcoming announcements. Add releases from pokemon.com/tcg and TPCi press releases."
+          />
+          <SourceCoverageCard
+            tcg="Pokémon (JP)"
+            source="No permissive API"
+            mode="manual"
+            cadence="Operator-entered"
+            notes="Add from pokemon-card.com. Honour release_date_precision=month when only a month is confirmed."
+          />
+          <SourceCoverageCard
+            tcg="One Piece (EN/JP)"
+            source="No permissive API"
+            mode="manual"
+            cadence="Operator-entered"
+            notes="Add from en.onepiece-cardgame.com (English) and onepiece-cardgame.com (Japanese). TCGCSV only has historic groups."
+          />
+          <SourceCoverageCard
+            tcg="Lorcana (EN)"
+            source="No permissive API"
+            mode="manual"
+            cadence="Operator-entered"
+            notes="Add from disneylorcana.com announcements. TCGCSV only has historic groups."
+          />
+        </div>
+        <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+          The daily sweep at 04:50 UTC transitions releases whose date has passed to <code>released</code> and marks manual rows older than 30 days as stale. It does NOT contact publisher websites — only ingested-from-API rows carry a true source verification.
+        </div>
+      </Panel>
 
       {/* ─── Filters ─── */}
       <Panel title="Filters">
@@ -326,6 +377,28 @@ function ReleaseCard({ row }: { row: Awaited<ReturnType<typeof listReleases>>[nu
         )}
         <Link href={`/admin/intelligence/releases/${row.id}`} className="ui-btn ui-btn--secondary ui-btn--sm" style={{ fontSize: 11 }}>Edit</Link>
       </div>
+    </div>
+  );
+}
+
+function SourceCoverageCard({ tcg, source, mode, cadence, notes }: {
+  tcg: string; source: string; mode: 'automated' | 'manual'; cadence: string; notes: string;
+}) {
+  return (
+    <div style={{
+      border: '1px solid var(--admin-border)',
+      borderRadius: 'var(--radius-md)',
+      padding: 10,
+      background: 'var(--admin-surface)',
+      display: 'flex', flexDirection: 'column', gap: 4,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{tcg}</span>
+        <StatusBadge state={mode === 'automated' ? 'success' : 'warning'} label={mode === 'automated' ? 'Automated' : 'Manual'} />
+      </div>
+      <div style={{ fontSize: 12 }}><strong>Source:</strong> {source}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}><strong>Cadence:</strong> {cadence}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)', lineHeight: 1.4 }}>{notes}</div>
     </div>
   );
 }
